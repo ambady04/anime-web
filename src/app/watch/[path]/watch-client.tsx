@@ -72,8 +72,7 @@ export default function WatchClient({
 
     const isSeries =
         subject.subjectType === 2 ||
-        subject.subjectType === 7 ||
-        (resource?.seasons && resource.seasons.length > 0);
+        subject.subjectType === 7;
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
     const currentSeasonData = resource?.seasons?.find(

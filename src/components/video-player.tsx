@@ -122,8 +122,22 @@ export default function VideoPlayer({
                 sortedDownloads.find((d) => d.resolution === 1080) ||
                 sortedDownloads[0];
             setActiveDownload(defaultQuality);
+            setIsLoading(true);
+            setPlayerError(false);
+            setAutoRetryLabel("");
         } else {
             setActiveDownload(null);
+            if (refreshCountRef.current < 2) {
+                refreshCountRef.current += 1;
+                setAutoRetryLabel("Fetching fresh stream links...");
+                setIsLoading(true);
+                setPlayerError(false);
+                refreshStreamData();
+            } else {
+                setIsLoading(false);
+                setPlayerError(true);
+                setAutoRetryLabel("");
+            }
         }
 
         // Convert SRT to WebVTT if subtitle exists — prefer English, fallback to first available
@@ -139,9 +153,6 @@ export default function VideoPlayer({
         }
 
         setIsPlaying(false);
-        setIsLoading(true);
-        setPlayerError(false);
-        setAutoRetryLabel("");
         setShowAudioMenu(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [streamData]);

@@ -23,8 +23,8 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
     details = await movieApi.getDetails(path);
     
     // 2. Parse season/episode inputs if it is a series
-    const hasSeasons = details.resource?.seasons?.length > 0;
-    if (hasSeasons) {
+    const isSeries = details.subject.subjectType === 2 || details.subject.subjectType === 7;
+    if (isSeries) {
       activeSeason = season ? Number(season) : 1;
       activeEpisode = episode ? Number(episode) : 1;
     } else {
