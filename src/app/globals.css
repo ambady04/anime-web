@@ -36,9 +36,9 @@ html, :root:not(.light) {
   --primary-light: #FF5E64;
   --accent: #FF1E27;
   
-  --bg-solid: #09090B;
-  --bg-gradient: linear-gradient(180deg, #09090B 0%, #0F0F13 100%);
-  --nav-bg: rgba(9, 9, 11, 0.88);
+  --bg-solid: #000000;
+  --bg-gradient: #000000;
+  --nav-bg: rgba(0, 0, 0, 0.88);
   
   --text-primary: #FAFAFA;
   --text-secondary: #A1A1AA;
@@ -52,14 +52,14 @@ html, :root:not(.light) {
   --shadow-hover: 0 12px 32px rgba(255, 30, 39, 0.22), 0 0 20px rgba(255, 30, 39, 0.15);
   --shadow-nav: 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 32px rgba(0, 0, 0, 0.8);
   
-  --scrollbar-track: #09090B;
+  --scrollbar-track: #000000;
   --scrollbar-thumb: rgba(255, 255, 255, 0.08);
   --scrollbar-thumb-hover: #FF1E27;
   
   --card-glow-color: rgba(255, 30, 39, 0.06);
-  --radial-glow-1: radial-gradient(circle at 15% 15%, rgba(255, 30, 39, 0.05), transparent 45%);
-  --radial-glow-2: radial-gradient(circle at 85% 15%, rgba(255, 30, 39, 0.03), transparent 40%);
-  --radial-glow-3: radial-gradient(circle at 50% 50%, rgba(9, 9, 11, 0), transparent 50%);
+  --radial-glow-1: none;
+  --radial-glow-2: none;
+  --radial-glow-3: none;
 }
 
 /* 2. Light Theme (Daylight Lounge Glassmorphism) */
