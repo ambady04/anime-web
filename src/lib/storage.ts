@@ -107,5 +107,28 @@ export const localStore = {
     } catch {
       return false;
     }
-  }
+  },
+
+  // Episode progress — tracks which episodes have been watched per show/season
+  // Key format: `${detailPath}__s${season}`  Value: number[] of watched episode numbers
+  getWatchedEpisodes: (detailPath: string, season: number): Set<number> => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const key = `kixo_ep__${detailPath}__s${season}`;
+      const data = localStorage.getItem(key);
+      return data ? new Set<number>(JSON.parse(data)) : new Set();
+    } catch {
+      return new Set();
+    }
+  },
+
+  markEpisodeWatched: (detailPath: string, season: number, episode: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `kixo_ep__${detailPath}__s${season}`;
+      const existing = localStore.getWatchedEpisodes(detailPath, season);
+      existing.add(episode);
+      localStorage.setItem(key, JSON.stringify(Array.from(existing)));
+    } catch {}
+  },
 };

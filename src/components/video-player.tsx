@@ -79,6 +79,8 @@ export default function VideoPlayer({
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
+    // Stall watchdog timer — fires if video stays in "loading" for too long
+    const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize source on mount or stream data update
     useEffect(() => {
@@ -97,9 +99,12 @@ export default function VideoPlayer({
             setActiveDownload(null);
         }
 
-        // Convert SRT to WebVTT if subtitle exists
+        // Convert SRT to WebVTT if subtitle exists — prefer English, fallback to first available
         if (captions.length > 0) {
-            loadSubtitleTrack(captions[0].url);
+            const englishCaption = captions.find(
+                (c) => c.lan === 'en' || c.lanName?.toLowerCase().includes('english')
+            );
+            loadSubtitleTrack((englishCaption || captions[0]).url);
         } else {
             setSubtitleUrl("");
         }
@@ -202,6 +207,26 @@ export default function VideoPlayer({
         }
     };
 
+    // Stall watchdog — if isLoading stays true for 15 seconds, treat it as an error
+    // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
+    useEffect(() => {
+        if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+
+        if (isLoading && activeDownload && !playerError) {
+            stallTimerRef.current = setTimeout(() => {
+                // Only trigger if still in a loading state (not yet playing)
+                if (!videoRef.current || videoRef.current.readyState < 2) {
+                    handlePlayerError(new Error('Stream stall timeout'));
+                }
+            }, 15_000);
+        }
+
+        return () => {
+            if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoading, activeDownload, playerError]);
+
     // Listen to time updates and sync progress with storage
     const handleTimeUpdate = () => {
         if (!videoRef.current) return;
@@ -225,6 +250,11 @@ export default function VideoPlayer({
                 season,
                 episode,
             });
+        }
+
+        // Mark episode as "watched" after 30 seconds of playback
+        if (isSeries && season && episode && current >= 30) {
+            localStore.markEpisodeWatched(detailPath, season, episode);
         }
     };
 
@@ -439,8 +469,7 @@ export default function VideoPlayer({
                     onDoubleClick={toggleFullscreen}
                     autoPlay
                     playsInline
-                    preload="auto"
-                    crossOrigin="anonymous"
+                    preload="metadata"
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && (
