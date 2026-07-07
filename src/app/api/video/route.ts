@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
-// Node.js runtime so maxDuration:60 in vercel.json applies.
-export const runtime = "nodejs";
+// Edge runtime so we can stream large video files without Vercel's 4.5MB serverless response size limit.
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 // Multiple referers to try — CDNs may accept different ones
