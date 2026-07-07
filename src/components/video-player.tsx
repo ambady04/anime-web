@@ -16,7 +16,13 @@ import {
     Maximize2,
     AlertTriangle,
 } from "lucide-react";
-import { StreamData, DownloadLink, Caption, DubModel } from "@/lib/api";
+import {
+    StreamData,
+    DownloadLink,
+    Caption,
+    DubModel,
+    movieApi,
+} from "@/lib/api";
 import { localStore } from "@/lib/storage";
 
 interface VideoPlayerProps {
@@ -28,6 +34,7 @@ interface VideoPlayerProps {
     season?: number;
     episode?: number;
     dubs?: DubModel[];
+    onStreamRefresh?: (newStream: StreamData) => void;
 }
 
 export default function VideoPlayer({
@@ -39,6 +46,7 @@ export default function VideoPlayer({
     season,
     episode,
     dubs,
+    onStreamRefresh,
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +82,7 @@ export default function VideoPlayer({
     const [playerError, setPlayerError] = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
     const [autoRetryLabel, setAutoRetryLabel] = useState("");
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -81,11 +90,14 @@ export default function VideoPlayer({
     const failedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
+    // Track how many times we've refreshed streams to avoid infinite loops
+    const refreshCountRef = useRef(0);
 
     // Initialize source on mount or stream data update
     useEffect(() => {
-        // Reset failed URLs tracker when stream changes
+        // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
+        refreshCountRef.current = 0;
 
         if (sortedDownloads.length > 0) {
             // Pick 720p first (better reliability than 1080p on slow CDNs)
@@ -102,7 +114,9 @@ export default function VideoPlayer({
         // Convert SRT to WebVTT if subtitle exists — prefer English, fallback to first available
         if (captions.length > 0) {
             const englishCaption = captions.find(
-                (c) => c.lan === 'en' || c.lanName?.toLowerCase().includes('english')
+                (c) =>
+                    c.lan === "en" ||
+                    c.lanName?.toLowerCase().includes("english"),
             );
             loadSubtitleTrack((englishCaption || captions[0]).url);
         } else {
@@ -190,24 +204,80 @@ export default function VideoPlayer({
 
         // Try to find the next quality that hasn't failed yet
         const nextQuality = sortedDownloads.find(
-            (d) => !failedUrlsRef.current.has(d.url)
+            (d) => !failedUrlsRef.current.has(d.url),
         );
 
         if (nextQuality) {
             // Auto-switch to next quality silently
-            setAutoRetryLabel(`Auto-switching to ${nextQuality.resolution}p...`);
+            setAutoRetryLabel(
+                `Auto-switching to ${nextQuality.resolution}p...`,
+            );
             setIsLoading(true);
             setActiveDownload(nextQuality);
+        } else if (refreshCountRef.current < 2) {
+            // All local qualities exhausted — try fetching fresh stream URLs from API
+            refreshCountRef.current += 1;
+            setAutoRetryLabel("Fetching fresh stream links...");
+            setIsLoading(true);
+            refreshStreamData();
         } else {
-            // All qualities exhausted — show error screen
-            console.error("Video player: all qualities failed", e);
+            // All qualities and refreshes exhausted — show error screen
+            console.error(
+                "Video player: all qualities and refreshes failed",
+                e,
+            );
             setPlayerError(true);
             setIsLoading(false);
             setAutoRetryLabel("");
         }
     };
 
-    // Stall watchdog — if isLoading stays true for 15 seconds, treat it as an error
+    // Fetch fresh stream URLs from the API (called when all CDN URLs fail)
+    const refreshStreamData = async () => {
+        setIsRefreshing(true);
+        try {
+            const freshStream = await movieApi.getStream(
+                detailPath,
+                season || 0,
+                episode || 0,
+            );
+
+            if (freshStream.downloads && freshStream.downloads.length > 0) {
+                // Reset failed URLs and use new stream data
+                failedUrlsRef.current = new Set();
+                setAutoRetryLabel("Fresh links found! Resuming...");
+
+                // Notify parent if callback provided
+                if (onStreamRefresh) onStreamRefresh(freshStream);
+
+                // Pick best available quality from fresh data
+                const freshSorted = [...freshStream.downloads].sort(
+                    (a, b) => b.resolution - a.resolution,
+                );
+                const pick =
+                    freshSorted.find((d) => d.resolution === 720) ||
+                    freshSorted.find((d) => d.resolution === 1080) ||
+                    freshSorted[0];
+
+                setActiveDownload(null);
+                setTimeout(() => setActiveDownload(pick), 50);
+            } else {
+                // API returned no streams
+                setPlayerError(true);
+                setIsLoading(false);
+                setAutoRetryLabel("");
+            }
+        } catch (err) {
+            console.error("Stream refresh failed:", err);
+            setPlayerError(true);
+            setIsLoading(false);
+            setAutoRetryLabel("");
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    // Stall watchdog — if isLoading stays true for 10 seconds, treat it as an error
     // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
     useEffect(() => {
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
@@ -216,9 +286,9 @@ export default function VideoPlayer({
             stallTimerRef.current = setTimeout(() => {
                 // Only trigger if still in a loading state (not yet playing)
                 if (!videoRef.current || videoRef.current.readyState < 2) {
-                    handlePlayerError(new Error('Stream stall timeout'));
+                    handlePlayerError(new Error("Stream stall timeout"));
                 }
-            }, 15_000);
+            }, 10_000);
         }
 
         return () => {
@@ -509,12 +579,14 @@ export default function VideoPlayer({
                         Video playback failed
                     </h3>
                     <p className="text-sm text-white/50 max-w-sm mb-6">
-                        All available mirrors have been tried. This stream may be temporarily unavailable — please try again later.
+                        All available mirrors have been tried. This stream may
+                        be temporarily unavailable — please try again later.
                     </p>
                     <button
                         onClick={() => {
-                            // Full reset — clear failed URLs and restart from highest quality
+                            // Full reset — clear failed URLs, reset refresh count, restart from highest quality
                             failedUrlsRef.current = new Set();
+                            refreshCountRef.current = 0;
                             setPlayerError(false);
                             setAutoRetryLabel("");
                             setIsLoading(true);
@@ -522,6 +594,9 @@ export default function VideoPlayer({
                             if (best) {
                                 setActiveDownload(null);
                                 setTimeout(() => setActiveDownload(best), 50);
+                            } else {
+                                // No downloads in current data — try fresh fetch
+                                refreshStreamData();
                             }
                         }}
                         className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all"
