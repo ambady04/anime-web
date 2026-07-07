@@ -31,35 +31,35 @@
 
 /* 1. Dark Theme (Neon-Noir Glassmorphism - Default) */
 html, :root:not(.light) {
-  --primary: #E31C25;
-  --primary-glow: rgba(227, 28, 37, 0.15);
-  --primary-light: #FF3B30;
-  --accent: #E31C25;
+  --primary: #FF1E27;
+  --primary-glow: rgba(255, 30, 39, 0.18);
+  --primary-light: #FF5E64;
+  --accent: #FF1E27;
   
-  --bg-solid: #060606;
-  --bg-gradient: linear-gradient(180deg, #070707 0%, #0D0D0D 100%);
-  --nav-bg: rgba(8, 8, 8, 0.88);
+  --bg-solid: #09090B;
+  --bg-gradient: linear-gradient(180deg, #09090B 0%, #0F0F13 100%);
+  --nav-bg: rgba(9, 9, 11, 0.88);
   
-  --text-primary: #FFFFFF;
-  --text-secondary: #9E9E95;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
   
   --glass-card: rgba(255, 255, 255, 0.05);
   --glass-panel: rgba(255, 255, 255, 0.07);
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-border-hover: rgba(227, 28, 37, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 30, 39, 0.45);
   
   --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.7);
-  --shadow-hover: 0 12px 32px rgba(227, 28, 37, 0.2), 0 0 20px rgba(227, 28, 37, 0.12);
+  --shadow-hover: 0 12px 32px rgba(255, 30, 39, 0.22), 0 0 20px rgba(255, 30, 39, 0.15);
   --shadow-nav: 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 32px rgba(0, 0, 0, 0.8);
   
-  --scrollbar-track: #060606;
+  --scrollbar-track: #09090B;
   --scrollbar-thumb: rgba(255, 255, 255, 0.08);
-  --scrollbar-thumb-hover: #E31C25;
+  --scrollbar-thumb-hover: #FF1E27;
   
-  --card-glow-color: rgba(227, 28, 37, 0.08);
-  --radial-glow-1: radial-gradient(circle at 10% 10%, rgba(227, 28, 37, 0.05), transparent 40%);
-  --radial-glow-2: radial-gradient(circle at 90% 10%, rgba(227, 28, 37, 0.03), transparent 35%);
-  --radial-glow-3: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0), transparent 50%);
+  --card-glow-color: rgba(255, 30, 39, 0.06);
+  --radial-glow-1: radial-gradient(circle at 15% 15%, rgba(255, 30, 39, 0.05), transparent 45%);
+  --radial-glow-2: radial-gradient(circle at 85% 15%, rgba(255, 30, 39, 0.03), transparent 40%);
+  --radial-glow-3: radial-gradient(circle at 50% 50%, rgba(9, 9, 11, 0), transparent 50%);
 }
 
 /* 2. Light Theme (Daylight Lounge Glassmorphism) */
@@ -97,10 +97,10 @@ html.light {
 
 @keyframes glow {
   from {
-    text-shadow: 0 0 4px rgba(227, 28, 37, 0.2), 0 0 12px rgba(227, 28, 37, 0.1);
+    text-shadow: 0 0 4px rgba(255, 30, 39, 0.2), 0 0 12px rgba(255, 30, 39, 0.1);
   }
   to {
-    text-shadow: 0 0 12px rgba(227, 28, 37, 0.4), 0 0 24px rgba(227, 28, 37, 0.2);
+    text-shadow: 0 0 12px rgba(255, 30, 39, 0.4), 0 0 24px rgba(255, 30, 39, 0.2);
   }
 }
 
