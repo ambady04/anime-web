@@ -233,8 +233,8 @@ export default function VideoPlayer({
         setIsLoading(true);
         setActiveDownload(quality);
 
-        // Swap source and reload
-        videoRef.current.src = quality.url;
+        // Swap source via the proxy (not the raw CDN URL which will 403)
+        videoRef.current.src = `/api/video?url=${encodeURIComponent(quality.url)}`;
         videoRef.current.load();
 
         // Restore timestamp
@@ -407,6 +407,8 @@ export default function VideoPlayer({
                     onDoubleClick={toggleFullscreen}
                     autoPlay
                     playsInline
+                    preload="auto"
+                    crossOrigin="anonymous"
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && (
