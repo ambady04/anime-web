@@ -41,6 +41,20 @@ export async function GET(req: NextRequest) {
 
     clearTimeout(timeout);
 
+    // CDN rejected – signal the client to fall back to a different quality
+    if (upstream.status === 403 || upstream.status === 404 || upstream.status === 410) {
+      return new Response(
+        JSON.stringify({ error: 'cdn_rejected', status: upstream.status }),
+        {
+          status: 422,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
     // Build response headers – only forward what the browser actually needs
     const resHeaders = new Headers();
 

@@ -73,15 +73,23 @@ export default function VideoPlayer({
     const [showSubtitles, setShowSubtitles] = useState(true);
     const [playerError, setPlayerError] = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
+    const [autoRetryLabel, setAutoRetryLabel] = useState("");
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Track which qualities have failed so we don't re-try them
+    const failedUrlsRef = useRef<Set<string>>(new Set());
 
     // Initialize source on mount or stream data update
     useEffect(() => {
+        // Reset failed URLs tracker when stream changes
+        failedUrlsRef.current = new Set();
+
         if (sortedDownloads.length > 0) {
-            // Pick 1080p or highest available by default
+            // Pick 720p first (better reliability than 1080p on slow CDNs)
+            // then fall to highest available if no 720p
             const defaultQuality =
+                sortedDownloads.find((d) => d.resolution === 720) ||
                 sortedDownloads.find((d) => d.resolution === 1080) ||
                 sortedDownloads[0];
             setActiveDownload(defaultQuality);
@@ -99,6 +107,7 @@ export default function VideoPlayer({
         setIsPlaying(false);
         setIsLoading(true);
         setPlayerError(false);
+        setAutoRetryLabel("");
         setShowAudioMenu(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [streamData]);
@@ -165,9 +174,32 @@ export default function VideoPlayer({
     };
 
     const handlePlayerError = (e: any) => {
-        console.error("Video player source error:", e);
-        setPlayerError(true);
-        setIsLoading(false);
+        if (!activeDownload) {
+            setPlayerError(true);
+            setIsLoading(false);
+            return;
+        }
+
+        // Mark this URL as failed
+        failedUrlsRef.current.add(activeDownload.url);
+
+        // Try to find the next quality that hasn't failed yet
+        const nextQuality = sortedDownloads.find(
+            (d) => !failedUrlsRef.current.has(d.url)
+        );
+
+        if (nextQuality) {
+            // Auto-switch to next quality silently
+            setAutoRetryLabel(`Auto-switching to ${nextQuality.resolution}p...`);
+            setIsLoading(true);
+            setActiveDownload(nextQuality);
+        } else {
+            // All qualities exhausted — show error screen
+            console.error("Video player: all qualities failed", e);
+            setPlayerError(true);
+            setIsLoading(false);
+            setAutoRetryLabel("");
+        }
     };
 
     // Listen to time updates and sync progress with storage
@@ -430,6 +462,16 @@ export default function VideoPlayer({
                 </div>
             )}
 
+            {/* Auto-retry label */}
+            {autoRetryLabel && !playerError && (
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 pointer-events-none">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
+                    <p className="text-white/80 text-xs font-bold uppercase tracking-widest">
+                        {autoRetryLabel}
+                    </p>
+                </div>
+            )}
+
             {/* Error state overlay */}
             {playerError && (
                 <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-30">
@@ -438,25 +480,24 @@ export default function VideoPlayer({
                         Video playback failed
                     </h3>
                     <p className="text-sm text-white/50 max-w-sm mb-6">
-                        The mirror streaming url failed to resolve. Try
-                        switching the resolution or checking other mirrors.
+                        All available mirrors have been tried. This stream may be temporarily unavailable — please try again later.
                     </p>
                     <button
                         onClick={() => {
+                            // Full reset — clear failed URLs and restart from highest quality
+                            failedUrlsRef.current = new Set();
                             setPlayerError(false);
+                            setAutoRetryLabel("");
                             setIsLoading(true);
-                            if (videoRef.current) {
-                                videoRef.current.load();
-                            } else if (activeDownload) {
-                                // Force state swap to trigger remount
-                                const curr = activeDownload;
+                            const best = sortedDownloads[0];
+                            if (best) {
                                 setActiveDownload(null);
-                                setTimeout(() => setActiveDownload(curr), 50);
+                                setTimeout(() => setActiveDownload(best), 50);
                             }
                         }}
                         className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all"
                     >
-                        Retry Playing
+                        Retry All Mirrors
                     </button>
                 </div>
             )}
