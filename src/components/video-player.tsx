@@ -83,21 +83,36 @@ export default function VideoPlayer({
     const [showAudioMenu, setShowAudioMenu] = useState(false);
     const [autoRetryLabel, setAutoRetryLabel] = useState("");
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [useDirectUrl, setUseDirectUrl] = useState(false);
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
+    // Track URLs that failed via proxy — used to decide when to try direct
+    const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
 
+    // Build the video source URL — uses proxy with referer hint, or direct CDN as fallback
+    const buildVideoSrc = (url: string): string => {
+        if (useDirectUrl) {
+            return url; // Direct CDN URL (last resort, may work for some CDNs)
+        }
+        const referer =
+            streamData.stream_domain || "https://videodownloader.site/";
+        return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}`;
+    };
+
     // Initialize source on mount or stream data update
     useEffect(() => {
         // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
+        proxyFailedUrlsRef.current = new Set();
         refreshCountRef.current = 0;
+        setUseDirectUrl(false);
 
         if (sortedDownloads.length > 0) {
             // Pick 720p first (better reliability than 1080p on slow CDNs)
@@ -202,6 +217,11 @@ export default function VideoPlayer({
         // Mark this URL as failed
         failedUrlsRef.current.add(activeDownload.url);
 
+        // Also track proxy failures specifically
+        if (!useDirectUrl) {
+            proxyFailedUrlsRef.current.add(activeDownload.url);
+        }
+
         // Try to find the next quality that hasn't failed yet
         const nextQuality = sortedDownloads.find(
             (d) => !failedUrlsRef.current.has(d.url),
@@ -214,16 +234,30 @@ export default function VideoPlayer({
             );
             setIsLoading(true);
             setActiveDownload(nextQuality);
+        } else if (!useDirectUrl && sortedDownloads.length > 0) {
+            // All proxy attempts failed — try direct CDN URLs as fallback
+            // (bypasses proxy, may work if CDN doesn't check referer for browser requests)
+            setAutoRetryLabel("Trying direct connection...");
+            setIsLoading(true);
+            failedUrlsRef.current = new Set(); // Reset so all qualities get tried again
+            setUseDirectUrl(true);
+            const best =
+                sortedDownloads.find((d) => d.resolution === 720) ||
+                sortedDownloads.find((d) => d.resolution === 480) ||
+                sortedDownloads[0];
+            setActiveDownload(null);
+            setTimeout(() => setActiveDownload(best), 50);
         } else if (refreshCountRef.current < 2) {
-            // All local qualities exhausted — try fetching fresh stream URLs from API
+            // All local qualities exhausted (both proxy and direct) — try fetching fresh stream URLs
             refreshCountRef.current += 1;
             setAutoRetryLabel("Fetching fresh stream links...");
             setIsLoading(true);
+            setUseDirectUrl(false); // Reset to proxy mode for fresh URLs
             refreshStreamData();
         } else {
-            // All qualities and refreshes exhausted — show error screen
+            // Everything exhausted — show error screen
             console.error(
-                "Video player: all qualities and refreshes failed",
+                "Video player: all qualities, direct mode, and refreshes failed",
                 e,
             );
             setPlayerError(true);
@@ -245,6 +279,8 @@ export default function VideoPlayer({
             if (freshStream.downloads && freshStream.downloads.length > 0) {
                 // Reset failed URLs and use new stream data
                 failedUrlsRef.current = new Set();
+                proxyFailedUrlsRef.current = new Set();
+                setUseDirectUrl(false);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
                 // Notify parent if callback provided
@@ -288,7 +324,7 @@ export default function VideoPlayer({
                 if (!videoRef.current || videoRef.current.readyState < 2) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 }
-            }, 10_000);
+            }, 20_000);
         }
 
         return () => {
@@ -366,7 +402,7 @@ export default function VideoPlayer({
         setActiveDownload(quality);
 
         // Swap source via the proxy (not the raw CDN URL which will 403)
-        videoRef.current.src = `/api/video?url=${encodeURIComponent(quality.url)}`;
+        videoRef.current.src = buildVideoSrc(quality.url);
         videoRef.current.load();
 
         // Restore timestamp
@@ -526,7 +562,7 @@ export default function VideoPlayer({
             {activeDownload && !playerError && (
                 <video
                     ref={videoRef}
-                    src={`/api/video?url=${encodeURIComponent(activeDownload.url)}`}
+                    src={buildVideoSrc(activeDownload.url)}
                     className="w-full h-full object-contain cursor-pointer"
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
@@ -586,7 +622,9 @@ export default function VideoPlayer({
                         onClick={() => {
                             // Full reset — clear failed URLs, reset refresh count, restart from highest quality
                             failedUrlsRef.current = new Set();
+                            proxyFailedUrlsRef.current = new Set();
                             refreshCountRef.current = 0;
+                            setUseDirectUrl(false);
                             setPlayerError(false);
                             setAutoRetryLabel("");
                             setIsLoading(true);
