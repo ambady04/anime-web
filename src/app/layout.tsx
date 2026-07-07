@@ -76,14 +76,6 @@ export default function RootLayout({
                 {/* Fixed Bottom Navigation for Mobile */}
                 <BottomNav />
 
-                {/* Elegant Minimalist Footer */}
-                <footer className="w-full py-8 pb-28 md:pb-8 border-t border-glass-border bg-black/40 backdrop-blur-sm z-10 mt-auto">
-                    <div className="max-w-380 mx-auto px-4 text-center text-sm text-foreground/40">
-                        <p>
-                            © {new Date().getFullYear()} KIXO. All rights reserved. All data sourced from unofficial mirrors.
-                        </p>
-                    </div>
-                </footer>
             </body>
         </html>
     );
