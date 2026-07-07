@@ -1,10 +1,9 @@
-import { NextRequest } from 'next/server';
-
-// Required to enable true streaming – without this Next.js buffers the full body
+// Edge runtime gives us Web Streams API natively and has no cold-start penalty,
+// making it the correct choice for a streaming video proxy on Vercel.
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get('url');
 
@@ -12,36 +11,28 @@ export async function GET(req: NextRequest) {
     return new Response('Missing url parameter', { status: 400 });
   }
 
-  // Pass Range header from browser for seeking / partial-content
-  const range = req.headers.get('range');
+  // Pass the browser's Range header through for seeking / partial-content
+  const incomingRange = new Request(req).headers.get('range');
 
   const upstreamHeaders: Record<string, string> = {
     'Referer': 'https://videodownloader.site/',
     'Origin':  'https://videodownloader.site',
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Encoding': 'identity', // Avoid compressed responses that break Content-Length
   };
 
-  if (range) {
-    upstreamHeaders['Range'] = range;
+  if (incomingRange) {
+    upstreamHeaders['Range'] = incomingRange;
   }
-
-  // 30-second abort so a stalled CDN connection doesn't hang the proxy indefinitely
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
     const upstream = await fetch(targetUrl, {
       headers: upstreamHeaders,
-      signal: controller.signal,
-      // Prevent Node from buffering the body – stream it directly
-      // @ts-expect-error: duplex is a valid fetch option in Node 18+
-      duplex: 'half',
     });
 
-    clearTimeout(timeout);
-
-    // CDN rejected – signal the client to fall back to a different quality
+    // CDN permanently rejected the URL — signal client to auto-fallback to next quality
     if (upstream.status === 403 || upstream.status === 404 || upstream.status === 410) {
       return new Response(
         JSON.stringify({ error: 'cdn_rejected', status: upstream.status }),
@@ -55,45 +46,40 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Build response headers – only forward what the browser actually needs
+    // Build response headers — only forward what the browser player needs
     const resHeaders = new Headers();
 
-    const forward = [
+    for (const h of [
       'content-type',
       'content-length',
       'content-range',
       'accept-ranges',
       'etag',
       'last-modified',
-    ];
-    for (const h of forward) {
+    ]) {
       const v = upstream.headers.get(h);
       if (v) resHeaders.set(h, v);
     }
 
-    // Ensure byte-range serving is advertised so the player can seek
+    // Advertise byte-range support so the player can seek without re-loading the source
     if (!resHeaders.has('accept-ranges')) {
       resHeaders.set('accept-ranges', 'bytes');
     }
 
     resHeaders.set('Access-Control-Allow-Origin', '*');
-
-    // Allow aggressive browser caching of video segments (1 hour)
-    // Without this every seek causes a full re-fetch through the proxy
+    // Cache video segments for 1 hour — avoids redundant proxy fetches on seeks
     resHeaders.set('Cache-Control', 'public, max-age=3600');
+    // Prevent Vercel's edge CDN from buffering the stream
+    resHeaders.set('X-Accel-Buffering', 'no');
 
-    // Stream the body directly – no intermediate buffering
+    // Stream body directly through — no intermediate buffering
     return new Response(upstream.body, {
-      status: upstream.status,      // 200 or 206 (partial content)
+      status: upstream.status,   // 200 or 206 Partial Content
       headers: resHeaders,
     });
 
   } catch (err: any) {
-    clearTimeout(timeout);
-    if (err?.name === 'AbortError') {
-      return new Response('Upstream CDN timed out', { status: 504 });
-    }
-    console.error('Video proxy error:', err);
-    return new Response('Error loading target stream', { status: 502 });
+    console.error('Video proxy error:', err?.message ?? err);
+    return new Response('Error loading stream', { status: 502 });
   }
 }
