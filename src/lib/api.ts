@@ -203,7 +203,7 @@ export const movieApi = {
   },
 
   // Get category listing
-  getCategory: async (name: string, page = 1, query?: string, adult = false): Promise<any> => {
-    return fetchFromApi<any>('/api/category', { name, page, query: query ?? '', adult });
+  getCategory: async (name: string, page = 1, query?: string, adult = false): Promise<{ pager: { hasMore: boolean; nextPage: number; page: number; perPage: number; totalCount: number }; items: Subject[] }> => {
+    return fetchFromApi('/api/category', { name, page, query: query ?? '', adult });
   }
 };
