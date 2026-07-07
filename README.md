@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KIXO — Glassmorphism Movie & Series Streaming UI
+
+KIXO is a premium, high-fidelity Glassmorphism-style movie streaming web application. The design is inspired by modern sleek dark user interfaces (like Apple TV+ and neon-noir cinema lounges), featuring rich translucency, glowing border accents, and dynamic micro-animations.
+
+---
+
+## Key Features
+
+- 🎭 **Glassmorphism Design System**: Clean, transparent card layouts with `backdrop-filter: blur(20px)`, subtle red borders (`#E31C25` theme color), and responsive grid arrangements.
+- 📱 **Responsive Multi-Device Layout**: Fully adaptive navigation containing a desktop header and a convenient mobile bottom navigation bar.
+- 🔍 **Rich Category Explorer**: A discovery view organized by genres (Action, Comedy, Drama, etc.) and curated Collections (Anime Hits, Blockbuster Movies, Korean Dramas).
+- 🎬 **Custom Video Player HUD**: Complete with responsive scrubber, volume sliders, multiple playback speeds, audio dub stream selectors, and error recovery fallbacks.
+- 🔐 **Inspect Guard Protection**: Features built-in timing-based DevTools detection and right-click restriction to protect premium assets and clear the browser Network tab instantly upon inspection attempts.
+- 💾 **Local History & Watchlist**: Integrated local storage tracking to bookmark titles and resume playback exactly where you left off ("Continue Watching").
+
+---
+
+## Technology Stack
+
+- **Core Framework**: [Next.js 16 (App Router)](https://nextjs.org)
+- **Styling**: Tailwind CSS & Modern Custom Glassmorphic Utilities
+- **Icons**: Lucide React
+- **Animations**: Framer Motion
+
+---
 
 ## Getting Started
 
-First, run the development server:
-
+### 1. Install Dependencies
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Run the Development Server
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open [http://localhost:3000](http://localhost:3000) (or the mapped local port) in your browser to view the application.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3. Build for Production
+```bash
+npm run build
+npm run start
+```

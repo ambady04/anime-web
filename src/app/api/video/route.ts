@@ -39,12 +39,16 @@ export async function GET(req: NextRequest) {
     // Disable server caching of media chunks
     responseHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-    return new NextResponse(videoResponse.body, {
+    // Read body as ArrayBuffer to prevent Next.js from forcing Transfer-Encoding: chunked
+    // which breaks video playback on iOS Safari/mobile browsers.
+    const buffer = await videoResponse.arrayBuffer();
+
+    return new Response(buffer, {
       status: videoResponse.status,
       headers: responseHeaders,
     });
   } catch (error) {
     console.error('Video proxy stream error:', error);
-    return new NextResponse('Error loading target stream', { status: 500 });
+    return new Response('Error loading target stream', { status: 500 });
   }
 }

@@ -4,6 +4,24 @@ import { useEffect } from "react";
 
 export default function InspectGuard() {
     useEffect(() => {
+        // Bypass inspect guard on mobile and tablet devices to prevent false-positive
+        // redirections caused by CPU latency/lag on slower mobile processors.
+        const isMobileOrTablet = () => {
+            if (typeof window === "undefined" || typeof navigator === "undefined") {
+                return false;
+            }
+            const hasTouch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+            const isSmallScreen = window.innerWidth < 1024;
+            const isMobileUA = /iphone|ipad|ipod|android|blackberry|mini|windows\sphone|iemobile/i.test(
+                navigator.userAgent.toLowerCase()
+            );
+            return hasTouch || isSmallScreen || isMobileUA;
+        };
+
+        if (isMobileOrTablet()) {
+            return;
+        }
+
         // 1. Disable Right-Click Context Menu
         const handleContextMenu = (e: MouseEvent) => {
             e.preventDefault();

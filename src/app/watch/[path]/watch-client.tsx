@@ -101,7 +101,7 @@ export default function WatchClient({
             </button>
 
             {/* Video Player Display */}
-            <div className="w-full mb-8 rounded-3xl overflow-hidden shadow-card border border-glass-border relative">
+            <div className="w-full aspect-video mb-8 rounded-3xl overflow-hidden shadow-card border border-glass-border relative">
                 <VideoPlayer
                     streamData={stream}
                     detailPath={path}

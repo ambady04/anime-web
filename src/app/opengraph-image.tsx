@@ -107,7 +107,7 @@ export default async function Image() {
             Premium Movie & Series Stream Hub
           </div>
 
-          {/* powered by tagline */}
+          {/* tagline */}
           <div
             style={{
               fontSize: '11px',
@@ -119,7 +119,7 @@ export default async function Image() {
               fontFamily: 'sans-serif',
             }}
           >
-            POWERED BY ABISOLUTIONS.ONLINE
+            MOVIES, SERIES & ANIME STREAM HUB
           </div>
         </div>
       </div>

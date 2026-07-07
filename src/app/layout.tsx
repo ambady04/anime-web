@@ -18,10 +18,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    metadataBase: new URL("https://abisolutions.online"),
+    metadataBase: new URL("https://kixo.to"),
     title: "KIXO - Premium Movie & Series Stream Hub",
     description:
-        "Watch and discover trending movies, TV shows, and subbed anime in high quality. Powered by abisolutions.online.",
+        "Watch and discover trending movies, TV shows, and subbed anime in high quality.",
 };
 
 export default function RootLayout({
@@ -80,16 +80,7 @@ export default function RootLayout({
                 <footer className="w-full py-8 pb-28 md:pb-8 border-t border-glass-border bg-black/40 backdrop-blur-sm z-10 mt-auto">
                     <div className="max-w-380 mx-auto px-4 text-center text-sm text-foreground/40">
                         <p>
-                            © {new Date().getFullYear()} KIXO. Powered by{" "}
-                            <a
-                                href="https://abisolutions.online"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="hover:text-primary transition-colors"
-                            >
-                                abisolutions.online
-                            </a>
-                            . All data sourced unofficial.
+                            © {new Date().getFullYear()} KIXO. All rights reserved. All data sourced from unofficial mirrors.
                         </p>
                     </div>
                 </footer>

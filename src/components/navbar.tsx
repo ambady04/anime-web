@@ -91,9 +91,6 @@ export default function Navbar() {
                                 XO
                             </span>
                         </div>
-                        <span className="text-[7px] font-bold tracking-tight text-foreground/40 group-hover:text-primary transition-colors">
-                            powered by abisolutions.online
-                        </span>
                     </div>
                 </Link>
 
