@@ -19,6 +19,8 @@ import {
     SkipBack,
     SkipForward,
     Headphones,
+    Keyboard,
+    HelpCircle,
 } from "lucide-react";
 import {
     StreamData,
@@ -104,10 +106,20 @@ export default function VideoPlayer({
     const [useDirectUrl, setUseDirectUrl] = useState(false);
     const [showRemaining, setShowRemaining] = useState(false);
 
+    // Premium states
+    const [showCheatSheet, setShowCheatSheet] = useState(false);
+    const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
+    const [showRightSkipAnimation, setShowRightSkipAnimation] = useState(false);
+    const [isPiPSupported, setIsPiPSupported] = useState(false);
+    const [isPiPActive, setIsPiPActive] = useState(false);
+
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track double click state to distinguish single clicks
     const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Track seek animation durations
+    const leftSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
     // Track URLs that failed via proxy — used to decide when to try direct
@@ -189,6 +201,36 @@ export default function VideoPlayer({
         if (videoRef.current) {
             videoRef.current.setAttribute("referrerpolicy", "no-referrer");
         }
+    }, [activeDownload]);
+
+    // Check for Picture-in-Picture support
+    useEffect(() => {
+        if (typeof document !== "undefined") {
+            setIsPiPSupported(
+                document.pictureInPictureEnabled ||
+                (videoRef.current && "requestPictureInPicture" in videoRef.current) ||
+                false
+            );
+        }
+    }, []);
+
+    // Monitor Picture-in-Picture enter/leave events to synchronize isPiPActive state
+    useEffect(() => {
+        const videoElement = videoRef.current;
+        const handleEnterPiP = () => setIsPiPActive(true);
+        const handleLeavePiP = () => setIsPiPActive(false);
+
+        if (videoElement) {
+            videoElement.addEventListener("enterpictureinpicture", handleEnterPiP);
+            videoElement.addEventListener("leavepictureinpicture", handleLeavePiP);
+        }
+
+        return () => {
+            if (videoElement) {
+                videoElement.removeEventListener("enterpictureinpicture", handleEnterPiP);
+                videoElement.removeEventListener("leavepictureinpicture", handleLeavePiP);
+            }
+        };
     }, [activeDownload]);
 
     // Convert SRT to WebVTT Blob URL
@@ -487,7 +529,6 @@ export default function VideoPlayer({
             videoRef.current.play().catch(() => {});
             setIsPlaying(true);
         }
-        triggerControlsVisibility();
     };
 
     // Seek bar scrubber scrubbing
@@ -496,6 +537,7 @@ export default function VideoPlayer({
         const seekTime = Number(e.target.value);
         videoRef.current.currentTime = seekTime;
         setCurrentTime(seekTime);
+        triggerControlsVisibility();
     };
 
     // Mute volume toggle
@@ -547,38 +589,103 @@ export default function VideoPlayer({
         }
     };
 
-    // Handle single clicks on the screen
-    const handleScreenClick = (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
-        if (
-            target.closest("button") ||
-            target.closest("input") ||
-            target.closest("select") ||
-            target.closest(".bg-zinc-950/80") ||
-            target.closest(".absolute.bottom-14")
-        ) {
-            return;
+    // Picture-in-Picture implementation
+    const togglePiP = async () => {
+        if (!videoRef.current) return;
+        try {
+            if (document.pictureInPictureElement) {
+                await document.exitPictureInPicture();
+                setIsPiPActive(false);
+            } else {
+                await videoRef.current.requestPictureInPicture();
+                setIsPiPActive(true);
+            }
+        } catch (err) {
+            console.error("PiP toggle failed:", err);
         }
-
-        e.stopPropagation();
-        togglePlay();
     };
 
-    // Handle double clicks on the screen to toggle fullscreen
-    const handleScreenDoubleClick = (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
+    // Handle single clicks on the screen
+    const handleScreenClick = (e: React.MouseEvent) => {
+        const clickTarget = e.target as HTMLElement;
         if (
-            target.closest("button") ||
-            target.closest("input") ||
-            target.closest("select") ||
-            target.closest(".bg-zinc-950/80") ||
-            target.closest(".absolute.bottom-14")
+            clickTarget.closest("button") ||
+            clickTarget.closest("input") ||
+            clickTarget.closest("select") ||
+            clickTarget.closest(".bg-zinc-950/80") ||
+            clickTarget.closest(".absolute.bottom-14")
         ) {
             return;
         }
 
         e.stopPropagation();
-        toggleFullscreen();
+
+        // If a double-click timer is running, cancel it and let handleScreenDoubleClick handle it
+        if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+            return;
+        }
+
+        // Set a timeout to delay the single click (play/pause) action
+        clickTimeoutRef.current = setTimeout(() => {
+            togglePlay();
+            clickTimeoutRef.current = null;
+        }, 220); // 220ms is fast enough to feel responsive, but slow enough to detect a double click
+    };
+
+    // Handle double clicks on the screen to toggle fullscreen or seek
+    const handleScreenDoubleClick = (e: React.MouseEvent) => {
+        const target = e.currentTarget as HTMLElement;
+        const clickTarget = e.target as HTMLElement;
+        if (
+            clickTarget.closest("button") ||
+            clickTarget.closest("input") ||
+            clickTarget.closest("select") ||
+            clickTarget.closest(".bg-zinc-950/80") ||
+            clickTarget.closest(".absolute.bottom-14")
+        ) {
+            return;
+        }
+
+        e.stopPropagation();
+
+        if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+        }
+
+        const rect = target.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const clickRatio = x / rect.width;
+
+        if (clickRatio < 0.35) {
+            // Skip backward 10s
+            if (videoRef.current) {
+                videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                setCurrentTime(videoRef.current.currentTime);
+            }
+            setShowLeftSkipAnimation(true);
+            if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
+            leftSkipTimeoutRef.current = setTimeout(() => setShowLeftSkipAnimation(false), 800);
+            triggerControlsVisibility();
+        } else if (clickRatio > 0.65) {
+            // Skip forward 10s
+            if (videoRef.current) {
+                videoRef.current.currentTime = Math.min(
+                    videoRef.current.duration || 0,
+                    videoRef.current.currentTime + 10,
+                );
+                setCurrentTime(videoRef.current.currentTime);
+            }
+            setShowRightSkipAnimation(true);
+            if (rightSkipTimeoutRef.current) clearTimeout(rightSkipTimeoutRef.current);
+            rightSkipTimeoutRef.current = setTimeout(() => setShowRightSkipAnimation(false), 800);
+            triggerControlsVisibility();
+        } else {
+            // Double click in the middle: toggle fullscreen
+            toggleFullscreen();
+        }
     };
 
     // Handle click outside of dropdowns to close them
@@ -680,6 +787,14 @@ export default function VideoPlayer({
                     toggleMute();
                     triggerControlsVisibility();
                     break;
+                case "?":
+                case "/":
+                    if (e.key === "?" || e.shiftKey) {
+                        e.preventDefault();
+                        setShowCheatSheet((prev) => !prev);
+                        triggerControlsVisibility();
+                    }
+                    break;
                 default:
                     break;
             }
@@ -725,11 +840,35 @@ export default function VideoPlayer({
         }
     };
 
-    // Auto clean timer
+    // Auto hide controls when playing, show them when paused, and clean up timers
     useEffect(() => {
-        return () => {
-            if (controlsTimeoutRef.current)
+        if (isPlaying) {
+            setShowControls(true);
+            if (controlsTimeoutRef.current) {
                 clearTimeout(controlsTimeoutRef.current);
+            }
+            controlsTimeoutRef.current = setTimeout(() => {
+                setShowControls(false);
+                setShowQualityMenu(false);
+                setShowSpeedMenu(false);
+                setShowAudioMenu(false);
+                setShowSubtitleMenu(false);
+                setShowRatioMenu(false);
+            }, 1200);
+        } else {
+            setShowControls(true);
+            if (controlsTimeoutRef.current) {
+                clearTimeout(controlsTimeoutRef.current);
+            }
+        }
+
+        return () => {
+            if (controlsTimeoutRef.current) {
+                clearTimeout(controlsTimeoutRef.current);
+            }
+            if (clickTimeoutRef.current) {
+                clearTimeout(clickTimeoutRef.current);
+            }
         };
     }, [isPlaying]);
 
@@ -819,6 +958,34 @@ export default function VideoPlayer({
                 video::-webkit-media-text-track-container {
                     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
                 }
+                @keyframes bounceHorizontalLeft {
+                    0%, 100% { transform: translateX(0); }
+                    50% { transform: translateX(-6px); }
+                }
+                @keyframes bounceHorizontalRight {
+                    0%, 100% { transform: translateX(0); }
+                    50% { transform: translateX(6px); }
+                }
+                @keyframes pulseFast {
+                    0%, 100% { opacity: 0; }
+                    50% { opacity: 1; }
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
+                }
+                .animate-bounce-horizontal-left {
+                    animation: bounceHorizontalLeft 0.5s infinite ease-in-out;
+                }
+                .animate-bounce-horizontal-right {
+                    animation: bounceHorizontalRight 0.5s infinite ease-in-out;
+                }
+                .animate-pulse-fast {
+                    animation: pulseFast 0.8s ease-in-out forwards;
+                }
+                .animate-fade-in {
+                    animation: fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+                }
             `}} />
 
             {/* Video Node */}
@@ -827,9 +994,7 @@ export default function VideoPlayer({
                     ref={videoRef}
                     src={buildVideoSrc(activeDownload.url)}
                     onEnded={handleVideoEnded}
-                    className={`w-full h-full ${
-                        isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
-                    } ${showControls ? "controls-visible" : ""} ${
+                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
                         aspectRatio === "contain"
                             ? "object-contain"
                             : aspectRatio === "fill"
@@ -849,8 +1014,6 @@ export default function VideoPlayer({
                         setAutoRetryLabel("");
                     }}
                     onError={handlePlayerError}
-                    onClick={handleScreenClick}
-                    onDoubleClick={handleScreenDoubleClick}
                     autoPlay
                     playsInline
                     preload="metadata"
@@ -867,6 +1030,71 @@ export default function VideoPlayer({
                         />
                     )}
                 </video>
+            )}
+
+            {/* Click Catcher Overlay */}
+            {!playerError && (
+                <div
+                    className={`absolute inset-0 z-10 ${
+                        isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
+                    }`}
+                    onClick={handleScreenClick}
+                    onDoubleClick={handleScreenDoubleClick}
+                />
+            )}
+
+            {/* Double-Click Skip Animations */}
+            {showLeftSkipAnimation && (
+                <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-r-full animate-pulse-fast">
+                    <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
+                        <SkipBack className="w-5 h-5 fill-white animate-bounce-horizontal-left text-primary-light" />
+                        <span className="text-xs font-black">-10s</span>
+                    </div>
+                </div>
+            )}
+
+            {showRightSkipAnimation && (
+                <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-l-full animate-pulse-fast">
+                    <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
+                        <SkipForward className="w-5 h-5 fill-white animate-bounce-horizontal-right text-primary-light" />
+                        <span className="text-xs font-black">+10s</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Skip Intro Floating Button */}
+            {isPlaying && currentTime >= 10 && currentTime <= 95 && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (videoRef.current) {
+                            videoRef.current.currentTime = Math.min(
+                                videoRef.current.duration || 0,
+                                videoRef.current.currentTime + 85
+                            );
+                            setCurrentTime(videoRef.current.currentTime);
+                        }
+                        triggerControlsVisibility();
+                    }}
+                    className="absolute bottom-32 right-6 z-25 bg-zinc-950/90 border border-white/10 hover:bg-zinc-900 hover:border-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+                >
+                    <span>Skip Intro</span>
+                    <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
+                </button>
+            )}
+
+            {/* Skip Outro / Next Episode Floating Button */}
+            {isPlaying && isSeries && onNextEpisode && duration > 0 && currentTime >= duration - 150 && currentTime < duration - 10 && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onNextEpisode();
+                    }}
+                    className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+                >
+                    <span>Next Episode</span>
+                    <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
+                </button>
             )}
 
             {/* Loading state spinner */}
@@ -1363,6 +1591,41 @@ export default function VideoPlayer({
                                     )}
                                 </div>
 
+                                {/* Picture-in-Picture Trigger */}
+                                {isPiPSupported && (
+                                    <button
+                                        onClick={togglePiP}
+                                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                                            isPiPActive
+                                                ? "text-primary bg-primary/10"
+                                                : "text-white/70 hover:text-white"
+                                        }`}
+                                        title="Picture-in-Picture"
+                                    >
+                                        <Scan className="w-4.5 h-4.5" />
+                                    </button>
+                                )}
+
+                                {/* Keyboard Cheat-Sheet Trigger */}
+                                <button
+                                    onClick={() => {
+                                        setShowCheatSheet(!showCheatSheet);
+                                        setShowQualityMenu(false);
+                                        setShowSpeedMenu(false);
+                                        setShowAudioMenu(false);
+                                        setShowSubtitleMenu(false);
+                                        setShowRatioMenu(false);
+                                    }}
+                                    className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                                        showCheatSheet
+                                            ? "text-primary bg-primary/10"
+                                            : "text-white/70 hover:text-white"
+                                    }`}
+                                    title="Keyboard Shortcuts Guide"
+                                >
+                                    <Keyboard className="w-4.5 h-4.5" />
+                                </button>
+
                                 {/* Fullscreen Trigger */}
                                 <button
                                     onClick={toggleFullscreen}
@@ -1376,6 +1639,68 @@ export default function VideoPlayer({
                                 </button>
                             </div>
                         </div>
+
+                        {/* Hotkeys Cheat Sheet Modal */}
+                        {showCheatSheet && (
+                            <div
+                                onClick={() => setShowCheatSheet(false)}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-40 p-4 animate-fade-in"
+                            >
+                                <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="bg-zinc-900 border border-white/10 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4 text-white"
+                                >
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                                        <h3 className="text-sm font-extrabold uppercase tracking-widest text-primary">
+                                            Keyboard Shortcuts
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowCheatSheet(false)}
+                                            className="text-white/45 hover:text-white text-xs font-bold px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Play / Pause</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">Space</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Fullscreen</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">F</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Rewind 10s</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">←</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Forward 10s</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">→</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Volume Up</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">↑</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Volume Down</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">↓</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Mute Toggle</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">M</kbd>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
+                                            <span className="text-white/60 font-semibold">Hotkeys Menu</span>
+                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">?</kbd>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-white/40 text-center font-medium pt-2">
+                                        Tip: You can also double-click left/right side of the video to seek 10s.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
