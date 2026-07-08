@@ -560,6 +560,7 @@ export default function VideoPlayer({
             return;
         }
 
+        e.stopPropagation();
         togglePlay();
     };
 
@@ -576,6 +577,7 @@ export default function VideoPlayer({
             return;
         }
 
+        e.stopPropagation();
         toggleFullscreen();
     };
 
@@ -797,6 +799,8 @@ export default function VideoPlayer({
                         setAutoRetryLabel("");
                     }}
                     onError={handlePlayerError}
+                    onClick={handleScreenClick}
+                    onDoubleClick={handleScreenDoubleClick}
                     autoPlay
                     playsInline
                     preload="metadata"
@@ -876,6 +880,8 @@ export default function VideoPlayer({
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 }`}
+                onClick={handleScreenClick}
+                onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
