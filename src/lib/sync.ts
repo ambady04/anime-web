@@ -209,3 +209,42 @@ export async function syncWatchedEpisodesToCloud(uid: string, detailPath: string
         console.error("[sync] Failed to sync watched episodes to cloud", e);
     }
 }
+
+/**
+ * Bidirectional load/sync for a single series season's watched episode progress in real-time
+ */
+export async function syncSeasonWatchedEpisodes(uid: string, detailPath: string, season: number): Promise<Set<number>> {
+    try {
+        const { getDoc } = await import("firebase/firestore");
+        const cleanKey = `${detailPath}__s${season}`;
+        const docRef = doc(db, "users", uid, "watched_episodes", escapeKey(cleanKey));
+        const docSnap = await getDoc(docRef);
+
+        const localKey = `kixo_ep__${cleanKey}`;
+        const localDataRaw = localStorage.getItem(localKey);
+        const localEps = localDataRaw ? JSON.parse(localDataRaw) as number[] : [];
+
+        if (docSnap.exists()) {
+            const cloudData = docSnap.data() as { episodes: number[] };
+            // Merge local and cloud via union
+            const union = Array.from(new Set([...localEps, ...cloudData.episodes]));
+            localStorage.setItem(localKey, JSON.stringify(union));
+
+            // Push union back to cloud if it has new items
+            if (union.length > cloudData.episodes.length) {
+                await setDoc(docRef, { episodes: union, updatedAt: Date.now() });
+            }
+            return new Set<number>(union);
+        } else if (localEps.length > 0) {
+            // Push local data to cloud if cloud record doesn't exist yet
+            await setDoc(docRef, { episodes: localEps, updatedAt: Date.now() });
+        }
+        return new Set<number>(localEps);
+    } catch (e) {
+        console.error("[sync] Real-time season episodes sync failed, falling back to local storage:", e);
+        const localKey = `kixo_ep__${detailPath}__s${season}`;
+        const localDataRaw = localStorage.getItem(localKey);
+        const localEps = localDataRaw ? JSON.parse(localDataRaw) as number[] : [];
+        return new Set<number>(localEps);
+    }
+}

@@ -130,6 +130,25 @@ export const localStore = {
       
       if (exists) {
         updated = watchlist.filter((w) => w.detailPath !== item.detailPath);
+        
+        // When unbookmarking, automatically clear all episode watch checklists for this series
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(`kixo_ep__${item.detailPath}__s`)) {
+            localStorage.removeItem(key);
+
+            // If logged in, queue deletion on Cloud Firestore as well
+            if (auth.currentUser) {
+              const { db } = require("./firebase");
+              const { doc, deleteDoc } = require("firebase/firestore");
+              const cleanKey = key.replace("kixo_ep__", "");
+              const docRef = doc(db, "users", auth.currentUser.uid, "watched_episodes", encodeURIComponent(cleanKey));
+              deleteDoc(docRef).catch((err: any) => {
+                console.error("[sync] Background episode progress delete failed:", err);
+              });
+            }
+          }
+        }
       } else {
         updated = [item, ...watchlist];
         added = true;

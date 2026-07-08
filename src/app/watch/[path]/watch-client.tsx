@@ -23,6 +23,8 @@ import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
+import { auth } from "@/lib/firebase";
+import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 
 const cleanTitle = (title: string): string => {
     return title
@@ -240,10 +242,22 @@ export default function WatchClient({
     const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
 
     useEffect(() => {
+        // Load local state synchronously first for instant UI response
         setWatchedEpisodes(
             localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
         );
         setWatchHistory(localStore.getHistory());
+
+        // Bidirectional sync with cloud database in the background if logged in
+        if (auth.currentUser) {
+            syncSeasonWatchedEpisodes(auth.currentUser.uid, subject.detailPath, selectedSeason)
+                .then((syncedEps) => {
+                    setWatchedEpisodes(syncedEps);
+                })
+                .catch((err) => {
+                    console.error("[sync] Background episode sync failed:", err);
+                });
+        }
     }, [subject.detailPath, selectedSeason, activeEpisode]);
 
     const handleEpisodeContextMenu = (e: React.MouseEvent, epNum: number) => {
