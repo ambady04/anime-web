@@ -19,7 +19,10 @@ export interface WatchlistItem {
   imdbRatingValue: number;
   releaseDate?: string;
   corner?: string;
+  bookmarkedSeason?: number;
+  bookmarkedEpisode?: number;
 }
+
 
 export const localStore = {
   // Watch History
@@ -108,6 +111,50 @@ export const localStore = {
       return false;
     }
   },
+
+  getWatchlistItem: (detailPath: string): WatchlistItem | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    try {
+      const watchlist = localStore.getWatchlist();
+      return watchlist.find((w) => w.detailPath === detailPath);
+    } catch {
+      return undefined;
+    }
+  },
+
+  updateEpisodeBookmark: (item: WatchlistItem, season?: number, episode?: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const watchlist = localStore.getWatchlist();
+      const exists = watchlist.some((w) => w.detailPath === item.detailPath);
+      let updated;
+      if (exists) {
+        updated = watchlist.map((w) => {
+          if (w.detailPath === item.detailPath) {
+            return {
+              ...w,
+              bookmarkedSeason: season,
+              bookmarkedEpisode: episode,
+            };
+          }
+          return w;
+        });
+      } else {
+        updated = [
+          {
+            ...item,
+            bookmarkedSeason: season,
+            bookmarkedEpisode: episode,
+          },
+          ...watchlist,
+        ];
+      }
+      localStorage.setItem('kixo_watchlist', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to update episode bookmark', e);
+    }
+  },
+
 
   // Episode progress — tracks which episodes have been watched per show/season
   // Key format: `${detailPath}__s${season}`  Value: number[] of watched episode numbers

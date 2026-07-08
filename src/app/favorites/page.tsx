@@ -69,6 +69,8 @@ export default function FavoritesPage() {
                                     corner: fav.corner,
                                     hasResource: true,
                                 }}
+                                bookmarkedSeason={fav.bookmarkedSeason}
+                                bookmarkedEpisode={fav.bookmarkedEpisode}
                             />
                         </div>
                     ))}

@@ -1,22 +1,49 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Star, Play, Tv, Film } from "lucide-react";
 import { Subject } from "@/lib/api";
+import { localStore } from "@/lib/storage";
 
 interface MovieCardProps {
     subject: Subject;
+    bookmarkedSeason?: number;
+    bookmarkedEpisode?: number;
 }
 
-export default function MovieCard({ subject }: MovieCardProps) {
+export default function MovieCard({
+    subject,
+    bookmarkedSeason: propBookmarkedSeason,
+    bookmarkedEpisode: propBookmarkedEpisode,
+}: MovieCardProps) {
     // If the cover URL is relative or missing, we can fallback, but we should make sure we support it.
     const imageUrl = subject.cover?.url || "/placeholder.jpg";
 
+    const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
+
+    const [bookmarkedSeason, setBookmarkedSeason] = useState<number | undefined>(propBookmarkedSeason);
+    const [bookmarkedEpisode, setBookmarkedEpisode] = useState<number | undefined>(propBookmarkedEpisode);
+
+    useEffect(() => {
+        if (propBookmarkedSeason !== undefined) {
+            setBookmarkedSeason(propBookmarkedSeason);
+        }
+        if (propBookmarkedEpisode !== undefined) {
+            setBookmarkedEpisode(propBookmarkedEpisode);
+        }
+        if (isSeries && propBookmarkedSeason === undefined && propBookmarkedEpisode === undefined) {
+            const item = localStore.getWatchlistItem(subject.detailPath);
+            setBookmarkedSeason(item?.bookmarkedSeason);
+            setBookmarkedEpisode(item?.bookmarkedEpisode);
+        }
+    }, [isSeries, subject.detailPath, propBookmarkedSeason, propBookmarkedEpisode]);
+
     // Decide the layout link path.
     // The path parameter is the detailPath, e.g., "from-hindi-Icj9nKQHUt2"
-    const watchLink = `/watch/${subject.detailPath}`;
-
-    const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
+    const watchLink = bookmarkedSeason && bookmarkedEpisode
+        ? `/watch/${subject.detailPath}?season=${bookmarkedSeason}&episode=${bookmarkedEpisode}`
+        : `/watch/${subject.detailPath}`;
 
     return (
         <Link
@@ -52,16 +79,25 @@ export default function MovieCard({ subject }: MovieCardProps) {
                     )}
 
                     {/* Format Badge */}
-                    <div className="bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-md border border-white/5 flex items-center space-x-1">
-                        {isSeries ? (
-                            <Tv className="w-2.5 h-2.5 text-primary-light" />
-                        ) : (
-                            <Film className="w-2.5 h-2.5 text-white/90" />
-                        )}
-                        <span className="text-[8px] font-black text-white/90 uppercase tracking-wider">
-                            {isSeries ? "Series" : "Movie"}
-                        </span>
-                    </div>
+                    {bookmarkedSeason && bookmarkedEpisode ? (
+                        <div className="bg-emerald-500/20 backdrop-blur-md px-2 py-0.5 rounded-md border border-emerald-500/40 flex items-center space-x-1 shadow-lg shadow-emerald-500/10">
+                            <Tv className="w-2.5 h-2.5 text-emerald-400 fill-emerald-400/20" />
+                            <span className="text-[8px] font-black text-emerald-400 uppercase tracking-wider">
+                                Resume S{bookmarkedSeason} E{bookmarkedEpisode}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="bg-white/10 backdrop-blur-md px-2 py-0.5 rounded-md border border-white/5 flex items-center space-x-1">
+                            {isSeries ? (
+                                <Tv className="w-2.5 h-2.5 text-primary-light" />
+                            ) : (
+                                <Film className="w-2.5 h-2.5 text-white/90" />
+                            )}
+                            <span className="text-[8px] font-black text-white/90 uppercase tracking-wider">
+                                {isSeries ? "Series" : "Movie"}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Movie Title */}

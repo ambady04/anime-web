@@ -102,6 +102,7 @@ export default function VideoPlayer({
     const [autoRetryLabel, setAutoRetryLabel] = useState("");
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [useDirectUrl, setUseDirectUrl] = useState(false);
+    const [showRemaining, setShowRemaining] = useState(false);
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -216,6 +217,7 @@ export default function VideoPlayer({
         setDuration(videoRef.current?.duration || 0);
         setIsLoading(false);
         setPlayerError(false);
+        setAutoRetryLabel("");
 
         // Check history to resume
         const history = localStore.getHistory();
@@ -545,7 +547,7 @@ export default function VideoPlayer({
         }
     };
 
-    // Distinguish single clicks from double clicks on the screen
+    // Handle single clicks on the screen
     const handleScreenClick = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         if (
@@ -558,17 +560,10 @@ export default function VideoPlayer({
             return;
         }
 
-        if (clickTimeoutRef.current) {
-            clearTimeout(clickTimeoutRef.current);
-            clickTimeoutRef.current = null;
-        } else {
-            clickTimeoutRef.current = setTimeout(() => {
-                togglePlay();
-                clickTimeoutRef.current = null;
-            }, 250);
-        }
+        togglePlay();
     };
 
+    // Handle double clicks on the screen to toggle fullscreen
     const handleScreenDoubleClick = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
         if (
@@ -581,10 +576,6 @@ export default function VideoPlayer({
             return;
         }
 
-        if (clickTimeoutRef.current) {
-            clearTimeout(clickTimeoutRef.current);
-            clickTimeoutRef.current = null;
-        }
         toggleFullscreen();
     };
 
@@ -776,6 +767,8 @@ export default function VideoPlayer({
             ref={containerRef}
             onMouseMove={triggerControlsVisibility}
             onMouseLeave={() => isPlaying && setShowControls(false)}
+            onClick={handleScreenClick}
+            onDoubleClick={handleScreenDoubleClick}
             className="relative w-full h-full bg-black select-none overflow-hidden group/player"
         >
             {/* Video Node */}
@@ -791,15 +784,19 @@ export default function VideoPlayer({
                               ? "object-fill"
                               : "object-cover"
                     }`}
-                    onPlay={() => setIsPlaying(true)}
+                    onPlay={() => {
+                        setIsPlaying(true);
+                        setAutoRetryLabel("");
+                    }}
                     onPause={() => setIsPlaying(false)}
                     onLoadedMetadata={handleLoadedMetadata}
                     onTimeUpdate={handleTimeUpdate}
                     onWaiting={() => setIsLoading(true)}
-                    onPlaying={() => setIsLoading(false)}
+                    onPlaying={() => {
+                        setIsLoading(false);
+                        setAutoRetryLabel("");
+                    }}
                     onError={handlePlayerError}
-                    onClick={handleScreenClick}
-                    onDoubleClick={handleScreenDoubleClick}
                     autoPlay
                     playsInline
                     preload="metadata"
@@ -879,8 +876,6 @@ export default function VideoPlayer({
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 }`}
-                onClick={handleScreenClick}
-                onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
@@ -924,8 +919,14 @@ export default function VideoPlayer({
                                 className="grow accent-primary cursor-pointer h-1 hover:h-1.5 transition-all bg-white/20 rounded-lg outline-none"
                             />
 
-                            <span className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left">
-                                {formatTime(duration)}
+                             <span
+                                onClick={() => setShowRemaining((prev) => !prev)}
+                                className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
+                                title={showRemaining ? "Click to show duration" : "Click to show remaining time"}
+                            >
+                                {showRemaining
+                                    ? `-${formatTime(Math.max(0, duration - currentTime))}`
+                                    : formatTime(duration)}
                             </span>
                         </div>
 

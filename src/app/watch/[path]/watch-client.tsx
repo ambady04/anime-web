@@ -16,6 +16,7 @@ import {
     Info,
     ChevronDown,
     ChevronUp,
+    Bookmark,
 } from "lucide-react";
 import { ItemDetails, StreamData } from "@/lib/api";
 import { localStore } from "@/lib/storage";
@@ -53,8 +54,14 @@ export default function WatchClient({
     }, [path, stream]);
 
     const [isInWatchlist, setIsInWatchlist] = useState(false);
+    const [bookmarkedSeason, setBookmarkedSeason] = useState<number | undefined>(undefined);
+    const [bookmarkedEpisode, setBookmarkedEpisode] = useState<number | undefined>(undefined);
+
     useEffect(() => {
         setIsInWatchlist(localStore.isInWatchlist(subject.detailPath));
+        const item = localStore.getWatchlistItem(subject.detailPath);
+        setBookmarkedSeason(item?.bookmarkedSeason);
+        setBookmarkedEpisode(item?.bookmarkedEpisode);
     }, [subject.detailPath]);
 
     const handleWatchlistToggle = () => {
@@ -68,9 +75,52 @@ export default function WatchClient({
             corner: subject.corner || "",
         });
         setIsInWatchlist(added);
+        if (!added) {
+            // If removed from watchlist, clear the episode bookmark state too
+            setBookmarkedSeason(undefined);
+            setBookmarkedEpisode(undefined);
+        }
     };
 
     const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
+
+    const isEpisodeBookmarked = bookmarkedSeason === activeSeason && bookmarkedEpisode === activeEpisode;
+
+    const handleEpisodeBookmarkToggle = () => {
+        const item = {
+            detailPath: subject.detailPath,
+            title: subject.title,
+            coverUrl: subject.cover?.url || "",
+            subjectType: subject.subjectType,
+            imdbRatingValue: subject.imdbRatingValue,
+            releaseDate: subject.releaseDate || "",
+            corner: subject.corner || "",
+        };
+
+        if (isEpisodeBookmarked) {
+            localStore.updateEpisodeBookmark(item, undefined, undefined);
+            setBookmarkedSeason(undefined);
+            setBookmarkedEpisode(undefined);
+        } else {
+            localStore.updateEpisodeBookmark(item, activeSeason, activeEpisode);
+            setBookmarkedSeason(activeSeason);
+            setBookmarkedEpisode(activeEpisode);
+            setIsInWatchlist(true);
+        }
+    };
+
+    // Auto-redirect to bookmarked episode if no query params are explicitly set
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const hasParams = window.location.search.includes("season=") || window.location.search.includes("episode=");
+            if (isSeries && !hasParams) {
+                const item = localStore.getWatchlistItem(subject.detailPath);
+                if (item?.bookmarkedSeason && item?.bookmarkedEpisode) {
+                    router.replace(`/watch/${path}?season=${item.bookmarkedSeason}&episode=${item.bookmarkedEpisode}`);
+                }
+            }
+        }
+    }, [isSeries, subject.detailPath, path, router]);
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
     const currentSeasonData = resource?.seasons?.find(
@@ -253,6 +303,26 @@ export default function WatchClient({
                                     {isInWatchlist ? "Saved" : "Bookmark"}
                                 </span>
                             </button>
+                            {isSeries && (
+                                <button
+                                    onClick={handleEpisodeBookmarkToggle}
+                                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-bold uppercase tracking-wider ${
+                                        isEpisodeBookmarked
+                                            ? "bg-emerald-500 border-emerald-500/20 text-white shadow-lg shadow-emerald-500/20 animate-fade-in"
+                                            : "bg-glass-card hover:bg-glass-panel border-glass-border text-foreground/70"
+                                    }`}
+                                    title={`Bookmark Season ${activeSeason} Episode ${activeEpisode}`}
+                                >
+                                    <Bookmark
+                                        className={`w-3 h-3 ${isEpisodeBookmarked ? "fill-white" : ""}`}
+                                    />
+                                    <span>
+                                        {isEpisodeBookmarked
+                                            ? `Bookmarked S${activeSeason} E${activeEpisode}`
+                                            : `Bookmark S${activeSeason} E${activeEpisode}`}
+                                    </span>
+                                </button>
+                            )}
                         </div>
 
                         {/* Genres */}
