@@ -8,7 +8,6 @@ import {
     History,
     Heart,
     Home,
-    Film,
     User,
     Sun,
     Moon,
@@ -54,7 +53,6 @@ export default function Navbar() {
 
     const navLinks = [
         { href: "/", label: "Home", icon: Home },
-        { href: "/search", label: "Explore", icon: Film },
         { href: "/history", label: "History", icon: History },
         { href: "/favorites", label: "Watchlist", icon: Heart },
     ];

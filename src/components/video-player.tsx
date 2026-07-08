@@ -88,6 +88,7 @@ export default function VideoPlayer({
     const [playbackRate, setPlaybackRate] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [aspectRatio, setAspectRatio] = useState<"contain" | "fill" | "cover">("contain");
+    const [isAutoQuality, setIsAutoQuality] = useState(true);
 
     const [showControls, setShowControls] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
@@ -130,6 +131,7 @@ export default function VideoPlayer({
         proxyFailedUrlsRef.current = new Set();
         refreshCountRef.current = 0;
         setUseDirectUrl(false);
+        setIsAutoQuality(true);
 
         if (sortedDownloads.length > 0) {
             // Pick 720p first (better reliability than 1080p on slow CDNs)
@@ -426,8 +428,11 @@ export default function VideoPlayer({
     }, [detailPath, title, coverUrl, isSeries, season, episode, duration]);
 
     // Resolution selector handles video source swapping
-    const handleQualityChange = (quality: DownloadLink) => {
+    const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
         if (!videoRef.current || !activeDownload) return;
+        if (!keepAuto) {
+            setIsAutoQuality(false);
+        }
         const currentPlayTime = videoRef.current.currentTime;
         const wasPlaying = !videoRef.current.paused;
 
@@ -829,6 +834,19 @@ export default function VideoPlayer({
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 }`}
+                onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (
+                        target.closest("button") ||
+                        target.closest("input") ||
+                        target.closest("select") ||
+                        target.closest(".bg-zinc-950/80") ||
+                        target.closest(".absolute.bottom-14")
+                    ) {
+                        return;
+                    }
+                    togglePlay();
+                }}
             >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
@@ -1072,29 +1090,49 @@ export default function VideoPlayer({
                                     >
                                         <span>
                                             {activeDownload
-                                                ? `${activeDownload.resolution}p`
+                                                ? isAutoQuality
+                                                    ? `Auto (${activeDownload.resolution}p)`
+                                                    : `${activeDownload.resolution}p`
                                                 : "Auto"}
                                         </span>
                                         <Settings className="w-3.5 h-3.5" />
                                     </button>
-
+ 
                                     {showQualityMenu &&
                                         sortedDownloads.length > 0 && (
                                             <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Quality
                                                 </p>
+                                                <button
+                                                    onClick={() => {
+                                                        setIsAutoQuality(true);
+                                                        setShowQualityMenu(false);
+                                                        const defaultQuality =
+                                                            sortedDownloads.find((d) => d.resolution === 720) ||
+                                                            sortedDownloads.find((d) => d.resolution === 1080) ||
+                                                            sortedDownloads[0];
+                                                        if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
+                                                            handleQualityChange(defaultQuality, true);
+                                                        }
+                                                    }}
+                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                        isAutoQuality
+                                                            ? "text-primary bg-primary/10"
+                                                            : "text-white/80"
+                                                    }`}
+                                                >
+                                                    Auto
+                                                </button>
                                                 {sortedDownloads.map((link) => (
                                                     <button
                                                         key={link.id}
-                                                        onClick={() =>
-                                                            handleQualityChange(
-                                                                link,
-                                                            )
-                                                        }
+                                                        onClick={() => {
+                                                            handleQualityChange(link);
+                                                            setShowQualityMenu(false);
+                                                        }}
                                                         className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            activeDownload?.id ===
-                                                            link.id
+                                                            !isAutoQuality && activeDownload?.id === link.id
                                                                 ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
                                                         }`}
@@ -1172,35 +1210,17 @@ export default function VideoPlayer({
                                             viewBox="0 0 24 24"
                                             fill="none"
                                             stroke="currentColor"
-                                            strokeWidth="2.2"
+                                            strokeWidth="2"
                                             strokeLinecap="round"
                                             strokeLinejoin="round"
                                             className="w-4.5 h-4.5"
                                         >
-                                            {/* Curved screen outline */}
-                                            <path d="M 2.5 6.5 Q 12 8.5 21.5 6.5" />
-                                            <path d="M 2.5 17.5 Q 12 15.5 21.5 17.5" />
-                                            <line x1="2.5" y1="6.5" x2="2.5" y2="17.5" />
-                                            <line x1="21.5" y1="6.5" x2="21.5" y2="17.5" />
-                                            {/* Corner focus brackets */}
-                                            <path d="M 5 9.5 L 5 8.5 L 6 8.5" />
-                                            <path d="M 19 9.5 L 19 8.5 L 18 8.5" />
-                                            <path d="M 5 14.5 L 5 15.5 L 6 15.5" />
-                                            <path d="M 19 14.5 L 19 15.5 L 18 15.5" />
-                                            {/* Inside 16:9 text */}
-                                            <text
-                                                x="12"
-                                                y="13.8"
-                                                fontSize="5"
-                                                fontWeight="900"
-                                                letterSpacing="-0.2"
-                                                textAnchor="middle"
-                                                fill="currentColor"
-                                                stroke="none"
-                                                style={{ fontFamily: 'system-ui, sans-serif' }}
-                                            >
-                                                16:9
-                                            </text>
+                                            {/* Outer screen frame */}
+                                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                                            {/* Diagonal scale arrows */}
+                                            <path d="M 9 15 L 15 9" />
+                                            <path d="M 12 9 L 15 9 L 15 12" />
+                                            <path d="M 12 15 L 9 15 L 9 12" />
                                         </svg>
                                     </button>
 
