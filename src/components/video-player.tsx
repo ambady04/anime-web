@@ -16,6 +16,8 @@ import {
     Maximize2,
     AlertTriangle,
     Scan,
+    SkipBack,
+    SkipForward,
 } from "lucide-react";
 import {
     StreamData,
@@ -36,6 +38,8 @@ interface VideoPlayerProps {
     episode?: number;
     dubs?: DubModel[];
     onStreamRefresh?: (newStream: StreamData) => void;
+    onNextEpisode?: () => void;
+    onPrevEpisode?: () => void;
 }
 
 export default function VideoPlayer({
@@ -48,6 +52,8 @@ export default function VideoPlayer({
     episode,
     dubs,
     onStreamRefresh,
+    onNextEpisode,
+    onPrevEpisode,
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -703,6 +709,12 @@ export default function VideoPlayer({
         }
     }, [showSubtitles, subtitleUrl]);
 
+    const handleVideoEnded = () => {
+        if (isSeries && onNextEpisode) {
+            onNextEpisode();
+        }
+    };
+
     return (
         <div
             ref={containerRef}
@@ -715,6 +727,7 @@ export default function VideoPlayer({
                 <video
                     ref={videoRef}
                     src={buildVideoSrc(activeDownload.url)}
+                    onEnded={handleVideoEnded}
                     className={`w-full h-full cursor-pointer ${
                         aspectRatio === "contain"
                             ? "object-contain"
@@ -860,8 +873,19 @@ export default function VideoPlayer({
 
                         {/* Controls Bar Row */}
                         <div className="flex items-center justify-between">
-                            {/* Left Controls: Play, Volume */}
-                            <div className="flex items-center space-x-4">
+                            {/* Left Controls: Prev, Play, Next, Volume */}
+                            <div className="flex items-center space-x-2.5 sm:space-x-3">
+                                {/* Prev Episode */}
+                                {isSeries && onPrevEpisode && (
+                                    <button
+                                        onClick={onPrevEpisode}
+                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                        title="Previous Episode"
+                                    >
+                                        <SkipBack className="w-4 h-4 fill-white text-white" />
+                                    </button>
+                                )}
+
                                 {/* Play Pause */}
                                 <button
                                     onClick={togglePlay}
@@ -873,6 +897,17 @@ export default function VideoPlayer({
                                         <Play className="w-4.5 h-4.5 fill-white" />
                                     )}
                                 </button>
+
+                                {/* Next Episode */}
+                                {isSeries && onNextEpisode && (
+                                    <button
+                                        onClick={onNextEpisode}
+                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                        title="Next Episode"
+                                    >
+                                        <SkipForward className="w-4 h-4 fill-white text-white" />
+                                    </button>
+                                )}
 
                                 {/* Volume Panel */}
                                 <div className="flex items-center space-x-2">

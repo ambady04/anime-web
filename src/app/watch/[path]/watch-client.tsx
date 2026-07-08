@@ -86,6 +86,18 @@ export default function WatchClient({
         router.push(`/watch/${path}?season=${selectedSeason}&episode=${epNum}`);
     };
 
+    const handleNextEpisode = () => {
+        if (isSeries && activeEpisode < totalEpisodes) {
+            handleEpisodeClick(activeEpisode + 1);
+        }
+    };
+
+    const handlePrevEpisode = () => {
+        if (isSeries && activeEpisode > 1) {
+            handleEpisodeClick(activeEpisode - 1);
+        }
+    };
+
     const handleAudioClick = (detailPath: string) => {
         setLoadingAudio(detailPath);
         setIsPageLoading(true);
@@ -143,6 +155,8 @@ export default function WatchClient({
                             season={isSeries ? activeSeason : undefined}
                             episode={isSeries ? activeEpisode : undefined}
                             dubs={subject.dubs}
+                            onNextEpisode={activeEpisode < totalEpisodes ? handleNextEpisode : undefined}
+                            onPrevEpisode={activeEpisode > 1 ? handlePrevEpisode : undefined}
                         />
                         {isPageLoading && (
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-40 animate-fade-in">

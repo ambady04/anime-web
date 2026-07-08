@@ -96,6 +96,12 @@ export default async function HomePage() {
             {/* 4. Display Content Shelves (Trending, Cinema, etc.) */}
             {(shelves.length > 0 || malayalamMovies.length > 0) ? (
                 <div className="space-y-4">
+                    {malayalamMovies.length > 0 && (
+                        <MovieShelf
+                            title="Latest Malayalam Movies"
+                            subjects={malayalamMovies}
+                        />
+                    )}
                     {shelves.map((shelf, idx) => (
                         <MovieShelf
                             key={shelf.opId || idx}
@@ -103,12 +109,6 @@ export default async function HomePage() {
                             subjects={shelf.subjects}
                         />
                     ))}
-                    {malayalamMovies.length > 0 && (
-                        <MovieShelf
-                            title="Malayalam Movies"
-                            subjects={malayalamMovies}
-                        />
-                    )}
                 </div>
             ) : errorMsg ? (
                 /* API Error UI Container */
