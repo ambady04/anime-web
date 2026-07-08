@@ -147,10 +147,18 @@ const GENRE_CATEGORIES = [
         bg: "rgba(255,193,7,0.12)",
         name: "top",
     },
+    {
+        label: "Malayalam",
+        icon: Film,
+        color: "#FF2E93",
+        bg: "rgba(255,46,147,0.12)",
+        name: "malayalam",
+    },
 ];
 
 const QUICK_SEARCHES = [
     { label: "🔥 Trending Now", q: "trending" },
+    { label: "🌴 Malayalam", q: "malayalam" },
     { label: "⚡ New Releases", q: "new 2024" },
     { label: "🎌 Anime", q: "anime" },
     { label: "🎬 Marvel", q: "marvel" },

@@ -791,20 +791,20 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-black/40 z-20 flex flex-col justify-between p-4 transition-opacity duration-300 ${
+                className={`absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 }`}
             >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
                     <div className="text-white drop-shadow-md">
                         <h2 className="font-extrabold text-sm sm:text-base line-clamp-1">
                             {title}
                         </h2>
                         {isSeries && season && episode && (
-                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold">
+                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
                                 Season {season} • Episode {episode}
                             </p>
                         )}
@@ -821,286 +821,289 @@ export default function VideoPlayer({
                     </button>
                 )}
 
-                {/* Bottom controls panel */}
-                <div className="space-y-4">
-                    {/* Timeline Seek Scrubber Track */}
-                    <div className="flex items-center space-x-3">
-                        <span className="text-white font-mono text-xs select-none">
-                            {formatTime(currentTime)}
-                        </span>
+                {/* Bottom controls panel wrapped in a premium floating glass panel */}
+                <div className="w-full max-w-6xl mx-auto px-4 pb-4 sm:px-6 sm:pb-6">
+                    <div className="bg-zinc-950/80 backdrop-blur-md border border-white/10 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 transition-all duration-300 hover:border-white/15">
+                        {/* Timeline Seek Scrubber Track */}
+                        <div className="flex items-center space-x-3">
+                            <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">
+                                {formatTime(currentTime)}
+                            </span>
 
-                        <input
-                            type="range"
-                            min="0"
-                            max={duration || 100}
-                            value={currentTime}
-                            onChange={handleScrubberChange}
-                            className="grow accent-primary cursor-pointer h-1 hover:h-1.5 transition-all bg-white/20 rounded-lg outline-none"
-                        />
+                            <input
+                                type="range"
+                                min="0"
+                                max={duration || 100}
+                                value={currentTime}
+                                onChange={handleScrubberChange}
+                                className="grow accent-primary cursor-pointer h-1 hover:h-1.5 transition-all bg-white/20 rounded-lg outline-none"
+                            />
 
-                        <span className="text-white/60 font-mono text-xs select-none">
-                            {formatTime(duration)}
-                        </span>
-                    </div>
-
-                    {/* Controls Bar Row */}
-                    <div className="flex items-center justify-between">
-                        {/* Left Controls: Play, Skip/Rewind, Volume */}
-                        <div className="flex items-center space-x-4">
-                            {/* Play Pause */}
-                            <button
-                                onClick={togglePlay}
-                                className="text-white hover:text-primary-light transition-colors focus:outline-none"
-                            >
-                                {isPlaying ? (
-                                    <Pause className="w-5 h-5 fill-white" />
-                                ) : (
-                                    <Play className="w-5 h-5 fill-white" />
-                                )}
-                            </button>
-
-                            {/* Volume Scrubber Panel */}
-                            <div className="flex items-center space-x-2 group/volume">
-                                <button
-                                    onClick={toggleMute}
-                                    className="text-white hover:text-primary-light transition-colors focus:outline-none"
-                                >
-                                    {isMuted || volume === 0 ? (
-                                        <VolumeX className="w-5 h-5" />
-                                    ) : volume < 0.5 ? (
-                                        <Volume1 className="w-5 h-5" />
-                                    ) : (
-                                        <Volume2 className="w-5 h-5" />
-                                    )}
-                                </button>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.05"
-                                    value={isMuted ? 0 : volume}
-                                    onChange={handleVolumeChange}
-                                    className="w-0 group-hover/volume:w-16 transition-all duration-300 accent-white cursor-pointer h-1 bg-white/30 rounded-lg outline-none"
-                                />
-                            </div>
+                            <span className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left">
+                                {formatTime(duration)}
+                            </span>
                         </div>
 
-                        {/* Right Controls: Subtitle, Speed, Quality, Fullscreen */}
-                        <div className="flex items-center space-x-4 relative">
-                            {captions.length > 0 && (
-                                <div ref={subtitleMenuRef} className="relative">
-                                    <button
-                                        onClick={() => {
-                                            setShowSubtitleMenu(!showSubtitleMenu);
-                                            setShowQualityMenu(false);
-                                            setShowSpeedMenu(false);
-                                            setShowAudioMenu(false);
-                                        }}
-                                        className={`transition-colors focus:outline-none ${
-                                            showSubtitleMenu || showSubtitles
-                                                ? "text-primary-light"
-                                                : "text-white/60 hover:text-white"
-                                        }`}
-                                        title="Subtitles"
-                                    >
-                                        <Subtitles className="w-5 h-5" />
-                                    </button>
+                        {/* Controls Bar Row */}
+                        <div className="flex items-center justify-between">
+                            {/* Left Controls: Play, Volume */}
+                            <div className="flex items-center space-x-4">
+                                {/* Play Pause */}
+                                <button
+                                    onClick={togglePlay}
+                                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                >
+                                    {isPlaying ? (
+                                        <Pause className="w-4.5 h-4.5 fill-white" />
+                                    ) : (
+                                        <Play className="w-4.5 h-4.5 fill-white" />
+                                    )}
+                                </button>
 
-                                    {showSubtitleMenu && (
-                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
-                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                Subtitles
-                                            </p>
-                                            <button
-                                                onClick={() => handleSubtitleChange(null)}
-                                                className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                    !activeCaption
-                                                        ? "text-primary-light bg-primary/10"
-                                                        : "text-white/80"
-                                                }`}
-                                            >
-                                                Off
-                                            </button>
-                                            {captions.map((caption) => (
+                                {/* Volume Panel */}
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={toggleMute}
+                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                    >
+                                        {isMuted || volume === 0 ? (
+                                            <VolumeX className="w-4.5 h-4.5 text-primary" />
+                                        ) : volume < 0.5 ? (
+                                            <Volume1 className="w-4.5 h-4.5" />
+                                        ) : (
+                                            <Volume2 className="w-4.5 h-4.5" />
+                                        )}
+                                    </button>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={isMuted ? 0 : volume}
+                                        onChange={handleVolumeChange}
+                                        className="w-16 sm:w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Fullscreen */}
+                            <div className="flex items-center space-x-2 sm:space-x-3 relative">
+                                {/* Subtitle Selector */}
+                                {captions.length > 0 && (
+                                    <div ref={subtitleMenuRef} className="relative">
+                                        <button
+                                            onClick={() => {
+                                                setShowSubtitleMenu(!showSubtitleMenu);
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                            }}
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                                                showSubtitleMenu || showSubtitles
+                                                    ? "text-primary bg-primary/10"
+                                                    : "text-white/70 hover:text-white"
+                                            }`}
+                                            title="Subtitles"
+                                        >
+                                            <Subtitles className="w-4.5 h-4.5" />
+                                        </button>
+
+                                        {showSubtitleMenu && (
+                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                    Subtitles
+                                                </p>
                                                 <button
-                                                    key={caption.id || caption.url}
-                                                    onClick={() => handleSubtitleChange(caption)}
-                                                    className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        activeCaption?.id === caption.id
-                                                            ? "text-primary-light bg-primary/10"
+                                                    onClick={() => handleSubtitleChange(null)}
+                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                        !activeCaption
+                                                            ? "text-primary bg-primary/10"
                                                             : "text-white/80"
                                                     }`}
                                                 >
-                                                    {caption.lanName}
+                                                    Off
                                                 </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Audio/Dub selector popup */}
-                            {dubs && dubs.length > 0 && (
-                                <div ref={audioMenuRef} className="relative">
-                                    <button
-                                        onClick={() => {
-                                            setShowAudioMenu(!showAudioMenu);
-                                            setShowQualityMenu(false);
-                                            setShowSpeedMenu(false);
-                                            setShowSubtitleMenu(false);
-                                        }}
-                                        className={`transition-colors focus:outline-none flex items-center space-x-1 ${
-                                            showAudioMenu
-                                                ? "text-primary-light"
-                                                : "text-white/60 hover:text-white"
-                                        }`}
-                                        title="Change Audio Track"
-                                    >
-                                        <Volume2 className="w-5 h-5" />
-                                    </button>
-
-                                    {showAudioMenu && (
-                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[125px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
-                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                Audio Track
-                                            </p>
-                                            {dubs.map((dub, idx) => {
-                                                const isCurrent =
-                                                    detailPath ===
-                                                    dub.detailPath;
-                                                return (
+                                                {captions.map((caption) => (
                                                     <button
-                                                        key={idx}
-                                                        onClick={() => {
-                                                            setShowAudioMenu(
-                                                                false,
-                                                            );
-                                                            window.location.href = `/watch/${dub.detailPath}`;
-                                                        }}
-                                                        className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            isCurrent
-                                                                ? "text-primary-light bg-primary/10"
+                                                        key={caption.id || caption.url}
+                                                        onClick={() => handleSubtitleChange(caption)}
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                            activeCaption?.id === caption.id
+                                                                ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
                                                         }`}
                                                     >
-                                                        {dub.lanName}{" "}
-                                                        {dub.original
-                                                            ? "(Original)"
-                                                            : ""}
+                                                        {caption.lanName}
                                                     </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Quality Settings Dial Selector */}
-                            <div ref={qualityMenuRef} className="relative">
-                                <button
-                                    onClick={() => {
-                                        setShowQualityMenu(!showQualityMenu);
-                                        setShowSpeedMenu(false);
-                                        setShowAudioMenu(false);
-                                        setShowSubtitleMenu(false);
-                                    }}
-                                    className={`flex items-center space-x-1 font-bold text-xs px-2 py-1 rounded border transition-colors ${
-                                        showQualityMenu
-                                            ? "bg-primary/20 text-primary-light border-primary/30"
-                                            : "bg-white/5 border-white/10 text-white/80 hover:text-white"
-                                    }`}
-                                >
-                                    <span>
-                                        {activeDownload
-                                            ? `${activeDownload.resolution}p`
-                                            : "Auto"}
-                                    </span>
-                                    <Settings className="w-3.5 h-3.5" />
-                                </button>
-
-                                {showQualityMenu &&
-                                    sortedDownloads.length > 0 && (
-                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
-                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                Quality
-                                            </p>
-                                            {sortedDownloads.map((link) => (
-                                                <button
-                                                    key={link.id}
-                                                    onClick={() =>
-                                                        handleQualityChange(
-                                                            link,
-                                                        )
-                                                    }
-                                                    className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        activeDownload?.id ===
-                                                        link.id
-                                                            ? "text-primary-light bg-primary/10"
-                                                            : "text-white/80"
-                                                    }`}
-                                                >
-                                                    {link.resolution}p
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                            </div>
-
-                            {/* Speed Settings Dial Selector */}
-                            <div ref={speedMenuRef} className="relative">
-                                <button
-                                    onClick={() => {
-                                        setShowSpeedMenu(!showSpeedMenu);
-                                        setShowQualityMenu(false);
-                                        setShowAudioMenu(false);
-                                        setShowSubtitleMenu(false);
-                                    }}
-                                    className={`text-xs font-bold px-2 py-1.5 rounded transition-colors ${
-                                        showSpeedMenu
-                                            ? "text-primary-light bg-primary/10"
-                                            : "text-white/80 hover:text-white"
-                                    }`}
-                                >
-                                    {playbackRate}x
-                                </button>
-
-                                {showSpeedMenu && (
-                                    <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[90px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
-                                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                            Speed
-                                        </p>
-                                        {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(
-                                            (rate) => (
-                                                <button
-                                                    key={rate}
-                                                    onClick={() =>
-                                                        handleSpeedChange(rate)
-                                                    }
-                                                    className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        playbackRate === rate
-                                                            ? "text-primary-light bg-primary/10"
-                                                            : "text-white/80"
-                                                    }`}
-                                                >
-                                                    {rate.toFixed(1)}x
-                                                </button>
-                                            ),
+                                                ))}
+                                            </div>
                                         )}
                                     </div>
                                 )}
-                            </div>
 
-                            {/* Fullscreen Trigger */}
-                            <button
-                                onClick={toggleFullscreen}
-                                className="text-white hover:text-primary-light transition-colors focus:outline-none"
-                            >
-                                {isFullscreen ? (
-                                    <Minimize className="w-5 h-5" />
-                                ) : (
-                                    <Maximize className="w-5 h-5" />
+                                {/* Audio/Dub selector popup */}
+                                {dubs && dubs.length > 0 && (
+                                    <div ref={audioMenuRef} className="relative">
+                                        <button
+                                            onClick={() => {
+                                                setShowAudioMenu(!showAudioMenu);
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowSubtitleMenu(false);
+                                            }}
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                                                showAudioMenu
+                                                    ? "text-primary bg-primary/10"
+                                                    : "text-white/70 hover:text-white"
+                                            }`}
+                                            title="Change Audio Track"
+                                        >
+                                            <Volume2 className="w-4.5 h-4.5" />
+                                        </button>
+
+                                        {showAudioMenu && (
+                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                    Audio Track
+                                                </p>
+                                                {dubs.map((dub, idx) => {
+                                                    const isCurrent =
+                                                        detailPath ===
+                                                        dub.detailPath;
+                                                    return (
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => {
+                                                                setShowAudioMenu(
+                                                                    false,
+                                                                );
+                                                                window.location.href = `/watch/${dub.detailPath}`;
+                                                            }}
+                                                            className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                isCurrent
+                                                                    ? "text-primary bg-primary/10"
+                                                                    : "text-white/80"
+                                                            }`}
+                                                        >
+                                                            {dub.lanName}{" "}
+                                                            {dub.original
+                                                                ? "(Original)"
+                                                                : ""}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
-                            </button>
+
+                                {/* Quality Settings Dial Selector */}
+                                <div ref={qualityMenuRef} className="relative">
+                                    <button
+                                        onClick={() => {
+                                            setShowQualityMenu(!showQualityMenu);
+                                            setShowSpeedMenu(false);
+                                            setShowAudioMenu(false);
+                                            setShowSubtitleMenu(false);
+                                        }}
+                                        className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                                            showQualityMenu
+                                                ? "bg-primary/20 text-primary-light border-primary/30"
+                                                : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                                        }`}
+                                    >
+                                        <span>
+                                            {activeDownload
+                                                ? `${activeDownload.resolution}p`
+                                                : "Auto"}
+                                        </span>
+                                        <Settings className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    {showQualityMenu &&
+                                        sortedDownloads.length > 0 && (
+                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                    Quality
+                                                </p>
+                                                {sortedDownloads.map((link) => (
+                                                    <button
+                                                        key={link.id}
+                                                        onClick={() =>
+                                                            handleQualityChange(
+                                                                link,
+                                                            )
+                                                        }
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                            activeDownload?.id ===
+                                                            link.id
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/80"
+                                                        }`}
+                                                    >
+                                                        {link.resolution}p
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                </div>
+
+                                {/* Speed Settings Dial Selector */}
+                                <div ref={speedMenuRef} className="relative">
+                                    <button
+                                        onClick={() => {
+                                            setShowSpeedMenu(!showSpeedMenu);
+                                            setShowQualityMenu(false);
+                                            setShowAudioMenu(false);
+                                            setShowSubtitleMenu(false);
+                                        }}
+                                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
+                                            showSpeedMenu
+                                                ? "text-primary bg-primary/10"
+                                                : "text-white/80 hover:text-white"
+                                        }`}
+                                    >
+                                        {playbackRate}x
+                                    </button>
+
+                                    {showSpeedMenu && (
+                                        <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                Speed
+                                            </p>
+                                            {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(
+                                                (rate) => (
+                                                    <button
+                                                        key={rate}
+                                                        onClick={() =>
+                                                            handleSpeedChange(rate)
+                                                        }
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                            playbackRate === rate
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/80"
+                                                        }`}
+                                                    >
+                                                        {rate.toFixed(1)}x
+                                                    </button>
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Fullscreen Trigger */}
+                                <button
+                                    onClick={toggleFullscreen}
+                                    className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                >
+                                    {isFullscreen ? (
+                                        <Minimize className="w-4.5 h-4.5" />
+                                    ) : (
+                                        <Maximize className="w-4.5 h-4.5" />
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
