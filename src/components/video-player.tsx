@@ -712,7 +712,7 @@ export default function VideoPlayer({
             clearTimeout(controlsTimeoutRef.current);
         }
 
-        // Hide controls after 2 seconds of inactivity while playing
+        // Hide controls after 1.2 seconds of inactivity while playing
         if (isPlaying) {
             controlsTimeoutRef.current = setTimeout(() => {
                 setShowControls(false);
@@ -721,7 +721,7 @@ export default function VideoPlayer({
                 setShowAudioMenu(false);
                 setShowSubtitleMenu(false);
                 setShowRatioMenu(false);
-            }, 2000);
+            }, 1200);
         }
     };
 
@@ -814,7 +814,9 @@ export default function VideoPlayer({
                     ref={videoRef}
                     src={buildVideoSrc(activeDownload.url)}
                     onEnded={handleVideoEnded}
-                    className={`w-full h-full cursor-pointer ${
+                    className={`w-full h-full ${
+                        isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
+                    } ${
                         aspectRatio === "contain"
                             ? "object-contain"
                             : aspectRatio === "fill"
@@ -914,7 +916,7 @@ export default function VideoPlayer({
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
-                }`}
+                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
                 onClick={handleScreenClick}
                 onDoubleClick={handleScreenDoubleClick}
             >
