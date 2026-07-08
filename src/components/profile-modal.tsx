@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { localStore, WatchlistItem, HistoryItem } from "@/lib/storage";
 import { 
   X, 
   ShieldAlert, 
@@ -11,7 +12,9 @@ import {
   Cloud, 
   User as UserIcon,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  Check
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -23,19 +26,25 @@ interface ProfileModalProps {
 export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const { user, loginWithGoogle, logout, triggerSync } = useAuth();
     const [showResetConfirm, setShowResetConfirm] = useState(false);
-    const [showDeleteCloudConfirm, setShowDeleteCloudConfirm] = useState(false);
+    const [showManageCloud, setShowManageCloud] = useState(false);
     
     const [isSyncing, setIsSyncing] = useState(false);
     const [isDeletingCloud, setIsDeletingCloud] = useState(false);
     const [syncMessage, setSyncMessage] = useState("");
     const [errorMessage, setErrorMessage] = useState("");
 
-    // Statistics state from Cloud Firestore
+    // Cloud Data Lists and Statistics
     const [counts, setCounts] = useState({ watchlist: 0, history: 0, episodes: 0 });
+    const [cloudWatchlist, setCloudWatchlist] = useState<WatchlistItem[]>([]);
+    const [cloudHistory, setCloudHistory] = useState<HistoryItem[]>([]);
     const [loadingCounts, setLoadingCounts] = useState(false);
 
-    // Fetch cloud sync metrics
-    const fetchCloudCounts = async (uid: string) => {
+    // Tab Management inside Cloud Manager
+    const [activeTab, setActiveTab] = useState<"watchlist" | "history">("watchlist");
+    const [selectedItems, setSelectedItems] = useState<string[]>([]); // Array of detailPath
+
+    // Fetch cloud sync list items and update counts
+    const fetchCloudData = async (uid: string) => {
         setLoadingCounts(true);
         try {
             const { db } = await import("@/lib/firebase");
@@ -46,27 +55,44 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 getDocs(collection(db, "users", uid, "history")),
                 getDocs(collection(db, "users", uid, "watched_episodes"))
             ]);
-            
+
+            const wlItems: WatchlistItem[] = [];
+            watchlistSnap.forEach((doc) => wlItems.push(doc.data() as WatchlistItem));
+
+            const histItems: HistoryItem[] = [];
+            historySnap.forEach((doc) => histItems.push(doc.data() as HistoryItem));
+            // Sort history by updatedAt descending
+            histItems.sort((a, b) => b.updatedAt - a.updatedAt);
+
+            setCloudWatchlist(wlItems);
+            setCloudHistory(histItems);
             setCounts({
-                watchlist: watchlistSnap.size,
-                history: historySnap.size,
+                watchlist: wlItems.length,
+                history: histItems.length,
                 episodes: episodesSnap.size
             });
         } catch (err) {
-            console.error("[profile] Failed to fetch cloud sync statistics:", err);
+            console.error("[profile] Failed to fetch cloud sync list items:", err);
         } finally {
             setLoadingCounts(false);
         }
     };
 
-    // Load counts when opening modal or logging in
+    // Load cloud lists when opening modal or logging in
     useEffect(() => {
         if (isOpen && user) {
-            fetchCloudCounts(user.uid);
+            fetchCloudData(user.uid);
         } else if (!user) {
+            setCloudWatchlist([]);
+            setCloudHistory([]);
             setCounts({ watchlist: 0, history: 0, episodes: 0 });
         }
     }, [isOpen, user]);
+
+    // Clear item selections when switching tabs
+    useEffect(() => {
+        setSelectedItems([]);
+    }, [activeTab]);
 
     const handleGoogleLogin = async () => {
         setErrorMessage("");
@@ -94,7 +120,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         try {
             await triggerSync();
             setSyncMessage("Data successfully synced with Cloud!");
-            await fetchCloudCounts(user.uid); // Refresh counts after sync completes
+            await fetchCloudData(user.uid); // Refresh cloud data state after sync
             setTimeout(() => setSyncMessage(""), 4000);
         } catch (err: any) {
             setErrorMessage("Failed to synchronize data.");
@@ -103,36 +129,76 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         }
     };
 
-    const handleDeleteCloudData = async () => {
-        if (!user) return;
+    // Toggle single item selection
+    const toggleItemSelection = (path: string) => {
+        setSelectedItems((prev) =>
+            prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+        );
+    };
+
+    // Select all items in the current active tab list
+    const toggleSelectAll = () => {
+        const currentList = activeTab === "watchlist" ? cloudWatchlist : cloudHistory;
+        if (selectedItems.length === currentList.length) {
+            setSelectedItems([]);
+        } else {
+            setSelectedItems(currentList.map((item) => item.detailPath));
+        }
+    };
+
+    // Delete selected items from both Cloud Firestore and local storage
+    const handleDeleteSelected = async () => {
+        if (!user || selectedItems.length === 0) return;
         setIsDeletingCloud(true);
         setErrorMessage("");
         try {
             const { db } = await import("@/lib/firebase");
-            const { collection, getDocs, writeBatch } = await import("firebase/firestore");
-            const uid = user.uid;
-
-            // Fetch all subcollection documents
-            const [watchlistSnap, historySnap, episodesSnap] = await Promise.all([
-                getDocs(collection(db, "users", uid, "watchlist")),
-                getDocs(collection(db, "users", uid, "history")),
-                getDocs(collection(db, "users", uid, "watched_episodes"))
-            ]);
-
+            const { doc, deleteDoc, writeBatch } = await import("firebase/firestore");
             const batch = writeBatch(db);
-            watchlistSnap.forEach((doc: any) => batch.delete(doc.ref));
-            historySnap.forEach((doc: any) => batch.delete(doc.ref));
-            episodesSnap.forEach((doc: any) => batch.delete(doc.ref));
+            const pathsToDelete = [...selectedItems];
 
-            await batch.commit();
+            if (activeTab === "watchlist") {
+                // Delete from Cloud
+                pathsToDelete.forEach((path) => {
+                    const docRef = doc(db, "users", user.uid, "watchlist", encodeURIComponent(path));
+                    batch.delete(docRef);
+                });
+                await batch.commit();
 
-            setCounts({ watchlist: 0, history: 0, episodes: 0 });
-            setSyncMessage("All cloud synced data has been deleted.");
-            setShowDeleteCloudConfirm(false);
+                // Delete from local storage (keep sync state identical)
+                const localWatchlist = localStore.getWatchlist();
+                const updatedLocal = localWatchlist.filter((item) => !pathsToDelete.includes(item.detailPath));
+                localStorage.setItem("kixo_watchlist", JSON.stringify(updatedLocal));
+
+                // Update UI state
+                const updatedCloud = cloudWatchlist.filter((item) => !pathsToDelete.includes(item.detailPath));
+                setCloudWatchlist(updatedCloud);
+                setCounts((prev) => ({ ...prev, watchlist: updatedCloud.length }));
+            } else {
+                // Delete from Cloud
+                pathsToDelete.forEach((path) => {
+                    const docRef = doc(db, "users", user.uid, "history", encodeURIComponent(path));
+                    batch.delete(docRef);
+                });
+                await batch.commit();
+
+                // Delete from local storage
+                const localHistory = localStore.getHistory();
+                const updatedLocal = localHistory.filter((item) => !pathsToDelete.includes(item.detailPath));
+                localStorage.setItem("kixo_history", JSON.stringify(updatedLocal));
+
+                // Update UI state
+                const updatedCloud = cloudHistory.filter((item) => !pathsToDelete.includes(item.detailPath));
+                setCloudHistory(updatedCloud);
+                setCounts((prev) => ({ ...prev, history: updatedCloud.length }));
+            }
+
+            setSelectedItems([]);
+            setSyncMessage(`Deleted ${pathsToDelete.length} item(s) successfully.`);
             setTimeout(() => setSyncMessage(""), 4000);
         } catch (err: any) {
-            console.error("[profile] Failed to delete cloud data:", err);
-            setErrorMessage("Failed to delete cloud data.");
+            console.error("[profile] Failed to delete selected items:", err);
+            setErrorMessage("Failed to delete selected items.");
         } finally {
             setIsDeletingCloud(false);
         }
@@ -229,55 +295,168 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                     </button>
                                 </div>
                             </div>
-                        ) : showDeleteCloudConfirm ? (
-                            /* DELETE CLOUD DATA CONFIRMATION VIEW */
-                            <div className="space-y-6">
-                                <div className="flex flex-col items-center text-center space-y-3 select-none">
-                                    <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500 shadow-lg shadow-red-glow/10 animate-pulse">
-                                        <ShieldAlert className="w-6 h-6" />
-                                    </div>
-                                    <h3 className="text-lg font-black text-white uppercase tracking-wider">
-                                        Delete Cloud Synced Data
-                                    </h3>
-                                    <p className="text-xs text-foreground/60 font-medium max-w-xs leading-relaxed">
-                                        This will permanently delete all your bookmarks, watch history, and episode progress saved in your Google sync account.
-                                    </p>
-                                </div>
-
-                                <div className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-3 text-xs">
-                                    <div className="flex items-center justify-between text-white/80">
-                                        <span className="font-semibold">Cloud Watchlist / Bookmarks</span>
-                                        <span className="text-red-400 font-bold">Will be deleted</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-white/80 border-t border-white/5 pt-3">
-                                        <span className="font-semibold">Cloud Playback History</span>
-                                        <span className="text-red-400 font-bold">Will be deleted</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-white/80 border-t border-white/5 pt-3">
-                                        <span className="font-semibold">Cloud Episode Progress</span>
-                                        <span className="text-red-400 font-bold">Will be deleted</span>
-                                    </div>
-                                </div>
-
-                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] text-red-400 font-medium text-center">
-                                    Your local browser data will remain untouched. Only your cloud sync backup will be erased.
-                                </div>
-
-                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                        ) : showManageCloud ? (
+                            /* MANAGE CLOUD DATA VIEW WITH SELECTION CARD LISTS */
+                            <div className="space-y-4">
+                                {/* Header with back arrow */}
+                                <div className="flex items-center space-x-3">
                                     <button
-                                        onClick={() => setShowDeleteCloudConfirm(false)}
-                                        className="flex-1 px-4 py-3 rounded-xl border border-glass-border text-foreground/75 hover:text-white hover:bg-white/5 transition-colors text-xs font-bold uppercase tracking-wider cursor-pointer"
+                                        onClick={() => setShowManageCloud(false)}
+                                        className="p-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-white transition-all cursor-pointer"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <div>
+                                        <h3 className="text-sm font-black text-white uppercase tracking-wider leading-none">
+                                            Manage Cloud Data
+                                        </h3>
+                                        <span className="text-[10px] text-foreground/45">
+                                            Select items to delete from database sync
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Tab Selector */}
+                                <div className="flex border-b border-white/5 text-xs">
+                                    <button
+                                        onClick={() => setActiveTab("watchlist")}
+                                        className={`flex-1 pb-2 font-bold uppercase tracking-wider transition-colors cursor-pointer text-[10px] ${
+                                            activeTab === "watchlist"
+                                                ? "text-primary border-b-2 border-primary"
+                                                : "text-foreground/45 hover:text-white"
+                                        }`}
+                                    >
+                                        Watchlist ({counts.watchlist})
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab("history")}
+                                        className={`flex-1 pb-2 font-bold uppercase tracking-wider transition-colors cursor-pointer text-[10px] ${
+                                            activeTab === "history"
+                                                ? "text-primary border-b-2 border-primary"
+                                                : "text-foreground/45 hover:text-white"
+                                        }`}
+                                    >
+                                        History ({counts.history})
+                                    </button>
+                                </div>
+
+                                {/* Checkbox Controls Bar */}
+                                <div className="flex items-center justify-between text-xxs px-1 text-foreground/60 select-none">
+                                    <button
+                                        onClick={toggleSelectAll}
+                                        className="hover:text-white font-bold transition-colors cursor-pointer"
+                                    >
+                                        {selectedItems.length === (activeTab === "watchlist" ? cloudWatchlist.length : cloudHistory.length) && (activeTab === "watchlist" ? cloudWatchlist.length : cloudHistory.length) > 0
+                                            ? "Deselect All"
+                                            : "Select All"}
+                                    </button>
+                                    <span>{selectedItems.length} item(s) selected</span>
+                                </div>
+
+                                {/* Card List Container */}
+                                <div className="max-h-64 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                    {activeTab === "watchlist" ? (
+                                        cloudWatchlist.length === 0 ? (
+                                            <div className="py-8 text-center text-xs text-foreground/40 font-medium">
+                                                No bookmarks synced in the cloud.
+                                            </div>
+                                        ) : (
+                                            cloudWatchlist.map((item) => (
+                                                <div
+                                                    key={item.detailPath}
+                                                    onClick={() => toggleItemSelection(item.detailPath)}
+                                                    className="flex items-center space-x-3 bg-white/[0.02] border border-white/5 hover:bg-white/5 rounded-2xl p-2 cursor-pointer transition-all duration-200"
+                                                >
+                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                                        selectedItems.includes(item.detailPath)
+                                                            ? "bg-primary border-primary text-white"
+                                                            : "border-white/20 bg-zinc-900"
+                                                    }`}>
+                                                        {selectedItems.includes(item.detailPath) && (
+                                                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                                        )}
+                                                    </div>
+                                                    <img
+                                                        src={item.coverUrl}
+                                                        alt={item.title}
+                                                        className="w-8 h-11 object-cover rounded-lg shrink-0 bg-zinc-900"
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-black text-white truncate">
+                                                            {item.title}
+                                                        </p>
+                                                        <span className="text-[9px] font-bold text-foreground/45 uppercase tracking-wider block mt-0.5">
+                                                            {item.corner || "Movie / Series"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )
+                                    ) : (
+                                        cloudHistory.length === 0 ? (
+                                            <div className="py-8 text-center text-xs text-foreground/40 font-medium">
+                                                No watch history synced in the cloud.
+                                            </div>
+                                        ) : (
+                                            cloudHistory.map((item) => (
+                                                <div
+                                                    key={item.detailPath}
+                                                    onClick={() => toggleItemSelection(item.detailPath)}
+                                                    className="flex items-center space-x-3 bg-white/[0.02] border border-white/5 hover:bg-white/5 rounded-2xl p-2 cursor-pointer transition-all duration-200"
+                                                >
+                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                                        selectedItems.includes(item.detailPath)
+                                                            ? "bg-primary border-primary text-white"
+                                                            : "border-white/20 bg-zinc-900"
+                                                    }`}>
+                                                        {selectedItems.includes(item.detailPath) && (
+                                                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                                        )}
+                                                    </div>
+                                                    <img
+                                                        src={item.coverUrl}
+                                                        alt={item.title}
+                                                        className="w-8 h-11 object-cover rounded-lg shrink-0 bg-zinc-900"
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-black text-white truncate">
+                                                            {item.title}
+                                                        </p>
+                                                        <div className="flex items-center space-x-2 mt-0.5">
+                                                            <span className="text-[9px] font-bold text-foreground/45 uppercase tracking-wider">
+                                                                {item.isSeries ? `S${item.season} E${item.episode}` : "Movie"}
+                                                            </span>
+                                                            <span className="text-[9px] font-bold text-primary tracking-wider uppercase">
+                                                                {Math.round(item.progress)}% Watched
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )
+                                    )}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        onClick={() => setShowManageCloud(false)}
+                                        className="flex-1 py-3 px-4 rounded-xl border border-glass-border text-foreground/75 hover:text-white hover:bg-white/5 transition-colors text-xs font-bold uppercase tracking-wider cursor-pointer select-none"
                                         disabled={isDeletingCloud}
                                     >
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={handleDeleteCloudData}
-                                        disabled={isDeletingCloud}
-                                        className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-all text-xs font-bold uppercase tracking-wider shadow-lg shadow-red-glow cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                                        onClick={handleDeleteSelected}
+                                        disabled={selectedItems.length === 0 || isDeletingCloud}
+                                        className="flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center space-x-1.5 cursor-pointer select-none"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
-                                        <span>{isDeletingCloud ? "Deleting..." : "Delete Cloud"}</span>
+                                        <span>
+                                            {isDeletingCloud 
+                                                ? "Deleting..." 
+                                                : `Delete Selected (${selectedItems.length})`}
+                                        </span>
                                     </button>
                                 </div>
                             </div>
@@ -437,10 +616,10 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                         <>
                                             <span className="hidden sm:inline text-white/10">|</span>
                                             <button
-                                                onClick={() => setShowDeleteCloudConfirm(true)}
+                                                onClick={() => setShowManageCloud(true)}
                                                 className="text-xxs font-bold uppercase tracking-wider text-foreground/45 hover:text-red-400 transition-colors cursor-pointer"
                                             >
-                                                Delete Cloud Data
+                                                Manage Cloud Data
                                             </button>
                                         </>
                                     )}
