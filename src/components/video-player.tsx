@@ -113,6 +113,16 @@ export default function VideoPlayer({
     const [showRightSkipAnimation, setShowRightSkipAnimation] = useState(false);
     const [isPiPSupported, setIsPiPSupported] = useState(false);
     const [isPiPActive, setIsPiPActive] = useState(false);
+    const [subtitleSize, setSubtitleSize] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("player-subtitle-size") || "22px";
+        }
+        return "22px";
+    });
+
+    useEffect(() => {
+        localStorage.setItem("player-subtitle-size", subtitleSize);
+    }, [subtitleSize]);
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -960,6 +970,11 @@ export default function VideoPlayer({
             }`}
         >
             <style dangerouslySetInnerHTML={{ __html: `
+                video::cue {
+                    font-size: ${subtitleSize} !important;
+                    background: rgba(0, 0, 0, 0.75) !important;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
+                }
                 video.controls-visible::-webkit-media-text-track-display {
                     transform: translateY(-80px) !important;
                 }
@@ -1075,7 +1090,7 @@ export default function VideoPlayer({
             )}
 
             {/* Skip Intro Floating Button */}
-            {isPlaying && currentTime >= 10 && currentTime <= 95 && (
+            {currentTime >= 2 && currentTime <= 95 && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -1096,7 +1111,7 @@ export default function VideoPlayer({
             )}
 
             {/* Skip Outro / Next Episode Floating Button */}
-            {isPlaying && isSeries && onNextEpisode && duration > 0 && currentTime >= duration - 150 && currentTime < duration - 10 && (
+            {isSeries && onNextEpisode && duration > 0 && currentTime >= duration - 150 && currentTime < duration - 10 && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -1341,6 +1356,44 @@ export default function VideoPlayer({
                                                         {caption.lanName}
                                                     </button>
                                                 ))}
+                                                <div className="h-px bg-zinc-800 my-1" />
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                    Size
+                                                </p>
+                                                <div className="flex items-center justify-between px-1 py-1">
+                                                    <button
+                                                        onClick={() => setSubtitleSize("16px")}
+                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
+                                                            subtitleSize === "16px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                        }`}
+                                                    >
+                                                        SM
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setSubtitleSize("22px")}
+                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
+                                                            subtitleSize === "22px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                        }`}
+                                                    >
+                                                        MD
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setSubtitleSize("28px")}
+                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
+                                                            subtitleSize === "28px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                        }`}
+                                                    >
+                                                        LG
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setSubtitleSize("36px")}
+                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
+                                                            subtitleSize === "36px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                        }`}
+                                                    >
+                                                        XL
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

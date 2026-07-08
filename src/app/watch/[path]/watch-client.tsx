@@ -24,6 +24,14 @@ import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
 
+const cleanTitle = (title: string): string => {
+    return title
+        .replace(/\[[^\]]+\]/g, "")
+        .replace(/\([^)]+\)/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+
 interface WatchClientProps {
     path: string;
     details: ItemDetails;
@@ -127,6 +135,75 @@ export default function WatchClient({
         (s) => s.se === selectedSeason,
     );
     const totalEpisodes = currentSeasonData?.maxEp || 0;
+
+    const [fillerEpisodes, setFillerEpisodes] = useState<Set<number>>(new Set());
+
+    useEffect(() => {
+        if (!isSeries || !subject.title) return;
+
+        let isMounted = true;
+        const cacheKey = `fillers-${subject.detailPath}-${selectedSeason}`;
+
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached) as number[];
+                setFillerEpisodes(new Set(parsed));
+                return;
+            } catch (e) {
+                console.error("Error parsing cached fillers:", e);
+            }
+        }
+
+        const fetchFillers = async () => {
+            try {
+                const query = cleanTitle(subject.title);
+                const searchRes = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=1`);
+                if (!searchRes.ok) return;
+                const searchJson = await searchRes.json();
+                if (!searchJson.data || searchJson.data.length === 0) return;
+
+                const malId = searchJson.data[0].mal_id;
+
+                let currentPage = 1;
+                let hasNextPage = true;
+                const fillerEpNumbers: number[] = [];
+
+                while (hasNextPage && currentPage <= 3) {
+                    const epRes = await fetch(`https://api.jikan.moe/v4/anime/${malId}/episodes?page=${currentPage}`);
+                    if (!epRes.ok) break;
+                    const epJson = await epRes.json();
+
+                    if (epJson.data && Array.isArray(epJson.data)) {
+                        epJson.data.forEach((ep: any) => {
+                            if (ep.filler === true) {
+                                fillerEpNumbers.push(ep.mal_id);
+                            }
+                        });
+                    }
+
+                    hasNextPage = epJson.pagination?.has_next_page || false;
+                    if (hasNextPage) {
+                        currentPage++;
+                        await new Promise(resolve => setTimeout(resolve, 350));
+                    }
+                }
+
+                if (isMounted) {
+                    setFillerEpisodes(new Set(fillerEpNumbers));
+                    localStorage.setItem(cacheKey, JSON.stringify(fillerEpNumbers));
+                }
+            } catch (e) {
+                console.error("Error fetching filler episodes:", e);
+            }
+        };
+
+        fetchFillers();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isSeries, subject.title, subject.detailPath, selectedSeason]);
 
     const handleEpisodeClick = (epNum: number) => {
         setLoadingEpisode(epNum);
@@ -459,6 +536,9 @@ export default function WatchClient({
                                         const isWatched =
                                             watchedEpisodes.has(epNum) &&
                                             !isActive;
+                                        const isFiller =
+                                            fillerEpisodes.has(epNum) &&
+                                            !isActive;
                                         return (
                                             <button
                                                 key={epNum}
@@ -478,9 +558,11 @@ export default function WatchClient({
                                                         ? "bg-primary/50 text-white border-primary/30 animate-pulse scale-105"
                                                         : isActive
                                                           ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary-glow scale-105"
-                                                          : isWatched
-                                                            ? "bg-emerald-500/18 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/70 shadow-sm"
-                                                            : "bg-glass-card hover:bg-primary/10 hover:border-primary/30 border-glass-border text-foreground/60 hover:text-foreground"
+                                                          : isFiller
+                                                            ? "bg-blue-500/18 text-blue-400 border-blue-500/50 hover:bg-blue-500/25 hover:text-blue-300 hover:border-blue-500/70 shadow-sm"
+                                                            : isWatched
+                                                              ? "bg-emerald-500/18 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/70 shadow-sm"
+                                                              : "bg-glass-card hover:bg-primary/10 hover:border-primary/30 border-glass-border text-foreground/60 hover:text-foreground"
                                                 }`}
                                             >
                                                 {loadingEpisode === epNum ? (
@@ -492,7 +574,13 @@ export default function WatchClient({
                                                 {isWatched &&
                                                     loadingEpisode !==
                                                         epNum && (
-                                                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                                    )}
+                                                {/* Small dot indicator for filler episodes (only if not watched) */}
+                                                {!isWatched && isFiller &&
+                                                    loadingEpisode !==
+                                                        epNum && (
+                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400" />
                                                     )}
                                             </button>
                                         );
