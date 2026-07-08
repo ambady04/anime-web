@@ -27,6 +27,11 @@ export default function Navbar() {
         setTheme(isLight ? "light" : "dark");
     }, []);
 
+    // Clear search query whenever the pathname changes
+    useEffect(() => {
+        setSearchQuery("");
+    }, [pathname]);
+
     const toggleTheme = () => {
         if (theme === "dark") {
             document.documentElement.classList.add("light");
@@ -43,6 +48,7 @@ export default function Navbar() {
         e.preventDefault();
         if (searchQuery.trim()) {
             router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+            setSearchQuery("");
         }
     };
 

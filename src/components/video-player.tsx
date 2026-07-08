@@ -50,6 +50,10 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const audioMenuRef = useRef<HTMLDivElement>(null);
+    const qualityMenuRef = useRef<HTMLDivElement>(null);
+    const speedMenuRef = useRef<HTMLDivElement>(null);
+    const subtitleMenuRef = useRef<HTMLDivElement>(null);
 
     // Stream options
     const downloads = streamData.downloads || [];
@@ -65,6 +69,7 @@ export default function VideoPlayer({
         null,
     );
     const [subtitleUrl, setSubtitleUrl] = useState<string>("");
+    const [activeCaption, setActiveCaption] = useState<Caption | null>(null);
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
@@ -78,6 +83,7 @@ export default function VideoPlayer({
     const [isLoading, setIsLoading] = useState(true);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+    const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
     const [showSubtitles, setShowSubtitles] = useState(true);
     const [playerError, setPlayerError] = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
@@ -147,9 +153,14 @@ export default function VideoPlayer({
                     c.lan === "en" ||
                     c.lanName?.toLowerCase().includes("english"),
             );
-            loadSubtitleTrack((englishCaption || captions[0]).url);
+            const defaultCaption = englishCaption || captions[0];
+            setActiveCaption(defaultCaption);
+            loadSubtitleTrack(defaultCaption.url);
+            setShowSubtitles(true);
         } else {
+            setActiveCaption(null);
             setSubtitleUrl("");
+            setShowSubtitles(false);
         }
 
         setIsPlaying(false);
@@ -433,6 +444,19 @@ export default function VideoPlayer({
         setShowQualityMenu(false);
     };
 
+    const handleSubtitleChange = (caption: Caption | null) => {
+        if (!caption) {
+            setActiveCaption(null);
+            setSubtitleUrl("");
+            setShowSubtitles(false);
+        } else {
+            setActiveCaption(caption);
+            loadSubtitleTrack(caption.url);
+            setShowSubtitles(true);
+        }
+        setShowSubtitleMenu(false);
+    };
+
     // Basic Playback Action
     const togglePlay = () => {
         if (!videoRef.current) return;
@@ -503,6 +527,114 @@ export default function VideoPlayer({
         }
     };
 
+    // Handle click outside of dropdowns to close them
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (audioMenuRef.current && !audioMenuRef.current.contains(target)) {
+                setShowAudioMenu(false);
+            }
+            if (qualityMenuRef.current && !qualityMenuRef.current.contains(target)) {
+                setShowQualityMenu(false);
+            }
+            if (speedMenuRef.current && !speedMenuRef.current.contains(target)) {
+                setShowSpeedMenu(false);
+            }
+            if (subtitleMenuRef.current && !subtitleMenuRef.current.contains(target)) {
+                setShowSubtitleMenu(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    // Handle keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore shortcuts if the user is typing in form inputs
+            const activeEl = document.activeElement;
+            if (
+                activeEl &&
+                (activeEl.tagName === "INPUT" ||
+                    activeEl.tagName === "TEXTAREA" ||
+                    activeEl.getAttribute("contenteditable") === "true")
+            ) {
+                return;
+            }
+
+            if (!videoRef.current) return;
+
+            switch (e.key.toLowerCase()) {
+                case " ":
+                case "spacebar":
+                    e.preventDefault();
+                    togglePlay();
+                    break;
+                case "f":
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+                case "arrowleft":
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.max(
+                        0,
+                        videoRef.current.currentTime - 10,
+                    );
+                    triggerControlsVisibility();
+                    break;
+                case "arrowright":
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.min(
+                        videoRef.current.duration || 0,
+                        videoRef.current.currentTime + 10,
+                    );
+                    triggerControlsVisibility();
+                    break;
+                case "arrowup":
+                    e.preventDefault();
+                    const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
+                    videoRef.current.volume = newVolUp;
+                    setVolume(newVolUp);
+                    if (newVolUp > 0) {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                    }
+                    triggerControlsVisibility();
+                    break;
+                case "arrowdown":
+                    e.preventDefault();
+                    const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
+                    videoRef.current.volume = newVolDown;
+                    setVolume(newVolDown);
+                    if (newVolDown === 0) {
+                        videoRef.current.muted = true;
+                        setIsMuted(true);
+                    } else {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                    }
+                    triggerControlsVisibility();
+                    break;
+                case "m":
+                    e.preventDefault();
+                    toggleMute();
+                    triggerControlsVisibility();
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPlaying, isFullscreen, volume, isMuted]);
+
     // Track fullscreen changes directly on document level (e.g. Escape key presses)
     useEffect(() => {
         const handleFullscreenChange = () => {
@@ -530,6 +662,7 @@ export default function VideoPlayer({
                 setShowQualityMenu(false);
                 setShowSpeedMenu(false);
                 setShowAudioMenu(false);
+                setShowSubtitleMenu(false);
             }, 3000);
         }
     };
@@ -589,12 +722,13 @@ export default function VideoPlayer({
                     preload="metadata"
                 >
                     {/* Subtitle track */}
-                    {subtitleUrl && (
+                    {subtitleUrl && activeCaption && (
                         <track
+                            key={activeCaption.id || activeCaption.url}
                             kind="subtitles"
                             src={subtitleUrl}
-                            srcLang="en"
-                            label="English"
+                            srcLang={activeCaption.lan}
+                            label={activeCaption.lanName}
                             default
                         />
                     )}
@@ -753,31 +887,67 @@ export default function VideoPlayer({
 
                         {/* Right Controls: Subtitle, Speed, Quality, Fullscreen */}
                         <div className="flex items-center space-x-4 relative">
-                            {/* Subtitles toggle */}
-                            {subtitleUrl && (
-                                <button
-                                    onClick={() =>
-                                        setShowSubtitles(!showSubtitles)
-                                    }
-                                    className={`transition-colors focus:outline-none ${
-                                        showSubtitles
-                                            ? "text-primary-light"
-                                            : "text-white/60 hover:text-white"
-                                    }`}
-                                    title="Toggle subtitles"
-                                >
-                                    <Subtitles className="w-5 h-5" />
-                                </button>
+                            {captions.length > 0 && (
+                                <div ref={subtitleMenuRef} className="relative">
+                                    <button
+                                        onClick={() => {
+                                            setShowSubtitleMenu(!showSubtitleMenu);
+                                            setShowQualityMenu(false);
+                                            setShowSpeedMenu(false);
+                                            setShowAudioMenu(false);
+                                        }}
+                                        className={`transition-colors focus:outline-none ${
+                                            showSubtitleMenu || showSubtitles
+                                                ? "text-primary-light"
+                                                : "text-white/60 hover:text-white"
+                                        }`}
+                                        title="Subtitles"
+                                    >
+                                        <Subtitles className="w-5 h-5" />
+                                    </button>
+
+                                    {showSubtitleMenu && (
+                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
+                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                Subtitles
+                                            </p>
+                                            <button
+                                                onClick={() => handleSubtitleChange(null)}
+                                                className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                    !activeCaption
+                                                        ? "text-primary-light bg-primary/10"
+                                                        : "text-white/80"
+                                                }`}
+                                            >
+                                                Off
+                                            </button>
+                                            {captions.map((caption) => (
+                                                <button
+                                                    key={caption.id || caption.url}
+                                                    onClick={() => handleSubtitleChange(caption)}
+                                                    className={`text-left text-xs font-semibold px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                        activeCaption?.id === caption.id
+                                                            ? "text-primary-light bg-primary/10"
+                                                            : "text-white/80"
+                                                    }`}
+                                                >
+                                                    {caption.lanName}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             )}
 
                             {/* Audio/Dub selector popup */}
                             {dubs && dubs.length > 0 && (
-                                <div className="relative">
+                                <div ref={audioMenuRef} className="relative">
                                     <button
                                         onClick={() => {
                                             setShowAudioMenu(!showAudioMenu);
                                             setShowQualityMenu(false);
                                             setShowSpeedMenu(false);
+                                            setShowSubtitleMenu(false);
                                         }}
                                         className={`transition-colors focus:outline-none flex items-center space-x-1 ${
                                             showAudioMenu
@@ -826,11 +996,13 @@ export default function VideoPlayer({
                             )}
 
                             {/* Quality Settings Dial Selector */}
-                            <div className="relative">
+                            <div ref={qualityMenuRef} className="relative">
                                 <button
                                     onClick={() => {
                                         setShowQualityMenu(!showQualityMenu);
                                         setShowSpeedMenu(false);
+                                        setShowAudioMenu(false);
+                                        setShowSubtitleMenu(false);
                                     }}
                                     className={`flex items-center space-x-1 font-bold text-xs px-2 py-1 rounded border transition-colors ${
                                         showQualityMenu
@@ -848,7 +1020,7 @@ export default function VideoPlayer({
 
                                 {showQualityMenu &&
                                     sortedDownloads.length > 0 && (
-                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in">
+                                        <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Quality
                                             </p>
@@ -875,11 +1047,13 @@ export default function VideoPlayer({
                             </div>
 
                             {/* Speed Settings Dial Selector */}
-                            <div className="relative">
+                            <div ref={speedMenuRef} className="relative">
                                 <button
                                     onClick={() => {
                                         setShowSpeedMenu(!showSpeedMenu);
                                         setShowQualityMenu(false);
+                                        setShowAudioMenu(false);
+                                        setShowSubtitleMenu(false);
                                     }}
                                     className={`text-xs font-bold px-2 py-1.5 rounded transition-colors ${
                                         showSpeedMenu
@@ -891,7 +1065,7 @@ export default function VideoPlayer({
                                 </button>
 
                                 {showSpeedMenu && (
-                                    <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[90px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in">
+                                    <div className="absolute bottom-10 right-0 glass-panel border border-white/10 rounded-xl p-2 min-w-[90px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950">
                                         <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                             Speed
                                         </p>
