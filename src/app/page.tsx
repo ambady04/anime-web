@@ -3,7 +3,7 @@ import HeroSlider from "@/components/hero-slider";
 import MovieShelf from "@/components/movie-shelf";
 import ContinueWatching from "@/components/continue-watching";
 import Link from "next/link";
-import { Film, RefreshCw, Layers } from "lucide-react";
+import { Film, RefreshCw } from "lucide-react";
 
 export const revalidate = 3600; // Revalidate cache hourly
 
@@ -23,11 +23,6 @@ export default async function HomePage() {
         (m) => m.type === "BANNER",
     );
     const banners = bannerModule?.banner?.items || [];
-
-    const filterModule = homeData?.operatingList?.find(
-        (m) => m.type === "FILTER",
-    );
-    const categories = filterModule?.filters || [];
 
     const shelves =
         homeData?.operatingList?.filter(
@@ -50,40 +45,6 @@ export default async function HomePage() {
             {/* 2. Client-side Continue Watching History */}
             <ContinueWatching />
 
-            {/* 3. Category Filter Badges */}
-            {categories.length > 0 && (
-                <div className="max-w-380 mx-auto px-4 sm:px-6 lg:px-8 my-10 relative z-20">
-                    <div className="flex items-center space-x-2 mb-6 select-none">
-                        <Layers className="w-4 h-4 text-primary" />
-                        <h2 className="text-xs font-black uppercase tracking-wider text-foreground/45">
-                            Browse by Genre
-                        </h2>
-                    </div>
-                    <div className="flex flex-wrap gap-2.5">
-                        {categories.slice(0, 12).map((cat, idx) => (
-                            <Link
-                                key={idx}
-                                href={`/search?category=${encodeURIComponent(cat.title)}`}
-                                className="group relative px-6 py-2.5 rounded-full overflow-hidden glass-card border border-glass-border flex items-center justify-center text-center transition-all duration-300 shadow-sm"
-                            >
-                                {/* Background thumb with low opacity */}
-                                {cat.image?.url && (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                        src={cat.image.url}
-                                        alt={cat.title}
-                                        className="absolute inset-0 w-full h-full object-cover opacity-10 group-hover:opacity-20 group-hover:scale-105 transition-all duration-300 select-none pointer-events-none"
-                                    />
-                                )}
-                                {/* Text overlay */}
-                                <span className="font-bold text-xs text-foreground/75 group-hover:text-primary transition-colors relative z-10 select-none">
-                                    {cat.title}
-                                </span>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* 4. Display Content Shelves (Trending, Cinema, etc.) */}
             {shelves.length > 0 ? (
