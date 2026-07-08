@@ -808,6 +808,19 @@ export default function VideoPlayer({
                 isPlaying && !showControls ? "cursor-none" : ""
             }`}
         >
+            <style dangerouslySetInnerHTML={{ __html: `
+                video.controls-visible::-webkit-media-text-track-display {
+                    transform: translateY(-80px) !important;
+                }
+                video.controls-visible::-webkit-media-text-track-container {
+                    transform: translateY(-80px) !important;
+                }
+                video::-webkit-media-text-track-display,
+                video::-webkit-media-text-track-container {
+                    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                }
+            `}} />
+
             {/* Video Node */}
             {activeDownload && !playerError && (
                 <video
@@ -816,7 +829,7 @@ export default function VideoPlayer({
                     onEnded={handleVideoEnded}
                     className={`w-full h-full ${
                         isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
-                    } ${
+                    } ${showControls ? "controls-visible" : ""} ${
                         aspectRatio === "contain"
                             ? "object-contain"
                             : aspectRatio === "fill"
