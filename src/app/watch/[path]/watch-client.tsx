@@ -70,9 +70,7 @@ export default function WatchClient({
         setIsInWatchlist(added);
     };
 
-    const isSeries =
-        subject.subjectType === 2 ||
-        subject.subjectType === 7;
+    const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
     const currentSeasonData = resource?.seasons?.find(
@@ -155,8 +153,16 @@ export default function WatchClient({
                             season={isSeries ? activeSeason : undefined}
                             episode={isSeries ? activeEpisode : undefined}
                             dubs={subject.dubs}
-                            onNextEpisode={activeEpisode < totalEpisodes ? handleNextEpisode : undefined}
-                            onPrevEpisode={activeEpisode > 1 ? handlePrevEpisode : undefined}
+                            onNextEpisode={
+                                activeEpisode < totalEpisodes
+                                    ? handleNextEpisode
+                                    : undefined
+                            }
+                            onPrevEpisode={
+                                activeEpisode > 1
+                                    ? handlePrevEpisode
+                                    : undefined
+                            }
                         />
                         {isPageLoading && (
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-40 animate-fade-in">
