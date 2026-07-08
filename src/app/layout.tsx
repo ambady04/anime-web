@@ -6,6 +6,7 @@ import BottomNav from "@/components/bottom-nav";
 import ScrollHandler from "@/components/scroll-handler";
 import PageTransition from "@/components/page-transition";
 import InspectGuard from "@/components/inspect-guard";
+import { AuthProvider } from "@/lib/auth-context";
 
 const inter = Inter({
     variable: "--font-inter",
@@ -55,27 +56,28 @@ export default function RootLayout({
                 />
             </head>
             <body className="min-h-full bg-background text-foreground flex flex-col relative transition-colors duration-300">
-                {/* Global protection guard */}
-                <InspectGuard />
+                <AuthProvider>
+                    {/* Global protection guard */}
+                    <InspectGuard />
 
-                {/* Scroll handler updating global styles dynamically */}
-                <ScrollHandler />
+                    {/* Scroll handler updating global styles dynamically */}
+                    <ScrollHandler />
 
-                {/* Glow backgrounds */}
-                <div className="radial-glow" />
-                <div className="radial-glow-secondary" />
+                    {/* Glow backgrounds */}
+                    <div className="radial-glow" />
+                    <div className="radial-glow-secondary" />
 
-                {/* Global Navigation */}
-                <Navbar />
+                    {/* Global Navigation */}
+                    <Navbar />
 
-                {/* Main Content Area with transition */}
-                <main className="grow z-10 pt-16 md:pt-20 pb-20 md:pb-0">
-                    <PageTransition>{children}</PageTransition>
-                </main>
+                    {/* Main Content Area with transition */}
+                    <main className="grow z-10 pt-16 md:pt-20 pb-20 md:pb-0">
+                        <PageTransition>{children}</PageTransition>
+                    </main>
 
-                {/* Fixed Bottom Navigation for Mobile */}
-                <BottomNav />
-
+                    {/* Fixed Bottom Navigation for Mobile */}
+                    <BottomNav />
+                </AuthProvider>
             </body>
         </html>
     );

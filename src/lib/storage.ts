@@ -1,3 +1,10 @@
+import { auth } from "./firebase";
+import { 
+  syncHistoryItemToCloud, 
+  syncWatchlistItemToCloud, 
+  syncWatchedEpisodesToCloud 
+} from "./sync";
+
 export interface HistoryItem {
   detailPath: string;
   title: string;
@@ -22,7 +29,6 @@ export interface WatchlistItem {
   bookmarkedSeason?: number;
   bookmarkedEpisode?: number;
 }
-
 
 export const localStore = {
   // Watch History
@@ -50,6 +56,13 @@ export const localStore = {
       
       const updated = [newItem, ...filtered].slice(0, 40); // Keep last 40 items
       localStorage.setItem('kixo_history', JSON.stringify(updated));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncHistoryItemToCloud(auth.currentUser.uid, newItem).catch((err) => {
+          console.error("[sync] Background history save failed:", err);
+        });
+      }
     } catch (e) {
       console.error('Failed to save watch history', e);
     }
@@ -61,12 +74,39 @@ export const localStore = {
       const history = localStore.getHistory();
       const updated = history.filter((h) => h.detailPath !== detailPath);
       localStorage.setItem('kixo_history', JSON.stringify(updated));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        const { db } = require("./firebase");
+        const { doc, deleteDoc } = require("firebase/firestore");
+        const docRef = doc(db, "users", auth.currentUser.uid, "history", encodeURIComponent(detailPath));
+        deleteDoc(docRef).catch((err: any) => {
+          console.error("[sync] Background history delete failed:", err);
+        });
+      }
     } catch {}
   },
 
   clearHistory: () => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('kixo_history');
+
+    // Background Cloud Firestore Sync
+    if (auth.currentUser) {
+      const { db } = require("./firebase");
+      const { collection, getDocs, writeBatch } = require("firebase/firestore");
+      const uid = auth.currentUser.uid;
+      const historyCol = collection(db, "users", uid, "history");
+      getDocs(historyCol).then((snapshot: any) => {
+        const batch = writeBatch(db);
+        snapshot.forEach((doc: any) => {
+          batch.delete(doc.ref);
+        });
+        return batch.commit();
+      }).catch((err: any) => {
+        console.error("[sync] Background history clear failed:", err);
+      });
+    }
   },
 
   // Watchlist / Favorites
@@ -96,6 +136,13 @@ export const localStore = {
       }
       
       localStorage.setItem('kixo_watchlist', JSON.stringify(updated));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncWatchlistItemToCloud(auth.currentUser.uid, item, exists).catch((err) => {
+          console.error("[sync] Background watchlist toggle failed:", err);
+        });
+      }
       return added;
     } catch {
       return false;
@@ -128,36 +175,37 @@ export const localStore = {
       const watchlist = localStore.getWatchlist();
       const exists = watchlist.some((w) => w.detailPath === item.detailPath);
       let updated;
+      
+      const updatedItem = {
+        ...item,
+        bookmarkedSeason: season,
+        bookmarkedEpisode: episode,
+      };
+
       if (exists) {
         updated = watchlist.map((w) => {
           if (w.detailPath === item.detailPath) {
-            return {
-              ...w,
-              bookmarkedSeason: season,
-              bookmarkedEpisode: episode,
-            };
+            return updatedItem;
           }
           return w;
         });
       } else {
-        updated = [
-          {
-            ...item,
-            bookmarkedSeason: season,
-            bookmarkedEpisode: episode,
-          },
-          ...watchlist,
-        ];
+        updated = [updatedItem, ...watchlist];
       }
       localStorage.setItem('kixo_watchlist', JSON.stringify(updated));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncWatchlistItemToCloud(auth.currentUser.uid, updatedItem).catch((err) => {
+          console.error("[sync] Background bookmark update failed:", err);
+        });
+      }
     } catch (e) {
       console.error('Failed to update episode bookmark', e);
     }
   },
 
-
   // Episode progress — tracks which episodes have been watched per show/season
-  // Key format: `${detailPath}__s${season}`  Value: number[] of watched episode numbers
   getWatchedEpisodes: (detailPath: string, season: number): Set<number> => {
     if (typeof window === 'undefined') return new Set();
     try {
@@ -175,7 +223,15 @@ export const localStore = {
       const key = `kixo_ep__${detailPath}__s${season}`;
       const existing = localStore.getWatchedEpisodes(detailPath, season);
       existing.add(episode);
-      localStorage.setItem(key, JSON.stringify(Array.from(existing)));
+      const epsArr = Array.from(existing);
+      localStorage.setItem(key, JSON.stringify(epsArr));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncWatchedEpisodesToCloud(auth.currentUser.uid, detailPath, season, epsArr).catch((err) => {
+          console.error("[sync] Background episode watch save failed:", err);
+        });
+      }
     } catch {}
   },
 
@@ -185,7 +241,15 @@ export const localStore = {
       const key = `kixo_ep__${detailPath}__s${season}`;
       const existing = localStore.getWatchedEpisodes(detailPath, season);
       existing.delete(episode);
-      localStorage.setItem(key, JSON.stringify(Array.from(existing)));
+      const epsArr = Array.from(existing);
+      localStorage.setItem(key, JSON.stringify(epsArr));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncWatchedEpisodesToCloud(auth.currentUser.uid, detailPath, season, epsArr).catch((err) => {
+          console.error("[sync] Background episode watch remove failed:", err);
+        });
+      }
     } catch {}
   },
 
@@ -195,6 +259,13 @@ export const localStore = {
       const key = `kixo_ep__${detailPath}__s${season}`;
       const eps = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
       localStorage.setItem(key, JSON.stringify(eps));
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        syncWatchedEpisodesToCloud(auth.currentUser.uid, detailPath, season, eps).catch((err) => {
+          console.error("[sync] Background season watch save failed:", err);
+        });
+      }
     } catch {}
   },
 
@@ -203,6 +274,17 @@ export const localStore = {
     try {
       const key = `kixo_ep__${detailPath}__s${season}`;
       localStorage.removeItem(key);
+
+      // Background Cloud Firestore Sync
+      if (auth.currentUser) {
+        const { db } = require("./firebase");
+        const { doc, deleteDoc } = require("firebase/firestore");
+        const cleanKey = `${detailPath}__s${season}`;
+        const docRef = doc(db, "users", auth.currentUser.uid, "watched_episodes", encodeURIComponent(cleanKey));
+        deleteDoc(docRef).catch((err: any) => {
+          console.error("[sync] Background season watch clear failed:", err);
+        });
+      }
     } catch {}
   },
 };
