@@ -15,6 +15,7 @@ import {
     Volume1,
     Maximize2,
     AlertTriangle,
+    Scan,
 } from "lucide-react";
 import {
     StreamData,
@@ -54,6 +55,7 @@ export default function VideoPlayer({
     const qualityMenuRef = useRef<HTMLDivElement>(null);
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const subtitleMenuRef = useRef<HTMLDivElement>(null);
+    const ratioMenuRef = useRef<HTMLDivElement>(null);
 
     // Stream options
     const downloads = streamData.downloads || [];
@@ -78,12 +80,14 @@ export default function VideoPlayer({
     const [isMuted, setIsMuted] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [aspectRatio, setAspectRatio] = useState<"contain" | "fill" | "cover">("contain");
 
     const [showControls, setShowControls] = useState(true);
     const [isLoading, setIsLoading] = useState(true);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
     const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+    const [showRatioMenu, setShowRatioMenu] = useState(false);
     const [showSubtitles, setShowSubtitles] = useState(true);
     const [playerError, setPlayerError] = useState(false);
     const [showAudioMenu, setShowAudioMenu] = useState(false);
@@ -543,6 +547,9 @@ export default function VideoPlayer({
             if (subtitleMenuRef.current && !subtitleMenuRef.current.contains(target)) {
                 setShowSubtitleMenu(false);
             }
+            if (ratioMenuRef.current && !ratioMenuRef.current.contains(target)) {
+                setShowRatioMenu(false);
+            }
         };
 
         document.addEventListener("mousedown", handleClickOutside);
@@ -663,6 +670,7 @@ export default function VideoPlayer({
                 setShowSpeedMenu(false);
                 setShowAudioMenu(false);
                 setShowSubtitleMenu(false);
+                setShowRatioMenu(false);
             }, 3000);
         }
     };
@@ -707,7 +715,13 @@ export default function VideoPlayer({
                 <video
                     ref={videoRef}
                     src={buildVideoSrc(activeDownload.url)}
-                    className="w-full h-full object-contain cursor-pointer"
+                    className={`w-full h-full cursor-pointer ${
+                        aspectRatio === "contain"
+                            ? "object-contain"
+                            : aspectRatio === "fill"
+                              ? "object-fill"
+                              : "object-cover"
+                    }`}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
                     onLoadedMetadata={handleLoadedMetadata}
@@ -886,7 +900,7 @@ export default function VideoPlayer({
                                 </div>
                             </div>
 
-                            {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Fullscreen */}
+                            {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Screen Size, Fullscreen */}
                             <div className="flex items-center space-x-2 sm:space-x-3 relative">
                                 {/* Subtitle Selector */}
                                 {captions.length > 0 && (
@@ -897,6 +911,7 @@ export default function VideoPlayer({
                                                 setShowQualityMenu(false);
                                                 setShowSpeedMenu(false);
                                                 setShowAudioMenu(false);
+                                                setShowRatioMenu(false);
                                             }}
                                             className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
                                                 showSubtitleMenu || showSubtitles
@@ -909,7 +924,7 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showSubtitleMenu && (
-                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Subtitles
                                                 </p>
@@ -950,6 +965,7 @@ export default function VideoPlayer({
                                                 setShowQualityMenu(false);
                                                 setShowSpeedMenu(false);
                                                 setShowSubtitleMenu(false);
+                                                setShowRatioMenu(false);
                                             }}
                                             className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
                                                 showAudioMenu
@@ -962,7 +978,7 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showAudioMenu && (
-                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Audio Track
                                                 </p>
@@ -1005,6 +1021,7 @@ export default function VideoPlayer({
                                             setShowSpeedMenu(false);
                                             setShowAudioMenu(false);
                                             setShowSubtitleMenu(false);
+                                            setShowRatioMenu(false);
                                         }}
                                         className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                                             showQualityMenu
@@ -1022,7 +1039,7 @@ export default function VideoPlayer({
 
                                     {showQualityMenu &&
                                         sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Quality
                                                 </p>
@@ -1056,6 +1073,7 @@ export default function VideoPlayer({
                                             setShowQualityMenu(false);
                                             setShowAudioMenu(false);
                                             setShowSubtitleMenu(false);
+                                            setShowRatioMenu(false);
                                         }}
                                         className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
                                             showSpeedMenu
@@ -1067,7 +1085,7 @@ export default function VideoPlayer({
                                     </button>
 
                                     {showSpeedMenu && (
-                                        <div className="absolute bottom-14 right-0 glass-panel border border-white/10 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950/95 backdrop-blur-xl">
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Speed
                                             </p>
@@ -1088,6 +1106,74 @@ export default function VideoPlayer({
                                                     </button>
                                                 ),
                                             )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Aspect Ratio Settings Dial Selector */}
+                                <div ref={ratioMenuRef} className="relative">
+                                    <button
+                                        onClick={() => {
+                                            setShowRatioMenu(!showRatioMenu);
+                                            setShowQualityMenu(false);
+                                            setShowSpeedMenu(false);
+                                            setShowAudioMenu(false);
+                                            setShowSubtitleMenu(false);
+                                        }}
+                                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                                            showRatioMenu
+                                                ? "text-primary bg-primary/10"
+                                                : "text-white/70 hover:text-white"
+                                        }`}
+                                        title="Aspect Ratio"
+                                    >
+                                        <Scan className="w-4.5 h-4.5" />
+                                    </button>
+
+                                    {showRatioMenu && (
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                Screen Size
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    setAspectRatio("contain");
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                    aspectRatio === "contain"
+                                                        ? "text-primary bg-primary/10"
+                                                        : "text-white/80"
+                                                }`}
+                                            >
+                                                Fit Screen
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setAspectRatio("fill");
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                    aspectRatio === "fill"
+                                                        ? "text-primary bg-primary/10"
+                                                        : "text-white/80"
+                                                }`}
+                                            >
+                                                Stretch Screen
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setAspectRatio("cover");
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                    aspectRatio === "cover"
+                                                        ? "text-primary bg-primary/10"
+                                                        : "text-white/80"
+                                                }`}
+                                            >
+                                                Zoom / Fill
+                                            </button>
                                         </div>
                                     )}
                                 </div>
