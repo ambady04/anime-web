@@ -105,6 +105,8 @@ export default function VideoPlayer({
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Track double click state to distinguish single clicks
+    const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
     // Track URLs that failed via proxy — used to decide when to try direct
@@ -543,6 +545,49 @@ export default function VideoPlayer({
         }
     };
 
+    // Distinguish single clicks from double clicks on the screen
+    const handleScreenClick = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (
+            target.closest("button") ||
+            target.closest("input") ||
+            target.closest("select") ||
+            target.closest(".bg-zinc-950/80") ||
+            target.closest(".absolute.bottom-14")
+        ) {
+            return;
+        }
+
+        if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+        } else {
+            clickTimeoutRef.current = setTimeout(() => {
+                togglePlay();
+                clickTimeoutRef.current = null;
+            }, 250);
+        }
+    };
+
+    const handleScreenDoubleClick = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (
+            target.closest("button") ||
+            target.closest("input") ||
+            target.closest("select") ||
+            target.closest(".bg-zinc-950/80") ||
+            target.closest(".absolute.bottom-14")
+        ) {
+            return;
+        }
+
+        if (clickTimeoutRef.current) {
+            clearTimeout(clickTimeoutRef.current);
+            clickTimeoutRef.current = null;
+        }
+        toggleFullscreen();
+    };
+
     // Handle click outside of dropdowns to close them
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -753,8 +798,8 @@ export default function VideoPlayer({
                     onWaiting={() => setIsLoading(true)}
                     onPlaying={() => setIsLoading(false)}
                     onError={handlePlayerError}
-                    onClick={togglePlay}
-                    onDoubleClick={toggleFullscreen}
+                    onClick={handleScreenClick}
+                    onDoubleClick={handleScreenDoubleClick}
                     autoPlay
                     playsInline
                     preload="metadata"
@@ -834,19 +879,8 @@ export default function VideoPlayer({
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 }`}
-                onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (
-                        target.closest("button") ||
-                        target.closest("input") ||
-                        target.closest("select") ||
-                        target.closest(".bg-zinc-950/80") ||
-                        target.closest(".absolute.bottom-14")
-                    ) {
-                        return;
-                    }
-                    togglePlay();
-                }}
+                onClick={handleScreenClick}
+                onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
