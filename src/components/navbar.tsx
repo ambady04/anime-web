@@ -11,14 +11,37 @@ import {
     User,
     Sun,
     Moon,
+    X,
+    ShieldAlert,
+    Trash2,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Navbar() {
     const pathname = usePathname();
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState("");
     const [theme, setTheme] = useState<"dark" | "light">("dark");
+    const [showResetModal, setShowResetModal] = useState(false);
+
+    const clearAllCookiesAndData = () => {
+        // Clear localStorage
+        localStorage.clear();
+        // Clear sessionStorage
+        sessionStorage.clear();
+        // Clear cookies
+        if (typeof document !== "undefined") {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i];
+                const eqPos = cookie.indexOf("=");
+                const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+            }
+        }
+        // Reload page
+        window.location.reload();
+    };
 
     // Load initial theme from DOM/localStorage
     useEffect(() => {
@@ -175,11 +198,93 @@ export default function Navbar() {
                     </button>
 
                     {/* Profile Circle Icon */}
-                    <div className="w-8 h-8 rounded-full border border-glass-border bg-glass-card hover:border-primary/45 transition-colors flex items-center justify-center overflow-hidden cursor-pointer">
+                    <button
+                        onClick={() => setShowResetModal(true)}
+                        className="w-8 h-8 rounded-full border border-glass-border bg-glass-card hover:border-primary/45 transition-colors flex items-center justify-center overflow-hidden cursor-pointer focus:outline-none"
+                    >
                         <User className="w-4 h-4 text-foreground/60 hover:text-primary transition-colors" />
-                    </div>
+                    </button>
                 </div>
             </div>
+
+            {/* Reset App Data Modal */}
+            <AnimatePresence>
+                {showResetModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowResetModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+
+                        {/* Modal Container */}
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            transition={{ type: "spring", duration: 0.4 }}
+                            className="relative w-full max-w-md bg-zinc-950/90 backdrop-blur-md border border-white/10 p-6 rounded-3xl shadow-2xl space-y-6 z-10"
+                        >
+                            {/* Close button */}
+                            <button
+                                onClick={() => setShowResetModal(false)}
+                                className="absolute top-4 right-4 p-2 rounded-xl text-foreground/50 hover:text-white hover:bg-white/5 transition-colors focus:outline-none cursor-pointer"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+
+                            {/* Icon & Title Header */}
+                            <div className="flex flex-col items-center text-center space-y-3 select-none">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-lg shadow-primary-glow/10 animate-bounce">
+                                    <ShieldAlert className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-lg font-black text-white uppercase tracking-wider">
+                                    Reset Application Data
+                                </h3>
+                                <p className="text-xs text-foreground/60 font-medium max-w-xs leading-relaxed">
+                                    If you are experiencing stream errors, loading issues, or broken player states, clearing your data can help restore the application.
+                                </p>
+                            </div>
+
+                            {/* Details Table / Alerts */}
+                            <div className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-3 text-xs">
+                                <div className="flex items-center justify-between text-white/80">
+                                    <span className="font-semibold">Watchlist / Bookmarks</span>
+                                    <span className="text-primary font-bold">Will be cleared</span>
+                                </div>
+                                <div className="flex items-center justify-between text-white/80 border-t border-white/5 pt-3">
+                                    <span className="font-semibold">Playback Progress History</span>
+                                    <span className="text-primary font-bold">Will be cleared</span>
+                                </div>
+                                <div className="flex items-center justify-between text-white/80 border-t border-white/5 pt-3">
+                                    <span className="font-semibold">Cookies & Storage Cache</span>
+                                    <span className="text-primary font-bold">Will be cleared</span>
+                                </div>
+                            </div>
+
+                            {/* Actions Footer */}
+                            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                <button
+                                    onClick={() => setShowResetModal(false)}
+                                    className="flex-1 px-4 py-3 rounded-xl border border-glass-border text-foreground/75 hover:text-white hover:bg-white/5 transition-colors text-xs font-bold uppercase tracking-wider cursor-pointer"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={clearAllCookiesAndData}
+                                    className="flex-1 px-4 py-3 rounded-xl bg-primary hover:bg-primary-light text-white transition-all text-xs font-bold uppercase tracking-wider shadow-lg shadow-primary-glow cursor-pointer flex items-center justify-center space-x-1.5"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Reset App</span>
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </header>
     );
 }
