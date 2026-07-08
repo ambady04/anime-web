@@ -114,7 +114,7 @@ export default function WatchClient({
         setWatchedEpisodes(
             localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
         );
-    }, [subject.detailPath, selectedSeason]);
+    }, [subject.detailPath, selectedSeason, activeEpisode]);
 
     // Ref for the currently active episode button — used to auto-scroll it into view
     const activeEpRef = useRef<HTMLButtonElement | null>(null);
@@ -409,7 +409,7 @@ export default function WatchClient({
                                                         : isActive
                                                           ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary-glow scale-105"
                                                           : isWatched
-                                                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50"
+                                                            ? "bg-emerald-500/18 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/70 shadow-sm"
                                                             : "bg-glass-card hover:bg-primary/10 hover:border-primary/30 border-glass-border text-foreground/60 hover:text-foreground"
                                                 }`}
                                             >

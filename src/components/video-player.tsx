@@ -18,6 +18,8 @@ import {
     Scan,
     SkipBack,
     SkipForward,
+    Headphones,
+    Frame,
 } from "lucide-react";
 import {
     StreamData,
@@ -710,8 +712,13 @@ export default function VideoPlayer({
     }, [showSubtitles, subtitleUrl]);
 
     const handleVideoEnded = () => {
-        if (isSeries && onNextEpisode) {
-            onNextEpisode();
+        if (isSeries) {
+            if (season && episode) {
+                localStore.markEpisodeWatched(detailPath, season, episode);
+            }
+            if (onNextEpisode) {
+                onNextEpisode();
+            }
         }
     };
 
@@ -1009,7 +1016,7 @@ export default function VideoPlayer({
                                             }`}
                                             title="Change Audio Track"
                                         >
-                                            <Volume2 className="w-4.5 h-4.5" />
+                                            <Headphones className="w-4.5 h-4.5" />
                                         </button>
 
                                         {showAudioMenu && (
@@ -1162,7 +1169,7 @@ export default function VideoPlayer({
                                         }`}
                                         title="Aspect Ratio"
                                     >
-                                        <Scan className="w-4.5 h-4.5" />
+                                        <Frame className="w-4.5 h-4.5" />
                                     </button>
 
                                     {showRatioMenu && (
