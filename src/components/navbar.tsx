@@ -203,7 +203,11 @@ export default function Navbar() {
                     {/* Profile Circle Icon */}
                     <button
                         onClick={() => setShowProfileModal(true)}
-                        className="w-8 h-8 rounded-full border border-glass-border bg-glass-card hover:border-primary/45 transition-colors flex items-center justify-center overflow-hidden cursor-pointer focus:outline-none relative"
+                        className={`w-9 h-9 rounded-full border-2 bg-glass-card flex items-center justify-center overflow-hidden cursor-pointer focus:outline-none relative shrink-0 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_12px_rgba(227,28,37,0.4)] active:scale-95 ${
+                            user
+                                ? "border-primary/50 hover:border-primary"
+                                : "border-glass-border hover:border-primary/45"
+                        }`}
                     >
                         {user ? (
                             user.photoURL ? (
