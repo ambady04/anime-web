@@ -712,7 +712,7 @@ export default function VideoPlayer({
             clearTimeout(controlsTimeoutRef.current);
         }
 
-        // Hide controls after 3 seconds of inactivity while playing
+        // Hide controls after 2 seconds of inactivity while playing
         if (isPlaying) {
             controlsTimeoutRef.current = setTimeout(() => {
                 setShowControls(false);
@@ -721,7 +721,7 @@ export default function VideoPlayer({
                 setShowAudioMenu(false);
                 setShowSubtitleMenu(false);
                 setShowRatioMenu(false);
-            }, 3000);
+            }, 2000);
         }
     };
 
@@ -744,14 +744,47 @@ export default function VideoPlayer({
         return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
     };
 
-    // Toggle Subtitle track display mode
+    // Toggle Subtitle track display mode and disable other tracks to prevent duplicates
     useEffect(() => {
-        if (videoRef.current && videoRef.current.textTracks.length > 0) {
-            videoRef.current.textTracks[0].mode = showSubtitles
-                ? "showing"
-                : "disabled";
+        const handleTrackChange = () => {
+            if (!videoRef.current || !videoRef.current.textTracks) return;
+            const tracks = videoRef.current.textTracks;
+            let enabledAny = false;
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                if (showSubtitles && activeCaption) {
+                    const isMatch =
+                        track.language === activeCaption.lan ||
+                        track.label === activeCaption.lanName;
+
+                    if (isMatch && !enabledAny) {
+                        track.mode = "showing";
+                        enabledAny = true;
+                    } else {
+                        track.mode = "disabled";
+                    }
+                } else {
+                    track.mode = "disabled";
+                }
+            }
+        };
+
+        const tracksList = videoRef.current?.textTracks;
+        if (tracksList) {
+            tracksList.addEventListener("addtrack", handleTrackChange);
+            tracksList.addEventListener("change", handleTrackChange);
         }
-    }, [showSubtitles, subtitleUrl]);
+
+        // Run initially
+        handleTrackChange();
+
+        return () => {
+            if (tracksList) {
+                tracksList.removeEventListener("addtrack", handleTrackChange);
+                tracksList.removeEventListener("change", handleTrackChange);
+            }
+        };
+    }, [showSubtitles, subtitleUrl, activeCaption]);
 
     const handleVideoEnded = () => {
         if (isSeries) {
@@ -771,7 +804,9 @@ export default function VideoPlayer({
             onMouseLeave={() => isPlaying && setShowControls(false)}
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
-            className="relative w-full h-full bg-black select-none overflow-hidden group/player"
+            className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
+                isPlaying && !showControls ? "cursor-none" : ""
+            }`}
         >
             {/* Video Node */}
             {activeDownload && !playerError && (
