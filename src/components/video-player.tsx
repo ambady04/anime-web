@@ -21,6 +21,7 @@ import {
     Headphones,
     Keyboard,
     HelpCircle,
+    PictureInPicture2,
 } from "lucide-react";
 import {
     StreamData,
@@ -731,33 +732,44 @@ export default function VideoPlayer({
 
             if (!videoRef.current) return;
 
-            switch (e.key.toLowerCase()) {
+            switch (e.key) {
                 case " ":
-                case "spacebar":
+                case "Spacebar":
                     e.preventDefault();
                     togglePlay();
                     break;
                 case "f":
+                case "F":
                     e.preventDefault();
                     toggleFullscreen();
                     break;
-                case "arrowleft":
+                case "ArrowLeft": {
                     e.preventDefault();
                     videoRef.current.currentTime = Math.max(
                         0,
                         videoRef.current.currentTime - 10,
                     );
+                    setCurrentTime(videoRef.current.currentTime);
+                    setShowLeftSkipAnimation(true);
+                    if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
+                    leftSkipTimeoutRef.current = setTimeout(() => setShowLeftSkipAnimation(false), 700);
                     triggerControlsVisibility();
                     break;
-                case "arrowright":
+                }
+                case "ArrowRight": {
                     e.preventDefault();
                     videoRef.current.currentTime = Math.min(
                         videoRef.current.duration || 0,
                         videoRef.current.currentTime + 10,
                     );
+                    setCurrentTime(videoRef.current.currentTime);
+                    setShowRightSkipAnimation(true);
+                    if (rightSkipTimeoutRef.current) clearTimeout(rightSkipTimeoutRef.current);
+                    rightSkipTimeoutRef.current = setTimeout(() => setShowRightSkipAnimation(false), 700);
                     triggerControlsVisibility();
                     break;
-                case "arrowup":
+                }
+                case "ArrowUp": {
                     e.preventDefault();
                     const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
                     videoRef.current.volume = newVolUp;
@@ -768,7 +780,8 @@ export default function VideoPlayer({
                     }
                     triggerControlsVisibility();
                     break;
-                case "arrowdown":
+                }
+                case "ArrowDown": {
                     e.preventDefault();
                     const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
                     videoRef.current.volume = newVolDown;
@@ -782,18 +795,17 @@ export default function VideoPlayer({
                     }
                     triggerControlsVisibility();
                     break;
+                }
                 case "m":
+                case "M":
                     e.preventDefault();
                     toggleMute();
                     triggerControlsVisibility();
                     break;
                 case "?":
-                case "/":
-                    if (e.key === "?" || e.shiftKey) {
-                        e.preventDefault();
-                        setShowCheatSheet((prev) => !prev);
-                        triggerControlsVisibility();
-                    }
+                    e.preventDefault();
+                    setShowCheatSheet((prev) => !prev);
+                    triggerControlsVisibility();
                     break;
                 default:
                     break;
@@ -1602,7 +1614,7 @@ export default function VideoPlayer({
                                         }`}
                                         title="Picture-in-Picture"
                                     >
-                                        <Scan className="w-4.5 h-4.5" />
+                                        <PictureInPicture2 className="w-4.5 h-4.5" />
                                     </button>
                                 )}
 
