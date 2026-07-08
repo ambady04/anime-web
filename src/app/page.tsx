@@ -9,7 +9,6 @@ export const revalidate = 3600; // Revalidate cache hourly
 
 export default async function HomePage() {
     let homeData = null;
-    let malayalamMovies: any[] = [];
     let errorMsg = "";
 
     try {
@@ -17,13 +16,6 @@ export default async function HomePage() {
     } catch (e: any) {
         console.error("HomePage API Error:", e);
         errorMsg = e.message || "Error loading live media catalog.";
-    }
-
-    try {
-        const malData = await movieApi.getCategory("malayalam", 1);
-        malayalamMovies = malData?.items || [];
-    } catch (e) {
-        console.error("Error loading Malayalam movies for homepage:", e);
     }
 
     // Extract sections
@@ -94,14 +86,8 @@ export default async function HomePage() {
             )}
 
             {/* 4. Display Content Shelves (Trending, Cinema, etc.) */}
-            {(shelves.length > 0 || malayalamMovies.length > 0) ? (
+            {shelves.length > 0 ? (
                 <div className="space-y-4">
-                    {malayalamMovies.length > 0 && (
-                        <MovieShelf
-                            title="Latest Malayalam Movies"
-                            subjects={malayalamMovies}
-                        />
-                    )}
                     {shelves.map((shelf, idx) => (
                         <MovieShelf
                             key={shelf.opId || idx}

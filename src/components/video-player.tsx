@@ -19,7 +19,6 @@ import {
     SkipBack,
     SkipForward,
     Headphones,
-    Frame,
 } from "lucide-react";
 import {
     StreamData,
@@ -1169,7 +1168,40 @@ export default function VideoPlayer({
                                         }`}
                                         title="Aspect Ratio"
                                     >
-                                        <Frame className="w-4.5 h-4.5" />
+                                        <svg
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2.2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="w-4.5 h-4.5"
+                                        >
+                                            {/* Curved screen outline */}
+                                            <path d="M 2.5 6.5 Q 12 8.5 21.5 6.5" />
+                                            <path d="M 2.5 17.5 Q 12 15.5 21.5 17.5" />
+                                            <line x1="2.5" y1="6.5" x2="2.5" y2="17.5" />
+                                            <line x1="21.5" y1="6.5" x2="21.5" y2="17.5" />
+                                            {/* Corner focus brackets */}
+                                            <path d="M 5 9.5 L 5 8.5 L 6 8.5" />
+                                            <path d="M 19 9.5 L 19 8.5 L 18 8.5" />
+                                            <path d="M 5 14.5 L 5 15.5 L 6 15.5" />
+                                            <path d="M 19 14.5 L 19 15.5 L 18 15.5" />
+                                            {/* Inside 16:9 text */}
+                                            <text
+                                                x="12"
+                                                y="13.8"
+                                                fontSize="5"
+                                                fontWeight="900"
+                                                letterSpacing="-0.2"
+                                                textAnchor="middle"
+                                                fill="currentColor"
+                                                stroke="none"
+                                                style={{ fontFamily: 'system-ui, sans-serif' }}
+                                            >
+                                                16:9
+                                            </text>
+                                        </svg>
                                     </button>
 
                                     {showRatioMenu && (
