@@ -178,4 +178,31 @@ export const localStore = {
       localStorage.setItem(key, JSON.stringify(Array.from(existing)));
     } catch {}
   },
+
+  markEpisodeUnwatched: (detailPath: string, season: number, episode: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `kixo_ep__${detailPath}__s${season}`;
+      const existing = localStore.getWatchedEpisodes(detailPath, season);
+      existing.delete(episode);
+      localStorage.setItem(key, JSON.stringify(Array.from(existing)));
+    } catch {}
+  },
+
+  markSeasonWatched: (detailPath: string, season: number, totalEpisodes: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `kixo_ep__${detailPath}__s${season}`;
+      const eps = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
+      localStorage.setItem(key, JSON.stringify(eps));
+    } catch {}
+  },
+
+  clearSeasonWatched: (detailPath: string, season: number) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = `kixo_ep__${detailPath}__s${season}`;
+      localStorage.removeItem(key);
+    } catch {}
+  },
 };

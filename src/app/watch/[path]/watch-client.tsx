@@ -19,7 +19,7 @@ import {
     Bookmark,
 } from "lucide-react";
 import { ItemDetails, StreamData } from "@/lib/api";
-import { localStore } from "@/lib/storage";
+import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
@@ -237,11 +237,55 @@ export default function WatchClient({
     const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(
         new Set(),
     );
+    const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
+
     useEffect(() => {
         setWatchedEpisodes(
             localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
         );
+        setWatchHistory(localStore.getHistory());
     }, [subject.detailPath, selectedSeason, activeEpisode]);
+
+    const handleEpisodeContextMenu = (e: React.MouseEvent, epNum: number) => {
+        e.preventDefault();
+        const isEpWatched = watchedEpisodes.has(epNum);
+        if (isEpWatched) {
+            localStore.markEpisodeUnwatched(subject.detailPath, selectedSeason, epNum);
+            // Clear progress from history too
+            const currentHistory = localStore.getHistory();
+            const updatedHistory = currentHistory.filter(
+                (h) => !(h.detailPath === subject.detailPath && h.season === selectedSeason && h.episode === epNum)
+            );
+            localStorage.setItem('kixo_history', JSON.stringify(updatedHistory));
+        } else {
+            localStore.markEpisodeWatched(subject.detailPath, selectedSeason, epNum);
+        }
+        // Sync states to update UI instantly
+        setWatchedEpisodes(localStore.getWatchedEpisodes(subject.detailPath, selectedSeason));
+        setWatchHistory(localStore.getHistory());
+    };
+
+    const handleMarkSeasonWatched = () => {
+        if (window.confirm(`Mark all ${totalEpisodes} episodes of Season ${selectedSeason} as watched?`)) {
+            localStore.markSeasonWatched(subject.detailPath, selectedSeason, totalEpisodes);
+            setWatchedEpisodes(localStore.getWatchedEpisodes(subject.detailPath, selectedSeason));
+        }
+    };
+
+    const handleClearSeasonWatched = () => {
+        if (window.confirm(`Reset watched progress for all episodes in Season ${selectedSeason}?`)) {
+            localStore.clearSeasonWatched(subject.detailPath, selectedSeason);
+            // Clear history items of this season to remove progress bars
+            const currentHistory = localStore.getHistory();
+            const updatedHistory = currentHistory.filter(
+                (h) => !(h.detailPath === subject.detailPath && h.season === selectedSeason)
+            );
+            localStorage.setItem('kixo_history', JSON.stringify(updatedHistory));
+            
+            setWatchedEpisodes(new Set());
+            setWatchHistory(localStore.getHistory());
+        }
+    };
 
     // Ref for the currently active episode button — used to auto-scroll it into view
     const activeEpRef = useRef<HTMLButtonElement | null>(null);
@@ -290,8 +334,9 @@ export default function WatchClient({
                                     ? handlePrevEpisode
                                     : undefined
                             }
+                            shouldPause={loadingEpisode !== null || loadingAudio !== null || isPageLoading}
                         />
-                        {isPageLoading && (
+                        {(isPageLoading || loadingEpisode !== null || loadingAudio !== null) && (
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-40 animate-fade-in">
                                 {/* Animated loading ring */}
                                 <div className="relative w-16 h-16 mb-4">
@@ -512,6 +557,24 @@ export default function WatchClient({
                                     )}
                             </div>
 
+                            <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-foreground/50 border-t border-glass-border/40 pt-2.5 gap-2">
+                                <button
+                                    onClick={handleMarkSeasonWatched}
+                                    className="hover:text-primary transition-colors flex items-center space-x-1 cursor-pointer bg-transparent border-none p-0"
+                                >
+                                    <span>Mark Season Watched</span>
+                                </button>
+                                <button
+                                    onClick={handleClearSeasonWatched}
+                                    className="hover:text-primary transition-colors flex items-center space-x-1 cursor-pointer bg-transparent border-none p-0"
+                                >
+                                    <span>Clear Season Progress</span>
+                                </button>
+                            </div>
+                            <p className="text-[8px] text-foreground/35 font-medium leading-tight mt-1">
+                                Tip: Right-click (or long-press) any episode to toggle watched status manually
+                            </p>
+
                             {/* Show a hint when browsing a different season than what's currently playing */}
                             {selectedSeason !== activeSeason && (
                                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/8 border border-primary/20 text-primary text-[10px] font-bold">
@@ -532,13 +595,20 @@ export default function WatchClient({
                                         const isActive =
                                             epNum === activeEpisode &&
                                             selectedSeason === activeSeason;
-                                        // Previously watched but not currently active
-                                        const isWatched =
-                                            watchedEpisodes.has(epNum) &&
-                                            !isActive;
-                                        const isFiller =
-                                            fillerEpisodes.has(epNum) &&
-                                            !isActive;
+                                        // Checked if watched (can be active too)
+                                        const isWatched = watchedEpisodes.has(epNum);
+                                        const isFiller = fillerEpisodes.has(epNum);
+
+                                        // Check for partial watch progress in history
+                                        const epHistory = watchHistory.find(
+                                            (h) =>
+                                                h.detailPath === subject.detailPath &&
+                                                h.season === selectedSeason &&
+                                                h.episode === epNum
+                                        );
+                                        const hasProgress = epHistory && epHistory.progress > 5 && epHistory.progress < 90;
+                                        const progressPercent = epHistory ? epHistory.progress : 0;
+
                                         return (
                                             <button
                                                 key={epNum}
@@ -550,18 +620,21 @@ export default function WatchClient({
                                                 onClick={() =>
                                                     handleEpisodeClick(epNum)
                                                 }
+                                                onContextMenu={(e) =>
+                                                    handleEpisodeContextMenu(e, epNum)
+                                                }
                                                 disabled={
                                                     loadingEpisode === epNum
                                                 }
-                                                className={`relative py-3 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                                                className={`relative py-3 rounded-xl text-xs font-black border transition-all cursor-pointer overflow-hidden ${
                                                     loadingEpisode === epNum
                                                         ? "bg-primary/50 text-white border-primary/30 animate-pulse scale-105"
                                                         : isActive
                                                           ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary-glow scale-105"
-                                                          : isFiller
-                                                            ? "bg-blue-500/18 text-blue-400 border-blue-500/50 hover:bg-blue-500/25 hover:text-blue-300 hover:border-blue-500/70 shadow-sm"
-                                                            : isWatched
-                                                              ? "bg-emerald-500/18 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/70 shadow-sm"
+                                                          : isWatched
+                                                            ? "bg-emerald-500/18 text-emerald-400 border-emerald-500/50 hover:bg-emerald-500/25 hover:text-emerald-300 hover:border-emerald-500/70 shadow-sm"
+                                                            : isFiller
+                                                              ? "bg-blue-500/18 text-blue-400 border-blue-500/50 hover:bg-blue-500/25 hover:text-blue-300 hover:border-blue-500/70 shadow-sm"
                                                               : "bg-glass-card hover:bg-primary/10 hover:border-primary/30 border-glass-border text-foreground/60 hover:text-foreground"
                                                 }`}
                                             >
@@ -574,14 +647,23 @@ export default function WatchClient({
                                                 {isWatched &&
                                                     loadingEpisode !==
                                                         epNum && (
-                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 z-10" />
                                                     )}
                                                 {/* Small dot indicator for filler episodes (only if not watched) */}
                                                 {!isWatched && isFiller &&
                                                     loadingEpisode !==
                                                         epNum && (
-                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400 z-10" />
                                                     )}
+                                                {/* Partial progress bar */}
+                                                {hasProgress && (
+                                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/15 overflow-hidden rounded-b-xl">
+                                                        <div
+                                                            className="h-full bg-primary"
+                                                            style={{ width: `${progressPercent}%` }}
+                                                        />
+                                                    </div>
+                                                )}
                                             </button>
                                         );
                                     },

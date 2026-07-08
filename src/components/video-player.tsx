@@ -44,6 +44,7 @@ interface VideoPlayerProps {
     onStreamRefresh?: (newStream: StreamData) => void;
     onNextEpisode?: () => void;
     onPrevEpisode?: () => void;
+    shouldPause?: boolean;
 }
 
 export default function VideoPlayer({
@@ -58,6 +59,7 @@ export default function VideoPlayer({
     onStreamRefresh,
     onNextEpisode,
     onPrevEpisode,
+    shouldPause,
 }: VideoPlayerProps) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -206,6 +208,14 @@ export default function VideoPlayer({
         setShowAudioMenu(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [streamData]);
+
+    // Pause player immediately on page navigation
+    useEffect(() => {
+        if (shouldPause && videoRef.current) {
+            videoRef.current.pause();
+            setIsPlaying(false);
+        }
+    }, [shouldPause]);
 
     // Set referrerPolicy directly on the video DOM element to bypass TypeScript's type check limit
     useEffect(() => {
