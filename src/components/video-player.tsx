@@ -638,19 +638,8 @@ export default function VideoPlayer({
         }
 
         e.stopPropagation();
-
-        // If a double-click timer is running, cancel it and let handleScreenDoubleClick handle it
-        if (clickTimeoutRef.current) {
-            clearTimeout(clickTimeoutRef.current);
-            clickTimeoutRef.current = null;
-            return;
-        }
-
-        // Set a timeout to delay the single click (play/pause) action
-        clickTimeoutRef.current = setTimeout(() => {
-            togglePlay();
-            clickTimeoutRef.current = null;
-        }, 220); // 220ms is fast enough to feel responsive, but slow enough to detect a double click
+        e.preventDefault();
+        togglePlay();
     };
 
     // Handle double clicks on the screen to toggle fullscreen or seek
@@ -668,11 +657,7 @@ export default function VideoPlayer({
         }
 
         e.stopPropagation();
-
-        if (clickTimeoutRef.current) {
-            clearTimeout(clickTimeoutRef.current);
-            clickTimeoutRef.current = null;
-        }
+        e.preventDefault();
 
         const rect = target.getBoundingClientRect();
         const x = e.clientX - rect.left;
@@ -865,6 +850,87 @@ export default function VideoPlayer({
             }
         }
     };
+
+    // Handle keyboard shortcuts (Space to Play/Pause, Arrows to Seek/Volume, M to Mute, F to Fullscreen)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const activeEl = document.activeElement;
+            if (
+                activeEl &&
+                (activeEl.tagName === "INPUT" ||
+                    activeEl.tagName === "TEXTAREA" ||
+                    activeEl.getAttribute("contenteditable") === "true")
+            ) {
+                return;
+            }
+
+            if (!videoRef.current) return;
+
+            switch (e.key) {
+                case " ":
+                case "Spacebar":
+                    e.preventDefault();
+                    togglePlay();
+                    break;
+                case "ArrowLeft":
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                    setCurrentTime(videoRef.current.currentTime);
+                    triggerControlsVisibility();
+                    break;
+                case "ArrowRight":
+                    e.preventDefault();
+                    videoRef.current.currentTime = Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + 10);
+                    setCurrentTime(videoRef.current.currentTime);
+                    triggerControlsVisibility();
+                    break;
+                case "ArrowUp":
+                    e.preventDefault();
+                    const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
+                    videoRef.current.volume = newVolUp;
+                    setVolume(newVolUp);
+                    if (newVolUp > 0) {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                    }
+                    triggerControlsVisibility();
+                    break;
+                case "ArrowDown":
+                    e.preventDefault();
+                    const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
+                    videoRef.current.volume = newVolDown;
+                    setVolume(newVolDown);
+                    if (newVolDown === 0) {
+                        videoRef.current.muted = true;
+                        setIsMuted(true);
+                    } else {
+                        videoRef.current.muted = false;
+                        setIsMuted(false);
+                    }
+                    triggerControlsVisibility();
+                    break;
+                case "m":
+                case "M":
+                    e.preventDefault();
+                    toggleMute();
+                    triggerControlsVisibility();
+                    break;
+                case "f":
+                case "F":
+                    e.preventDefault();
+                    toggleFullscreen();
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPlaying, isFullscreen, volume, isMuted]);
 
     return (
         <div
@@ -1237,38 +1303,40 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showSubtitleMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Subtitles
                                                 </p>
-                                                <button
-                                                    onClick={() => handleSubtitleChange(null)}
-                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        !activeCaption
-                                                            ? "text-primary bg-primary/10"
-                                                            : "text-white/80"
-                                                    }`}
-                                                >
-                                                    Off
-                                                </button>
-                                                {captions.map((caption) => (
+                                                <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                                                     <button
-                                                        key={caption.id || caption.url}
-                                                        onClick={() => handleSubtitleChange(caption)}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            activeCaption?.id === caption.id
+                                                        onClick={() => handleSubtitleChange(null)}
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                            !activeCaption
                                                                 ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
                                                         }`}
                                                     >
-                                                        {caption.lanName}
+                                                        Off
                                                     </button>
-                                                ))}
-                                                <div className="h-px bg-zinc-800 my-1" />
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                                    {captions.map((caption) => (
+                                                        <button
+                                                            key={caption.id || caption.url}
+                                                            onClick={() => handleSubtitleChange(caption)}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                activeCaption?.id === caption.id
+                                                                    ? "text-primary bg-primary/10"
+                                                                    : "text-white/80"
+                                                            }`}
+                                                        >
+                                                            {caption.lanName}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Size
                                                 </p>
-                                                <div className="flex items-center justify-between px-1 py-1">
+                                                <div className="flex items-center justify-between px-1 py-1 shrink-0">
                                                     <button
                                                         onClick={() => setSubtitleSize("16px")}
                                                         className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
@@ -1329,36 +1397,38 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showAudioMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Audio Track
                                                 </p>
-                                                {dubs.map((dub, idx) => {
-                                                    const isCurrent =
-                                                        detailPath ===
-                                                        dub.detailPath;
-                                                    return (
-                                                        <button
-                                                            key={idx}
-                                                            onClick={() => {
-                                                                setShowAudioMenu(
-                                                                    false,
-                                                                );
-                                                                window.location.href = `/watch/${dub.detailPath}`;
-                                                            }}
-                                                            className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                isCurrent
-                                                                    ? "text-primary bg-primary/10"
-                                                                    : "text-white/80"
-                                                            }`}
-                                                        >
-                                                            {dub.lanName}{" "}
-                                                            {dub.original
-                                                                ? "(Original)"
-                                                                : ""}
-                                                        </button>
-                                                    );
-                                                })}
+                                                <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                    {dubs.map((dub, idx) => {
+                                                        const isCurrent =
+                                                            detailPath ===
+                                                            dub.detailPath;
+                                                        return (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() => {
+                                                                    setShowAudioMenu(
+                                                                        false,
+                                                                    );
+                                                                    window.location.href = `/watch/${dub.detailPath}`;
+                                                                }}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                    isCurrent
+                                                                        ? "text-primary bg-primary/10"
+                                                                        : "text-white/80"
+                                                                }`}
+                                                            >
+                                                                {dub.lanName}{" "}
+                                                                {dub.original
+                                                                    ? "(Original)"
+                                                                    : ""}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1392,46 +1462,48 @@ export default function VideoPlayer({
  
                                     {showQualityMenu &&
                                         sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Quality
                                                 </p>
-                                                <button
-                                                    onClick={() => {
-                                                        setIsAutoQuality(true);
-                                                        setShowQualityMenu(false);
-                                                        const defaultQuality =
-                                                            sortedDownloads.find((d) => d.resolution === 720) ||
-                                                            sortedDownloads.find((d) => d.resolution === 1080) ||
-                                                            sortedDownloads[0];
-                                                        if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
-                                                            handleQualityChange(defaultQuality, true);
-                                                        }
-                                                    }}
-                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        isAutoQuality
-                                                            ? "text-primary bg-primary/10"
-                                                            : "text-white/80"
-                                                    }`}
-                                                >
-                                                    Auto
-                                                </button>
-                                                {sortedDownloads.map((link) => (
+                                                <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                                                     <button
-                                                        key={link.id}
                                                         onClick={() => {
-                                                            handleQualityChange(link);
+                                                            setIsAutoQuality(true);
                                                             setShowQualityMenu(false);
+                                                            const defaultQuality =
+                                                                sortedDownloads.find((d) => d.resolution === 720) ||
+                                                                sortedDownloads.find((d) => d.resolution === 1080) ||
+                                                                sortedDownloads[0];
+                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
+                                                                handleQualityChange(defaultQuality, true);
+                                                            }
                                                         }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            !isAutoQuality && activeDownload?.id === link.id
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                            isAutoQuality
                                                                 ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
                                                         }`}
                                                     >
-                                                        {link.resolution}p
+                                                        Auto
                                                     </button>
-                                                ))}
+                                                    {sortedDownloads.map((link) => (
+                                                        <button
+                                                            key={link.id}
+                                                            onClick={() => {
+                                                                handleQualityChange(link);
+                                                                setShowQualityMenu(false);
+                                                            }}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                !isAutoQuality && activeDownload?.id === link.id
+                                                                    ? "text-primary bg-primary/10"
+                                                                    : "text-white/80"
+                                                            }`}
+                                                        >
+                                                            {link.resolution}p
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
                                 </div>
