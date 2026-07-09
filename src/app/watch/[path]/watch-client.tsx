@@ -282,6 +282,25 @@ export default function WatchClient({
         setWatchHistory(localStore.getHistory());
     };
 
+    const toggleActiveEpisodeWatched = () => {
+        const isEpWatched = watchedEpisodes.has(activeEpisode);
+        if (isEpWatched) {
+            localStore.markEpisodeUnwatched(subject.detailPath, activeSeason, activeEpisode);
+            
+            // Clear progress from history too
+            const currentHistory = localStore.getHistory();
+            const updatedHistory = currentHistory.filter(
+                (h) => !(h.detailPath === subject.detailPath && h.season === activeSeason && h.episode === activeEpisode)
+            );
+            localStorage.setItem('kixo_history', JSON.stringify(updatedHistory));
+        } else {
+            localStore.markEpisodeWatched(subject.detailPath, activeSeason, activeEpisode);
+        }
+        // Sync states to update UI instantly
+        setWatchedEpisodes(localStore.getWatchedEpisodes(subject.detailPath, selectedSeason));
+        setWatchHistory(localStore.getHistory());
+    };
+
     const handleMarkSeasonWatched = () => {
         if (window.confirm(`Mark all ${totalEpisodes} episodes of Season ${selectedSeason} as watched?`)) {
             localStore.markSeasonWatched(subject.detailPath, selectedSeason, totalEpisodes);
@@ -595,11 +614,19 @@ export default function WatchClient({
                                 {/* Action Buttons */}
                                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-foreground/50 border-t border-glass-border/40 pt-3">
                                     <button
-                                        onClick={handleMarkSeasonWatched}
-                                        className="flex-1 bg-white/[0.02] border border-white/5 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400 py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black"
+                                        onClick={toggleActiveEpisodeWatched}
+                                        className={`flex-1 border py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black ${
+                                            watchedEpisodes.has(activeEpisode)
+                                                ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50"
+                                                : "bg-white/[0.02] border-white/5 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+                                        }`}
                                     >
                                         <Check className="w-2.5 h-2.5" />
-                                        <span>Mark Watched</span>
+                                        <span>
+                                            {watchedEpisodes.has(activeEpisode)
+                                                ? "Unmark Episode"
+                                                : "Mark Episode Watched"}
+                                        </span>
                                     </button>
                                     <button
                                         onClick={handleClearSeasonWatched}
@@ -674,9 +701,9 @@ export default function WatchClient({
                                                     )}
                                                     {/* Partial progress bar */}
                                                     {hasProgress && (
-                                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 overflow-hidden">
+                                                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5 overflow-hidden">
                                                             <div
-                                                                className="h-full bg-primary"
+                                                                className="h-full bg-gradient-to-r from-blue-500 to-sky-400"
                                                                 style={{ width: `${progressPercent}%` }}
                                                             />
                                                         </div>

@@ -936,9 +936,9 @@ export default function VideoPlayer({
             }
         };
 
-        window.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("keydown", handleKeyDown, { capture: true });
         return () => {
-            window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("keydown", handleKeyDown, { capture: true });
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPlaying, isFullscreen, volume, isMuted]);
