@@ -89,7 +89,7 @@ export default function VideoPlayer({
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
-    const [bufferedEnd, setBufferedEnd] = useState(0);
+    const [bufferedPercent, setBufferedPercent] = useState(0);
     const [volume, setVolume] = useState(1);
     const [isMuted, setIsMuted] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
@@ -297,7 +297,9 @@ export default function VideoPlayer({
 
     // Setup continue watching resume timestamp on load
     const handleLoadedMetadata = () => {
-        setDuration(videoRef.current?.duration || 0);
+        const videoDur = videoRef.current?.duration || 0;
+        // Only set duration if it's a finite number (not Infinity from live streams)
+        setDuration(isFinite(videoDur) ? videoDur : 0);
         setIsLoading(false);
         setPlayerError(false);
         setAutoRetryLabel("");
@@ -459,41 +461,43 @@ export default function VideoPlayer({
     const handleTimeUpdate = () => {
         if (!videoRef.current) return;
         const current = videoRef.current.currentTime;
+        const videoDuration = videoRef.current.duration;
         setCurrentTime(current);
 
-        // Update buffered range
-        const buffered = videoRef.current.buffered;
-        if (buffered.length > 0) {
-            // Find the buffer range that contains the current time
-            for (let i = 0; i < buffered.length; i++) {
-                if (
-                    buffered.start(i) <= current &&
-                    current <= buffered.end(i)
-                ) {
-                    setBufferedEnd(buffered.end(i));
-                    break;
-                }
+        // Update buffered percentage
+        if (
+            videoRef.current.buffered.length > 0 &&
+            videoDuration > 0 &&
+            isFinite(videoDuration)
+        ) {
+            const buf = videoRef.current.buffered;
+            let maxEnd = 0;
+            for (let i = 0; i < buf.length; i++) {
+                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
             }
-            // If no range contains current time, use the last range's end
-            if (buffered.length > 0) {
-                const lastEnd = buffered.end(buffered.length - 1);
-                if (lastEnd > bufferedEnd) {
-                    setBufferedEnd(lastEnd);
-                }
-            }
+            setBufferedPercent((maxEnd / videoDuration) * 100);
         }
 
-        // Save history progress every 3 seconds to avoid spamming
-        if (duration > 0 && Math.floor(current) % 3 === 0) {
+        // Use the video element's duration directly (more reliable than state)
+        const effectiveDuration =
+            videoDuration && isFinite(videoDuration) ? videoDuration : duration;
+
+        // Save history progress every ~5 seconds (throttled by integer check)
+        if (
+            effectiveDuration > 0 &&
+            current > 0 &&
+            Math.floor(current) % 5 === 0 &&
+            Math.floor(current) !== Math.floor(currentTime)
+        ) {
             const progressPercent = Math.min(
-                Math.round((current / duration) * 100),
+                Math.round((current / effectiveDuration) * 100),
                 100,
             );
             localStore.saveHistoryItem({
                 detailPath: seriesDetailPath || detailPath,
                 title,
                 coverUrl,
-                duration,
+                duration: effectiveDuration,
                 currentTime: current,
                 progress: progressPercent,
                 isSeries,
@@ -1174,15 +1178,31 @@ export default function VideoPlayer({
                     }}
                     onPause={() => setIsPlaying(false)}
                     onLoadedMetadata={handleLoadedMetadata}
+                    onDurationChange={() => {
+                        if (
+                            videoRef.current &&
+                            videoRef.current.duration > 0 &&
+                            isFinite(videoRef.current.duration)
+                        ) {
+                            setDuration(videoRef.current.duration);
+                        }
+                    }}
                     onTimeUpdate={handleTimeUpdate}
                     onProgress={() => {
                         if (
                             videoRef.current &&
-                            videoRef.current.buffered.length > 0
+                            videoRef.current.buffered.length > 0 &&
+                            videoRef.current.duration > 0 &&
+                            isFinite(videoRef.current.duration)
                         ) {
-                            const buffered = videoRef.current.buffered;
-                            const lastEnd = buffered.end(buffered.length - 1);
-                            setBufferedEnd(lastEnd);
+                            const buf = videoRef.current.buffered;
+                            let maxEnd = 0;
+                            for (let i = 0; i < buf.length; i++) {
+                                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
+                            }
+                            setBufferedPercent(
+                                (maxEnd / videoRef.current.duration) * 100,
+                            );
                         }
                     }}
                     onWaiting={() => setIsLoading(true)}
@@ -1503,12 +1523,9 @@ export default function VideoPlayer({
                                 <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
                                     {/* Buffered range (light grey) */}
                                     <div
-                                        className="absolute top-0 left-0 h-full bg-white/25 rounded-full"
+                                        className="absolute top-0 left-0 h-full bg-white/40 rounded-full"
                                         style={{
-                                            width:
-                                                duration > 0
-                                                    ? `${(bufferedEnd / duration) * 100}%`
-                                                    : "0%",
+                                            width: `${bufferedPercent}%`,
                                         }}
                                     />
                                     {/* Played range (primary red) */}
