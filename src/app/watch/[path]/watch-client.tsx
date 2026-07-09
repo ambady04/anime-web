@@ -543,7 +543,7 @@ export default function WatchClient({
                             {/* Info toggle on mobile */}
                             <button
                                 onClick={() => setShowInfo((v) => !v)}
-                                className="xl:hidden flex-shrink-0 p-2 rounded-xl bg-glass-card border border-glass-border text-foreground/60 hover:text-primary transition-colors"
+                                className="xl:hidden shrink-0 p-2 rounded-xl bg-glass-card border border-glass-border text-foreground/60 hover:text-primary transition-colors"
                             >
                                 <Info className="w-4 h-4" />
                             </button>
@@ -682,7 +682,7 @@ export default function WatchClient({
                 </div>
 
                 {/* ══ RIGHT SIDEBAR — Episodes + Audio ══ */}
-                <div className="w-full xl:w-[340px] flex-shrink-0 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto no-scrollbar">
+                <div className="w-full xl:w-[340px] shrink-0 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto no-scrollbar">
                     {/* Episodes Panel (series only) */}
                     {isSeries &&
                         totalEpisodes > 0 &&
@@ -738,7 +738,7 @@ export default function WatchClient({
                                         </div>
                                         <div className="w-full h-1.5 bg-foreground/5 rounded-full overflow-hidden border border-glass-border">
                                             <div
-                                                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+                                                className="h-full bg-linear-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
                                                 style={{
                                                     width: `${seasonProgressPercent}%`,
                                                 }}
@@ -779,7 +779,7 @@ export default function WatchClient({
                                     {/* Show a hint when browsing a different season than what's currently playing */}
                                     {selectedSeason !== activeSeason && (
                                         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/8 border border-primary/20 text-primary text-[10px] font-bold">
-                                            <Play className="w-3 h-3 fill-primary flex-shrink-0" />
+                                            <Play className="w-3 h-3 fill-primary shrink-0" />
                                             <span>
                                                 Now playing: S{activeSeason} E
                                                 {activeEpisode} — click below to
@@ -844,7 +844,7 @@ export default function WatchClient({
                                                         loadingEpisode === epNum
                                                             ? "bg-primary/50 text-white border-primary/30 animate-pulse scale-105"
                                                             : isActive
-                                                              ? "bg-gradient-to-br from-primary to-primary/80 text-white border-primary/20 shadow-md shadow-primary-glow/10 scale-105 font-bold"
+                                                              ? "bg-linear-to-br from-primary to-primary/80 text-white border-primary/20 shadow-md shadow-primary-glow/10 scale-105 font-bold"
                                                               : isWatched
                                                                 ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/25 hover:bg-emerald-500/20 hover:text-emerald-700 hover:border-emerald-500/40"
                                                                 : isFiller
@@ -881,7 +881,7 @@ export default function WatchClient({
                                                     {hasProgress && (
                                                         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-foreground/10 overflow-hidden">
                                                             <div
-                                                                className="h-full bg-gradient-to-r from-blue-500 to-sky-400"
+                                                                className="h-full bg-linear-to-r from-blue-500 to-sky-400"
                                                                 style={{
                                                                     width: `${progressPercent}%`,
                                                                 }}

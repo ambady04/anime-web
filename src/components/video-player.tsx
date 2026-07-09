@@ -89,6 +89,7 @@ export default function VideoPlayer({
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [bufferedEnd, setBufferedEnd] = useState(0);
     const [volume, setVolume] = useState(1);
     const [isMuted, setIsMuted] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
@@ -459,6 +460,28 @@ export default function VideoPlayer({
         if (!videoRef.current) return;
         const current = videoRef.current.currentTime;
         setCurrentTime(current);
+
+        // Update buffered range
+        const buffered = videoRef.current.buffered;
+        if (buffered.length > 0) {
+            // Find the buffer range that contains the current time
+            for (let i = 0; i < buffered.length; i++) {
+                if (
+                    buffered.start(i) <= current &&
+                    current <= buffered.end(i)
+                ) {
+                    setBufferedEnd(buffered.end(i));
+                    break;
+                }
+            }
+            // If no range contains current time, use the last range's end
+            if (buffered.length > 0) {
+                const lastEnd = buffered.end(buffered.length - 1);
+                if (lastEnd > bufferedEnd) {
+                    setBufferedEnd(lastEnd);
+                }
+            }
+        }
 
         // Save history progress every 3 seconds to avoid spamming
         if (duration > 0 && Math.floor(current) % 3 === 0) {
@@ -1152,6 +1175,16 @@ export default function VideoPlayer({
                     onPause={() => setIsPlaying(false)}
                     onLoadedMetadata={handleLoadedMetadata}
                     onTimeUpdate={handleTimeUpdate}
+                    onProgress={() => {
+                        if (
+                            videoRef.current &&
+                            videoRef.current.buffered.length > 0
+                        ) {
+                            const buffered = videoRef.current.buffered;
+                            const lastEnd = buffered.end(buffered.length - 1);
+                            setBufferedEnd(lastEnd);
+                        }
+                    }}
                     onWaiting={() => setIsLoading(true)}
                     onPlaying={() => {
                         setIsLoading(false);
@@ -1344,14 +1377,51 @@ export default function VideoPlayer({
                                 {formatTime(currentTime)}
                             </span>
 
-                            <input
-                                type="range"
-                                min="0"
-                                max={duration || 100}
-                                value={currentTime}
-                                onChange={handleScrubberChange}
-                                className="grow accent-primary cursor-pointer h-1 hover:h-1.5 transition-all bg-white/20 rounded-lg outline-none"
-                            />
+                            {/* Custom progress bar with buffer indicator */}
+                            <div className="grow relative group/scrub">
+                                {/* Clickable/draggable range input (invisible, on top) */}
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={duration || 100}
+                                    value={currentTime}
+                                    onChange={handleScrubberChange}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                />
+                                {/* Visual track */}
+                                <div className="relative w-full h-1 group-hover/scrub:h-1.5 transition-all rounded-full bg-white/20 overflow-hidden">
+                                    {/* Buffered range (light grey) */}
+                                    <div
+                                        className="absolute top-0 left-0 h-full bg-white/30 rounded-full transition-all duration-300"
+                                        style={{
+                                            width:
+                                                duration > 0
+                                                    ? `${(bufferedEnd / duration) * 100}%`
+                                                    : "0%",
+                                        }}
+                                    />
+                                    {/* Played range (primary red) */}
+                                    <div
+                                        className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]"
+                                        style={{
+                                            width:
+                                                duration > 0
+                                                    ? `${(currentTime / duration) * 100}%`
+                                                    : "0%",
+                                        }}
+                                    />
+                                </div>
+                                {/* Scrub thumb indicator */}
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg shadow-primary-glow/30 opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
+                                    style={{
+                                        left:
+                                            duration > 0
+                                                ? `calc(${(currentTime / duration) * 100}% - 6px)`
+                                                : "0px",
+                                    }}
+                                />
+                            </div>
 
                             <span
                                 onClick={() =>
