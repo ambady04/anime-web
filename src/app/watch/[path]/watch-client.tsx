@@ -467,6 +467,7 @@ export default function WatchClient({
                     {/* Video Player */}
                     <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-card border border-glass-border relative bg-black">
                         <VideoPlayer
+                            key={`${path}-s${activeSeason}-e${activeEpisode}`}
                             streamData={stream}
                             detailPath={path}
                             seriesDetailPath={subject.detailPath}
