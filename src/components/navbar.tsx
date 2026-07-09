@@ -3,21 +3,15 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-    Search,
-    History,
-    Heart,
-    Home,
-    User,
-    Sun,
-    Moon,
-    X,
-    ShieldAlert,
-    Trash2,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Search, History, Heart, Home, User, Sun, Moon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import ProfileModal from "./profile-modal";
+import dynamic from "next/dynamic";
+
+// Lazy load the heavy profile modal (includes firebase imports)
+const ProfileModal = dynamic(() => import("./profile-modal"), {
+    ssr: false,
+    loading: () => null,
+});
 
 export default function Navbar() {
     const { user } = useAuth();
@@ -26,25 +20,6 @@ export default function Navbar() {
     const [searchQuery, setSearchQuery] = useState("");
     const [theme, setTheme] = useState<"dark" | "light">("dark");
     const [showProfileModal, setShowProfileModal] = useState(false);
-
-    const clearAllCookiesAndData = () => {
-        // Clear localStorage
-        localStorage.clear();
-        // Clear sessionStorage
-        sessionStorage.clear();
-        // Clear cookies
-        if (typeof document !== "undefined") {
-            const cookies = document.cookie.split(";");
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i];
-                const eqPos = cookie.indexOf("=");
-                const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-                document.cookie = name.trim() + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-            }
-        }
-        // Reload page
-        window.location.reload();
-    };
 
     // Load initial theme from DOM/localStorage
     useEffect(() => {
@@ -140,15 +115,7 @@ export default function Navbar() {
                                 }`}
                             >
                                 {isActive && (
-                                    <motion.span
-                                        layoutId="activeDesktopTab"
-                                        className="absolute inset-0 bg-primary/10 border border-primary/20 rounded-xl -z-10 shadow-[0_0_12px_rgba(227,28,37,0.15)]"
-                                        transition={{
-                                            type: "spring",
-                                            stiffness: 380,
-                                            damping: 30,
-                                        }}
-                                    />
+                                    <span className="absolute inset-0 bg-primary/10 border border-primary/20 rounded-xl -z-10 shadow-[0_0_12px_rgba(227,28,37,0.15)] transition-all duration-300" />
                                 )}
                                 <Icon className="w-3.5 h-3.5" />
                                 <span>{link.label}</span>

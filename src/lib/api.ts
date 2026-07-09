@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
@@ -150,13 +152,12 @@ export interface StreamData {
     stream_domain: string;
 }
 
-// Client API functions
-
+// Core fetch function with proper caching
 async function fetchFromApi<T>(
     endpoint: string,
     params: Record<string, string | number | boolean> = {},
+    cacheOptions?: RequestInit["next"],
 ): Promise<T> {
-    // Build query string from params (filter out empty/undefined values)
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
         if (val !== undefined && val !== null && val !== "") {
@@ -167,13 +168,12 @@ async function fetchFromApi<T>(
     const queryString = searchParams.toString();
     const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-    // On the server, we need an absolute URL. On the client, relative works.
     const fetchUrl = isBrowser
         ? fullEndpoint
         : `${API_BASE_URL}${fullEndpoint}`;
 
     const response = await fetch(fetchUrl, {
-        next: { revalidate: 3600 }, // Cache response for 1 hour
+        next: cacheOptions ?? { revalidate: 3600 },
     });
 
     if (!response.ok) {
@@ -185,14 +185,32 @@ async function fetchFromApi<T>(
     return response.json() as Promise<T>;
 }
 
+// Server-side request deduplication using React cache()
+// This prevents duplicate API calls within the same render pass
+const getCachedHome = cache(async (adult: boolean): Promise<HomepageData> => {
+    return fetchFromApi<HomepageData>("/api/home", { adult });
+});
+
+const getCachedDetails = cache(
+    async (path: string, adult: boolean): Promise<ItemDetails> => {
+        return fetchFromApi<ItemDetails>("/api/details", { path, adult });
+    },
+);
+
 export const movieApi = {
-    // Get homepage data
+    // Get homepage data - deduplicated per render
     getHome: async (adult = false): Promise<HomepageData> => {
+        if (!isBrowser) {
+            return getCachedHome(adult);
+        }
         return fetchFromApi<HomepageData>("/api/home", { adult });
     },
 
-    // Get details for a movie/series
+    // Get details - deduplicated per render
     getDetails: async (path: string, adult = false): Promise<ItemDetails> => {
+        if (!isBrowser) {
+            return getCachedDetails(path, adult);
+        }
         return fetchFromApi<ItemDetails>("/api/details", { path, adult });
     },
 

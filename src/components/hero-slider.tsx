@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import Link from "next/link";
 import {
     Play,
@@ -10,7 +10,6 @@ import {
     Calendar,
     Film,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { BannerItem } from "@/lib/api";
 
 interface HeroSliderProps {
@@ -58,41 +57,29 @@ export default function HeroSlider({ banners }: HeroSliderProps) {
 
     return (
         <section className="relative w-full h-[70vh] sm:h-[80vh] overflow-hidden bg-background flex items-center transition-colors duration-300">
-            {/* Background Image Carousel with Parallax */}
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={current}
-                    initial={{ opacity: 0, scale: 1.04 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.8 }}
-                    className="absolute inset-0 w-full h-full"
-                    style={{
-                        transform:
-                            "translateY(calc(var(--scroll-y, 0) * 0.35px))",
-                        willChange: "transform",
-                    }}
-                >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={imageUrl}
-                        alt={title}
-                        className="w-full h-full object-cover select-none pointer-events-none"
-                    />
-                    {/* Gradients overlays to blend banner image with theme backgrounds */}
-                    <div className="absolute inset-0 bg-linear-to-r from-background via-background/60 to-transparent z-10 transition-colors duration-300" />
-                    <div className="absolute inset-0 bg-linear-to-t from-background via-background/25 to-transparent z-10 transition-colors duration-300" />
-                </motion.div>
-            </AnimatePresence>
+            {/* Background Image Carousel with CSS transitions */}
+            <div
+                key={current}
+                className="absolute inset-0 w-full h-full animate-fade-in"
+                style={{
+                    transform: "translateY(calc(var(--scroll-y, 0) * 0.35px))",
+                    willChange: "transform",
+                }}
+            >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={imageUrl}
+                    alt={title}
+                    className="w-full h-full object-cover select-none pointer-events-none"
+                />
+                {/* Gradients overlays to blend banner image with theme backgrounds */}
+                <div className="absolute inset-0 bg-linear-to-r from-background via-background/60 to-transparent z-10 transition-colors duration-300" />
+                <div className="absolute inset-0 bg-linear-to-t from-background via-background/25 to-transparent z-10 transition-colors duration-300" />
+            </div>
 
             {/* Slide details container */}
             <div className="max-w-380 mx-auto px-4 sm:px-6 lg:px-8 w-full relative z-20 flex flex-col justify-end h-full pb-16 sm:pb-20">
-                <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.15 }}
-                    className="max-w-xl text-left p-6 sm:p-8 rounded-3xl glass-panel border border-glass-border shadow-card relative backdrop-blur-xl"
-                >
+                <div className="max-w-xl text-left p-6 sm:p-8 rounded-3xl glass-panel border border-glass-border shadow-card relative backdrop-blur-xl animate-slide-up">
                     {/* Language/Quality Corner badge */}
                     {subject?.corner && (
                         <div className="inline-flex bg-primary text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider mb-4 border border-white/10 shadow-md">
@@ -148,7 +135,7 @@ export default function HeroSlider({ banners }: HeroSliderProps) {
                             <span>Watch Now</span>
                         </Link>
                     </div>
-                </motion.div>
+                </div>
             </div>
 
             {/* Manual Slide navigation arrows */}

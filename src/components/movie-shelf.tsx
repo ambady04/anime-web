@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, memo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import MovieCard from "./movie-card";
 import { Subject } from "@/lib/api";
@@ -10,7 +10,7 @@ interface MovieShelfProps {
     subjects: Subject[];
 }
 
-export default function MovieShelf({ title, subjects }: MovieShelfProps) {
+function MovieShelf({ title, subjects }: MovieShelfProps) {
     const rowRef = useRef<HTMLDivElement>(null);
     const [showLeftArrow, setShowLeftArrow] = useState(false);
     const [showRightArrow, setShowRightArrow] = useState(true);
@@ -107,3 +107,5 @@ export default function MovieShelf({ title, subjects }: MovieShelfProps) {
         </div>
     );
 }
+
+export default memo(MovieShelf);

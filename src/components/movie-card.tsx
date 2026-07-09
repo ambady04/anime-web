@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import Link from "next/link";
 import { Star, Play, Tv, Film } from "lucide-react";
 import { Subject } from "@/lib/api";
@@ -12,7 +12,7 @@ interface MovieCardProps {
     bookmarkedEpisode?: number;
 }
 
-export default function MovieCard({
+function MovieCard({
     subject,
     bookmarkedSeason: propBookmarkedSeason,
     bookmarkedEpisode: propBookmarkedEpisode,
@@ -22,8 +22,12 @@ export default function MovieCard({
 
     const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
 
-    const [bookmarkedSeason, setBookmarkedSeason] = useState<number | undefined>(propBookmarkedSeason);
-    const [bookmarkedEpisode, setBookmarkedEpisode] = useState<number | undefined>(propBookmarkedEpisode);
+    const [bookmarkedSeason, setBookmarkedSeason] = useState<
+        number | undefined
+    >(propBookmarkedSeason);
+    const [bookmarkedEpisode, setBookmarkedEpisode] = useState<
+        number | undefined
+    >(propBookmarkedEpisode);
 
     useEffect(() => {
         if (propBookmarkedSeason !== undefined) {
@@ -32,18 +36,28 @@ export default function MovieCard({
         if (propBookmarkedEpisode !== undefined) {
             setBookmarkedEpisode(propBookmarkedEpisode);
         }
-        if (isSeries && propBookmarkedSeason === undefined && propBookmarkedEpisode === undefined) {
+        if (
+            isSeries &&
+            propBookmarkedSeason === undefined &&
+            propBookmarkedEpisode === undefined
+        ) {
             const item = localStore.getWatchlistItem(subject.detailPath);
             setBookmarkedSeason(item?.bookmarkedSeason);
             setBookmarkedEpisode(item?.bookmarkedEpisode);
         }
-    }, [isSeries, subject.detailPath, propBookmarkedSeason, propBookmarkedEpisode]);
+    }, [
+        isSeries,
+        subject.detailPath,
+        propBookmarkedSeason,
+        propBookmarkedEpisode,
+    ]);
 
     // Decide the layout link path.
     // The path parameter is the detailPath, e.g., "from-hindi-Icj9nKQHUt2"
-    const watchLink = bookmarkedSeason && bookmarkedEpisode
-        ? `/watch/${subject.detailPath}?season=${bookmarkedSeason}&episode=${bookmarkedEpisode}`
-        : `/watch/${subject.detailPath}`;
+    const watchLink =
+        bookmarkedSeason && bookmarkedEpisode
+            ? `/watch/${subject.detailPath}?season=${bookmarkedSeason}&episode=${bookmarkedEpisode}`
+            : `/watch/${subject.detailPath}`;
 
     return (
         <Link
@@ -122,3 +136,5 @@ export default function MovieCard({
         </Link>
     );
 }
+
+export default memo(MovieCard);

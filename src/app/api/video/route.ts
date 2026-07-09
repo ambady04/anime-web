@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-// Edge runtime so we can stream large video files without Vercel's 4.5MB serverless response size limit.
+// Edge runtime for low-latency responses
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ const REFERER_POOL = [
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const targetUrl = searchParams.get("url");
+    const mode = searchParams.get("mode"); // "probe" = find working URL, "stream" = proxy bytes
 
     if (!targetUrl) {
         return new Response("Missing url parameter", { status: 400 });
@@ -29,10 +30,98 @@ export async function GET(req: NextRequest) {
         ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
         : REFERER_POOL;
 
+    // === PROBE MODE (default) ===
+    // Instead of streaming gigabytes through Vercel, we:
+    // 1. Send a HEAD/Range request to find a working referer
+    // 2. Return the working referer + CDN URL to the client
+    // 3. Client uses this info to fetch directly from CDN via <video> tag
+    //
+    // This reduces Origin Transfer from ~16GB to nearly zero for video data.
+    if (mode !== "stream") {
+        for (const referer of referersToTry) {
+            const upstreamHeaders: Record<string, string> = {
+                Referer: referer,
+                Origin: new URL(referer).origin,
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                Accept: "*/*",
+                "Accept-Encoding": "identity",
+                Range: "bytes=0-1", // Minimal probe request
+            };
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8_000);
+
+            try {
+                const upstream = await fetch(targetUrl, {
+                    headers: upstreamHeaders,
+                    signal: controller.signal,
+                });
+
+                clearTimeout(timeout);
+
+                if ([403, 404, 410].includes(upstream.status)) {
+                    continue;
+                }
+                if (upstream.status >= 500) {
+                    continue;
+                }
+
+                // Success! Return the working referer info to client
+                const contentLength = upstream.headers.get("content-length");
+                const contentType = upstream.headers.get("content-type");
+                const acceptRanges = upstream.headers.get("accept-ranges");
+
+                return new Response(
+                    JSON.stringify({
+                        url: targetUrl,
+                        referer: referer,
+                        origin: new URL(referer).origin,
+                        contentType: contentType || "video/mp4",
+                        contentLength: contentLength,
+                        acceptRanges: acceptRanges || "bytes",
+                        mode: "direct", // Tell client to fetch directly
+                    }),
+                    {
+                        status: 200,
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Origin": "*",
+                            "Cache-Control":
+                                "public, max-age=1800, s-maxage=1800",
+                        },
+                    },
+                );
+            } catch {
+                clearTimeout(timeout);
+                continue;
+            }
+        }
+
+        // All probes failed — fall back to stream mode
+        // (Client will retry with mode=stream)
+        return new Response(
+            JSON.stringify({
+                mode: "stream",
+                message: "Direct access unavailable, use stream mode",
+            }),
+            {
+                status: 200,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-store",
+                },
+            },
+        );
+    }
+
+    // === STREAM MODE (fallback) ===
+    // Only used when CDN requires referer validation that browsers can't provide.
+    // This is the old behavior — proxy bytes through Vercel origin.
     let lastStatus = 0;
     let lastError: Error | null = null;
 
-    // Try each referer until one works
     for (const referer of referersToTry) {
         const upstreamHeaders: Record<string, string> = {
             Referer: referer,
@@ -47,7 +136,6 @@ export async function GET(req: NextRequest) {
             upstreamHeaders["Range"] = range;
         }
 
-        // 30-second abort per referer attempt
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30_000);
 
@@ -55,24 +143,18 @@ export async function GET(req: NextRequest) {
             const upstream = await fetch(targetUrl, {
                 headers: upstreamHeaders,
                 signal: controller.signal,
-                // @ts-expect-error duplex is valid in Node 18+ fetch
-                duplex: "half",
             });
 
             clearTimeout(timeout);
             lastStatus = upstream.status;
 
-            // CDN rejected with this referer — try the next one
             if ([403, 404, 410].includes(upstream.status)) {
                 continue;
             }
-
-            // 5xx — CDN is having issues, try next referer
             if (upstream.status >= 500) {
                 continue;
             }
 
-            // Success! Stream the response through
             const resHeaders = new Headers();
 
             for (const h of [
@@ -92,22 +174,24 @@ export async function GET(req: NextRequest) {
             }
 
             resHeaders.set("Access-Control-Allow-Origin", "*");
-            resHeaders.set("Cache-Control", "public, max-age=3600");
+            // Aggressive caching for streamed video segments
+            resHeaders.set(
+                "Cache-Control",
+                "public, max-age=7200, s-maxage=7200",
+            );
             resHeaders.set("X-Accel-Buffering", "no");
 
             return new Response(upstream.body as ReadableStream, {
                 status: upstream.status,
                 headers: resHeaders,
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             clearTimeout(timeout);
-            lastError = err;
-            // Timeout or network error — try next referer
+            lastError = err as Error;
             continue;
         }
     }
 
-    // All referers failed
     if (lastStatus === 403 || lastStatus === 404 || lastStatus === 410) {
         return new Response(
             JSON.stringify({ error: "cdn_rejected", cdnStatus: lastStatus }),
@@ -121,7 +205,7 @@ export async function GET(req: NextRequest) {
         );
     }
 
-    if (lastError?.name === "AbortError") {
+    if (lastError && "name" in lastError && lastError.name === "AbortError") {
         return new Response(
             JSON.stringify({
                 error: "timeout",

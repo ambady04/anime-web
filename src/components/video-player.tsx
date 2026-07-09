@@ -93,7 +93,9 @@ export default function VideoPlayer({
     const [isMuted, setIsMuted] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [aspectRatio, setAspectRatio] = useState<"contain" | "fill" | "cover">("contain");
+    const [aspectRatio, setAspectRatio] = useState<
+        "contain" | "fill" | "cover"
+    >("contain");
     const [isAutoQuality, setIsAutoQuality] = useState(true);
 
     const [showControls, setShowControls] = useState(true);
@@ -142,14 +144,52 @@ export default function VideoPlayer({
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
 
-    // Build the video source URL — uses proxy with referer hint, or direct CDN as fallback
+    // Track resolved direct URLs from probe API
+    const probeCache = useRef<Map<string, { url: string; referer: string }>>(
+        new Map(),
+    );
+
+    // Build the video source URL:
+    // 1. If we have a probed direct URL, use it (saves Vercel origin transfer)
+    // 2. If useDirectUrl fallback, use raw CDN URL
+    // 3. Otherwise fall back to stream-mode proxy
     const buildVideoSrc = (url: string): string => {
+        const cached = probeCache.current.get(url);
+        if (cached) {
+            return cached.url; // Direct CDN URL with known working referer
+        }
         if (useDirectUrl) {
-            return url; // Direct CDN URL (last resort, may work for some CDNs)
+            return url;
         }
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}`;
+        return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+    };
+
+    // Probe the API to find a working referer, then set the video to direct CDN URL
+    const probeAndSetSource = async (download: DownloadLink) => {
+        const referer =
+            streamData.stream_domain || "https://videodownloader.site/";
+        try {
+            const res = await fetch(
+                `/api/video?url=${encodeURIComponent(download.url)}&referer=${encodeURIComponent(referer)}`,
+            );
+            if (res.ok) {
+                const data = await res.json();
+                if (data.mode === "direct") {
+                    // CDN allows direct access - use the URL directly
+                    probeCache.current.set(download.url, {
+                        url: download.url,
+                        referer: data.referer,
+                    });
+                    return download.url;
+                }
+            }
+        } catch {
+            // Probe failed, fall back to stream mode
+        }
+        // Fall back to proxy stream mode
+        return `/api/video?url=${encodeURIComponent(download.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
     };
 
     // Initialize source on mount or stream data update
@@ -157,6 +197,7 @@ export default function VideoPlayer({
         // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
         proxyFailedUrlsRef.current = new Set();
+        probeCache.current = new Map();
         refreshCountRef.current = 0;
         setUseDirectUrl(false);
         setIsAutoQuality(true);
@@ -172,6 +213,21 @@ export default function VideoPlayer({
             setIsLoading(true);
             setPlayerError(false);
             setAutoRetryLabel("");
+
+            // Probe for direct CDN URL in background (reduces origin transfer)
+            probeAndSetSource(defaultQuality).then((directUrl) => {
+                if (
+                    videoRef.current &&
+                    directUrl !== buildVideoSrc(defaultQuality.url)
+                ) {
+                    // Update source to direct URL if different from current
+                    const currentTime = videoRef.current.currentTime;
+                    if (currentTime < 2) {
+                        videoRef.current.src = directUrl;
+                        videoRef.current.load();
+                    }
+                }
+            });
         } else {
             setActiveDownload(null);
             if (refreshCountRef.current < 2) {
@@ -229,8 +285,9 @@ export default function VideoPlayer({
         if (typeof document !== "undefined") {
             setIsPiPSupported(
                 document.pictureInPictureEnabled ||
-                (videoRef.current && "requestPictureInPicture" in videoRef.current) ||
-                false
+                    (videoRef.current &&
+                        "requestPictureInPicture" in videoRef.current) ||
+                    false,
             );
         }
     }, []);
@@ -242,14 +299,26 @@ export default function VideoPlayer({
         const handleLeavePiP = () => setIsPiPActive(false);
 
         if (videoElement) {
-            videoElement.addEventListener("enterpictureinpicture", handleEnterPiP);
-            videoElement.addEventListener("leavepictureinpicture", handleLeavePiP);
+            videoElement.addEventListener(
+                "enterpictureinpicture",
+                handleEnterPiP,
+            );
+            videoElement.addEventListener(
+                "leavepictureinpicture",
+                handleLeavePiP,
+            );
         }
 
         return () => {
             if (videoElement) {
-                videoElement.removeEventListener("enterpictureinpicture", handleEnterPiP);
-                videoElement.removeEventListener("leavepictureinpicture", handleLeavePiP);
+                videoElement.removeEventListener(
+                    "enterpictureinpicture",
+                    handleEnterPiP,
+                );
+                videoElement.removeEventListener(
+                    "leavepictureinpicture",
+                    handleLeavePiP,
+                );
             }
         };
     }, [activeDownload]);
@@ -462,7 +531,11 @@ export default function VideoPlayer({
 
         // Mark episode as "watched" after 30 seconds of playback
         if (isSeries && season && episode && current >= 30) {
-            localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
+            localStore.markEpisodeWatched(
+                seriesDetailPath || detailPath,
+                season,
+                episode,
+            );
         }
     };
 
@@ -492,7 +565,16 @@ export default function VideoPlayer({
                 }
             }
         };
-    }, [detailPath, seriesDetailPath, title, coverUrl, isSeries, season, episode, duration]);
+    }, [
+        detailPath,
+        seriesDetailPath,
+        title,
+        coverUrl,
+        isSeries,
+        season,
+        episode,
+        duration,
+    ]);
 
     // Resolution selector handles video source swapping
     const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
@@ -629,7 +711,9 @@ export default function VideoPlayer({
     // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
     const handlePlayerClickCapture = (e: React.MouseEvent) => {
         const target = e.target as HTMLElement;
-        const focusable = target.closest("button, input[type='range'], [role='button']");
+        const focusable = target.closest(
+            "button, input[type='range'], [role='button']",
+        );
         if (focusable) {
             setTimeout(() => {
                 (focusable as HTMLElement).blur();
@@ -679,12 +763,19 @@ export default function VideoPlayer({
         if (clickRatio < 0.35) {
             // Skip backward 10s
             if (videoRef.current) {
-                videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                videoRef.current.currentTime = Math.max(
+                    0,
+                    videoRef.current.currentTime - 10,
+                );
                 setCurrentTime(videoRef.current.currentTime);
             }
             setShowLeftSkipAnimation(true);
-            if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
-            leftSkipTimeoutRef.current = setTimeout(() => setShowLeftSkipAnimation(false), 800);
+            if (leftSkipTimeoutRef.current)
+                clearTimeout(leftSkipTimeoutRef.current);
+            leftSkipTimeoutRef.current = setTimeout(
+                () => setShowLeftSkipAnimation(false),
+                800,
+            );
             triggerControlsVisibility();
         } else if (clickRatio > 0.65) {
             // Skip forward 10s
@@ -696,8 +787,12 @@ export default function VideoPlayer({
                 setCurrentTime(videoRef.current.currentTime);
             }
             setShowRightSkipAnimation(true);
-            if (rightSkipTimeoutRef.current) clearTimeout(rightSkipTimeoutRef.current);
-            rightSkipTimeoutRef.current = setTimeout(() => setShowRightSkipAnimation(false), 800);
+            if (rightSkipTimeoutRef.current)
+                clearTimeout(rightSkipTimeoutRef.current);
+            rightSkipTimeoutRef.current = setTimeout(
+                () => setShowRightSkipAnimation(false),
+                800,
+            );
             triggerControlsVisibility();
         } else {
             // Double click in the middle: toggle fullscreen
@@ -709,19 +804,34 @@ export default function VideoPlayer({
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Node;
-            if (audioMenuRef.current && !audioMenuRef.current.contains(target)) {
+            if (
+                audioMenuRef.current &&
+                !audioMenuRef.current.contains(target)
+            ) {
                 setShowAudioMenu(false);
             }
-            if (qualityMenuRef.current && !qualityMenuRef.current.contains(target)) {
+            if (
+                qualityMenuRef.current &&
+                !qualityMenuRef.current.contains(target)
+            ) {
                 setShowQualityMenu(false);
             }
-            if (speedMenuRef.current && !speedMenuRef.current.contains(target)) {
+            if (
+                speedMenuRef.current &&
+                !speedMenuRef.current.contains(target)
+            ) {
                 setShowSpeedMenu(false);
             }
-            if (subtitleMenuRef.current && !subtitleMenuRef.current.contains(target)) {
+            if (
+                subtitleMenuRef.current &&
+                !subtitleMenuRef.current.contains(target)
+            ) {
                 setShowSubtitleMenu(false);
             }
-            if (ratioMenuRef.current && !ratioMenuRef.current.contains(target)) {
+            if (
+                ratioMenuRef.current &&
+                !ratioMenuRef.current.contains(target)
+            ) {
                 setShowRatioMenu(false);
             }
         };
@@ -733,7 +843,6 @@ export default function VideoPlayer({
     }, []);
 
     // Handle keyboard shortcuts
-
 
     // Track fullscreen changes directly on document level (e.g. Escape key presses)
     useEffect(() => {
@@ -856,7 +965,11 @@ export default function VideoPlayer({
     const handleVideoEnded = () => {
         if (isSeries) {
             if (season && episode) {
-                localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
+                localStore.markEpisodeWatched(
+                    seriesDetailPath || detailPath,
+                    season,
+                    episode,
+                );
             }
             if (onNextEpisode) {
                 onNextEpisode();
@@ -866,7 +979,11 @@ export default function VideoPlayer({
 
     const handleNextEpisodeClick = () => {
         if (isSeries && season && episode) {
-            localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
+            localStore.markEpisodeWatched(
+                seriesDetailPath || detailPath,
+                season,
+                episode,
+            );
         }
         if (onNextEpisode) {
             onNextEpisode();
@@ -896,13 +1013,19 @@ export default function VideoPlayer({
                     break;
                 case "ArrowLeft":
                     e.preventDefault();
-                    videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+                    videoRef.current.currentTime = Math.max(
+                        0,
+                        videoRef.current.currentTime - 10,
+                    );
                     setCurrentTime(videoRef.current.currentTime);
                     triggerControlsVisibility();
                     break;
                 case "ArrowRight":
                     e.preventDefault();
-                    videoRef.current.currentTime = Math.min(videoRef.current.duration || 0, videoRef.current.currentTime + 10);
+                    videoRef.current.currentTime = Math.min(
+                        videoRef.current.duration || 0,
+                        videoRef.current.currentTime + 10,
+                    );
                     setCurrentTime(videoRef.current.currentTime);
                     triggerControlsVisibility();
                     break;
@@ -919,7 +1042,10 @@ export default function VideoPlayer({
                     break;
                 case "ArrowDown":
                     e.preventDefault();
-                    const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
+                    const newVolDown = Math.max(
+                        0,
+                        videoRef.current.volume - 0.1,
+                    );
                     videoRef.current.volume = newVolDown;
                     setVolume(newVolDown);
                     if (newVolDown === 0) {
@@ -949,7 +1075,9 @@ export default function VideoPlayer({
 
         window.addEventListener("keydown", handleKeyDown, { capture: true });
         return () => {
-            window.removeEventListener("keydown", handleKeyDown, { capture: true });
+            window.removeEventListener("keydown", handleKeyDown, {
+                capture: true,
+            });
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPlaying, isFullscreen, volume, isMuted]);
@@ -966,7 +1094,9 @@ export default function VideoPlayer({
                 isPlaying && !showControls ? "cursor-none" : ""
             }`}
         >
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style
+                dangerouslySetInnerHTML={{
+                    __html: `
                 video::cue {
                     font-size: ${subtitleSize} !important;
                     background: rgba(0, 0, 0, 0.75) !important;
@@ -1010,7 +1140,9 @@ export default function VideoPlayer({
                 .animate-fade-in {
                     animation: fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
                 }
-            `}} />
+            `,
+                }}
+            />
 
             {/* Video Node */}
             {activeDownload && !playerError && (
@@ -1060,7 +1192,9 @@ export default function VideoPlayer({
             {!playerError && (
                 <div
                     className={`absolute inset-0 z-10 ${
-                        isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
+                        isPlaying && !showControls
+                            ? "cursor-none"
+                            : "cursor-pointer"
                     }`}
                     onClick={handleScreenClick}
                     onDoubleClick={handleScreenDoubleClick}
@@ -1094,7 +1228,7 @@ export default function VideoPlayer({
                         if (videoRef.current) {
                             videoRef.current.currentTime = Math.min(
                                 videoRef.current.duration || 0,
-                                videoRef.current.currentTime + 85
+                                videoRef.current.currentTime + 85,
                             );
                             setCurrentTime(videoRef.current.currentTime);
                         }
@@ -1108,18 +1242,22 @@ export default function VideoPlayer({
             )}
 
             {/* Skip Outro / Next Episode Floating Button */}
-            {isSeries && onNextEpisode && duration > 0 && currentTime >= duration - 150 && currentTime < duration - 10 && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleNextEpisodeClick();
-                    }}
-                    className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
-                >
-                    <span>Next Episode</span>
-                    <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
-                </button>
-            )}
+            {isSeries &&
+                onNextEpisode &&
+                duration > 0 &&
+                currentTime >= duration - 150 &&
+                currentTime < duration - 10 && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleNextEpisodeClick();
+                        }}
+                        className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+                    >
+                        <span>Next Episode</span>
+                        <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
+                    </button>
+                )}
 
             {/* Loading state spinner */}
             {isLoading && (
@@ -1177,7 +1315,7 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
@@ -1186,7 +1324,7 @@ export default function VideoPlayer({
                 onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
+                <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
                     <div className="text-white drop-shadow-md">
                         <h2 className="font-extrabold text-sm sm:text-base line-clamp-1">
                             {title}
@@ -1227,10 +1365,16 @@ export default function VideoPlayer({
                                 className="grow accent-primary cursor-pointer h-1 hover:h-1.5 transition-all bg-white/20 rounded-lg outline-none"
                             />
 
-                             <span
-                                onClick={() => setShowRemaining((prev) => !prev)}
+                            <span
+                                onClick={() =>
+                                    setShowRemaining((prev) => !prev)
+                                }
                                 className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
-                                title={showRemaining ? "Click to show duration" : "Click to show remaining time"}
+                                title={
+                                    showRemaining
+                                        ? "Click to show duration"
+                                        : "Click to show remaining time"
+                                }
                             >
                                 {showRemaining
                                     ? `-${formatTime(Math.max(0, duration - currentTime))}`
@@ -1306,17 +1450,23 @@ export default function VideoPlayer({
                             <div className="flex items-center space-x-2 sm:space-x-3 relative">
                                 {/* Subtitle Selector */}
                                 {captions.length > 0 && (
-                                    <div ref={subtitleMenuRef} className="relative">
+                                    <div
+                                        ref={subtitleMenuRef}
+                                        className="relative"
+                                    >
                                         <button
                                             onClick={() => {
-                                                setShowSubtitleMenu(!showSubtitleMenu);
+                                                setShowSubtitleMenu(
+                                                    !showSubtitleMenu,
+                                                );
                                                 setShowQualityMenu(false);
                                                 setShowSpeedMenu(false);
                                                 setShowAudioMenu(false);
                                                 setShowRatioMenu(false);
                                             }}
                                             className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                showSubtitleMenu || showSubtitles
+                                                showSubtitleMenu ||
+                                                showSubtitles
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/70 hover:text-white"
                                             }`}
@@ -1326,13 +1476,17 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showSubtitleMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Subtitles
                                                 </p>
                                                 <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                                                     <button
-                                                        onClick={() => handleSubtitleChange(null)}
+                                                        onClick={() =>
+                                                            handleSubtitleChange(
+                                                                null,
+                                                            )
+                                                        }
                                                         className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
                                                             !activeCaption
                                                                 ? "text-primary bg-primary/10"
@@ -1343,10 +1497,18 @@ export default function VideoPlayer({
                                                     </button>
                                                     {captions.map((caption) => (
                                                         <button
-                                                            key={caption.id || caption.url}
-                                                            onClick={() => handleSubtitleChange(caption)}
+                                                            key={
+                                                                caption.id ||
+                                                                caption.url
+                                                            }
+                                                            onClick={() =>
+                                                                handleSubtitleChange(
+                                                                    caption,
+                                                                )
+                                                            }
                                                             className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                activeCaption?.id === caption.id
+                                                                activeCaption?.id ===
+                                                                caption.id
                                                                     ? "text-primary bg-primary/10"
                                                                     : "text-white/80"
                                                             }`}
@@ -1361,33 +1523,61 @@ export default function VideoPlayer({
                                                 </p>
                                                 <div className="flex items-center justify-between px-1 py-1 shrink-0">
                                                     <button
-                                                        onClick={() => setSubtitleSize("16px")}
+                                                        onClick={() =>
+                                                            setSubtitleSize(
+                                                                "16px",
+                                                            )
+                                                        }
                                                         className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize === "16px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                            subtitleSize ===
+                                                            "16px"
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/60"
                                                         }`}
                                                     >
                                                         SM
                                                     </button>
                                                     <button
-                                                        onClick={() => setSubtitleSize("22px")}
+                                                        onClick={() =>
+                                                            setSubtitleSize(
+                                                                "22px",
+                                                            )
+                                                        }
                                                         className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize === "22px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                            subtitleSize ===
+                                                            "22px"
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/60"
                                                         }`}
                                                     >
                                                         MD
                                                     </button>
                                                     <button
-                                                        onClick={() => setSubtitleSize("28px")}
+                                                        onClick={() =>
+                                                            setSubtitleSize(
+                                                                "28px",
+                                                            )
+                                                        }
                                                         className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize === "28px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                            subtitleSize ===
+                                                            "28px"
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/60"
                                                         }`}
                                                     >
                                                         LG
                                                     </button>
                                                     <button
-                                                        onClick={() => setSubtitleSize("36px")}
+                                                        onClick={() =>
+                                                            setSubtitleSize(
+                                                                "36px",
+                                                            )
+                                                        }
                                                         className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize === "36px" ? "text-primary bg-primary/10" : "text-white/60"
+                                                            subtitleSize ===
+                                                            "36px"
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/60"
                                                         }`}
                                                     >
                                                         XL
@@ -1400,10 +1590,15 @@ export default function VideoPlayer({
 
                                 {/* Audio/Dub selector popup */}
                                 {dubs && dubs.length > 0 && (
-                                    <div ref={audioMenuRef} className="relative">
+                                    <div
+                                        ref={audioMenuRef}
+                                        className="relative"
+                                    >
                                         <button
                                             onClick={() => {
-                                                setShowAudioMenu(!showAudioMenu);
+                                                setShowAudioMenu(
+                                                    !showAudioMenu,
+                                                );
                                                 setShowQualityMenu(false);
                                                 setShowSpeedMenu(false);
                                                 setShowSubtitleMenu(false);
@@ -1420,7 +1615,7 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showAudioMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Audio Track
                                                 </p>
@@ -1461,7 +1656,9 @@ export default function VideoPlayer({
                                 <div ref={qualityMenuRef} className="relative">
                                     <button
                                         onClick={() => {
-                                            setShowQualityMenu(!showQualityMenu);
+                                            setShowQualityMenu(
+                                                !showQualityMenu,
+                                            );
                                             setShowSpeedMenu(false);
                                             setShowAudioMenu(false);
                                             setShowSubtitleMenu(false);
@@ -1482,24 +1679,43 @@ export default function VideoPlayer({
                                         </span>
                                         <Settings className="w-3.5 h-3.5" />
                                     </button>
- 
+
                                     {showQualityMenu &&
                                         sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                     Quality
                                                 </p>
                                                 <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                                                     <button
                                                         onClick={() => {
-                                                            setIsAutoQuality(true);
-                                                            setShowQualityMenu(false);
+                                                            setIsAutoQuality(
+                                                                true,
+                                                            );
+                                                            setShowQualityMenu(
+                                                                false,
+                                                            );
                                                             const defaultQuality =
-                                                                sortedDownloads.find((d) => d.resolution === 720) ||
-                                                                sortedDownloads.find((d) => d.resolution === 1080) ||
+                                                                sortedDownloads.find(
+                                                                    (d) =>
+                                                                        d.resolution ===
+                                                                        720,
+                                                                ) ||
+                                                                sortedDownloads.find(
+                                                                    (d) =>
+                                                                        d.resolution ===
+                                                                        1080,
+                                                                ) ||
                                                                 sortedDownloads[0];
-                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
-                                                                handleQualityChange(defaultQuality, true);
+                                                            if (
+                                                                defaultQuality &&
+                                                                activeDownload?.id !==
+                                                                    defaultQuality.id
+                                                            ) {
+                                                                handleQualityChange(
+                                                                    defaultQuality,
+                                                                    true,
+                                                                );
                                                             }
                                                         }}
                                                         className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
@@ -1510,22 +1726,33 @@ export default function VideoPlayer({
                                                     >
                                                         Auto
                                                     </button>
-                                                    {sortedDownloads.map((link) => (
-                                                        <button
-                                                            key={link.id}
-                                                            onClick={() => {
-                                                                handleQualityChange(link);
-                                                                setShowQualityMenu(false);
-                                                            }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                !isAutoQuality && activeDownload?.id === link.id
-                                                                    ? "text-primary bg-primary/10"
-                                                                    : "text-white/80"
-                                                            }`}
-                                                        >
-                                                            {link.resolution}p
-                                                        </button>
-                                                    ))}
+                                                    {sortedDownloads.map(
+                                                        (link) => (
+                                                            <button
+                                                                key={link.id}
+                                                                onClick={() => {
+                                                                    handleQualityChange(
+                                                                        link,
+                                                                    );
+                                                                    setShowQualityMenu(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                    !isAutoQuality &&
+                                                                    activeDownload?.id ===
+                                                                        link.id
+                                                                        ? "text-primary bg-primary/10"
+                                                                        : "text-white/80"
+                                                                }`}
+                                                            >
+                                                                {
+                                                                    link.resolution
+                                                                }
+                                                                p
+                                                            </button>
+                                                        ),
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1551,27 +1778,27 @@ export default function VideoPlayer({
                                     </button>
 
                                     {showSpeedMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Speed
                                             </p>
-                                            {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(
-                                                (rate) => (
-                                                    <button
-                                                        key={rate}
-                                                        onClick={() =>
-                                                            handleSpeedChange(rate)
-                                                        }
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            playbackRate === rate
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/80"
-                                                        }`}
-                                                    >
-                                                        {rate.toFixed(1)}x
-                                                    </button>
-                                                ),
-                                            )}
+                                            {[
+                                                0.5, 0.75, 1.0, 1.25, 1.5, 2.0,
+                                            ].map((rate) => (
+                                                <button
+                                                    key={rate}
+                                                    onClick={() =>
+                                                        handleSpeedChange(rate)
+                                                    }
+                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                        playbackRate === rate
+                                                            ? "text-primary bg-primary/10"
+                                                            : "text-white/80"
+                                                    }`}
+                                                >
+                                                    {rate.toFixed(1)}x
+                                                </button>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -1603,7 +1830,13 @@ export default function VideoPlayer({
                                             className="w-4.5 h-4.5"
                                         >
                                             {/* Outer screen frame */}
-                                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                                            <rect
+                                                x="3"
+                                                y="5"
+                                                width="18"
+                                                height="14"
+                                                rx="2"
+                                            />
                                             {/* Diagonal scale arrows */}
                                             <path d="M 9 15 L 15 9" />
                                             <path d="M 12 9 L 15 9 L 15 12" />
@@ -1612,7 +1845,7 @@ export default function VideoPlayer({
                                     </button>
 
                                     {showRatioMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Screen Size
                                             </p>
@@ -1674,8 +1907,6 @@ export default function VideoPlayer({
                                     </button>
                                 )}
 
-
-
                                 {/* Fullscreen Trigger */}
                                 <button
                                     onClick={toggleFullscreen}
@@ -1689,8 +1920,6 @@ export default function VideoPlayer({
                                 </button>
                             </div>
                         </div>
-
-
                     </div>
                 </div>
             </div>
