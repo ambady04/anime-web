@@ -626,6 +626,17 @@ export default function VideoPlayer({
         }
     };
 
+    // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
+    const handlePlayerClickCapture = (e: React.MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const focusable = target.closest("button, input[type='range'], [role='button']");
+        if (focusable) {
+            setTimeout(() => {
+                (focusable as HTMLElement).blur();
+            }, 100);
+        }
+    };
+
     // Handle single clicks on the screen
     const handleScreenClick = (e: React.MouseEvent) => {
         const clickTarget = e.target as HTMLElement;
@@ -950,6 +961,7 @@ export default function VideoPlayer({
             onMouseLeave={() => isPlaying && setShowControls(false)}
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
+            onClickCapture={handlePlayerClickCapture}
             className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
                 isPlaying && !showControls ? "cursor-none" : ""
             }`}
