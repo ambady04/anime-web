@@ -144,52 +144,16 @@ export default function VideoPlayer({
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
 
-    // Track resolved direct URLs from probe API
-    const probeCache = useRef<Map<string, { url: string; referer: string }>>(
-        new Map(),
-    );
-
-    // Build the video source URL:
-    // 1. If we have a probed direct URL, use it (saves Vercel origin transfer)
-    // 2. If useDirectUrl fallback, use raw CDN URL
-    // 3. Otherwise fall back to stream-mode proxy
+    // Build the video source URL — always use proxy stream mode.
+    // Browsers cannot set custom Referer headers on <video> requests,
+    // so direct CDN URLs fail for CDNs that validate referer.
     const buildVideoSrc = (url: string): string => {
-        const cached = probeCache.current.get(url);
-        if (cached) {
-            return cached.url; // Direct CDN URL with known working referer
-        }
         if (useDirectUrl) {
-            return url;
+            return url; // Last-resort fallback for CDNs without referer check
         }
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
         return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
-    };
-
-    // Probe the API to find a working referer, then set the video to direct CDN URL
-    const probeAndSetSource = async (download: DownloadLink) => {
-        const referer =
-            streamData.stream_domain || "https://videodownloader.site/";
-        try {
-            const res = await fetch(
-                `/api/video?url=${encodeURIComponent(download.url)}&referer=${encodeURIComponent(referer)}`,
-            );
-            if (res.ok) {
-                const data = await res.json();
-                if (data.mode === "direct") {
-                    // CDN allows direct access - use the URL directly
-                    probeCache.current.set(download.url, {
-                        url: download.url,
-                        referer: data.referer,
-                    });
-                    return download.url;
-                }
-            }
-        } catch {
-            // Probe failed, fall back to stream mode
-        }
-        // Fall back to proxy stream mode
-        return `/api/video?url=${encodeURIComponent(download.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
     };
 
     // Initialize source on mount or stream data update
@@ -197,7 +161,6 @@ export default function VideoPlayer({
         // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
         proxyFailedUrlsRef.current = new Set();
-        probeCache.current = new Map();
         refreshCountRef.current = 0;
         setUseDirectUrl(false);
         setIsAutoQuality(true);
@@ -213,21 +176,6 @@ export default function VideoPlayer({
             setIsLoading(true);
             setPlayerError(false);
             setAutoRetryLabel("");
-
-            // Probe for direct CDN URL in background (reduces origin transfer)
-            probeAndSetSource(defaultQuality).then((directUrl) => {
-                if (
-                    videoRef.current &&
-                    directUrl !== buildVideoSrc(defaultQuality.url)
-                ) {
-                    // Update source to direct URL if different from current
-                    const currentTime = videoRef.current.currentTime;
-                    if (currentTime < 2) {
-                        videoRef.current.src = directUrl;
-                        videoRef.current.load();
-                    }
-                }
-            });
         } else {
             setActiveDownload(null);
             if (refreshCountRef.current < 2) {
