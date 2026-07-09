@@ -36,7 +36,21 @@ export const localStore = {
     if (typeof window === 'undefined') return [];
     try {
       const data = localStorage.getItem('kixo_history');
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+      const history = JSON.parse(data) as HistoryItem[];
+      
+      const seen = new Set<string>();
+      const deduplicated: HistoryItem[] = [];
+      
+      const sorted = [...history].sort((a, b) => b.updatedAt - a.updatedAt);
+      for (const item of sorted) {
+        const baseTitle = item.title.replace(/\[[^\]]+\]/g, "").trim().toLowerCase();
+        if (!seen.has(baseTitle)) {
+          seen.add(baseTitle);
+          deduplicated.push(item);
+        }
+      }
+      return deduplicated;
     } catch {
       return [];
     }
@@ -46,15 +60,18 @@ export const localStore = {
     if (typeof window === 'undefined') return;
     try {
       const history = localStore.getHistory();
-      // Remove existing item if exists
-      const filtered = history.filter((h) => h.detailPath !== item.detailPath);
+      const baseTitleOfNew = item.title.replace(/\[[^\]]+\]/g, "").trim().toLowerCase();
+      const filtered = history.filter((h) => {
+        const baseTitleOfExisting = h.title.replace(/\[[^\]]+\]/g, "").trim().toLowerCase();
+        return baseTitleOfExisting !== baseTitleOfNew;
+      });
       
       const newItem: HistoryItem = {
         ...item,
         updatedAt: Date.now(),
       };
       
-      const updated = [newItem, ...filtered].slice(0, 40); // Keep last 40 items
+      const updated = [newItem, ...filtered].slice(0, 40);
       localStorage.setItem('kixo_history', JSON.stringify(updated));
 
       // Background Cloud Firestore Sync

@@ -67,38 +67,51 @@ export async function syncUserData(uid: string) {
         const localHistoryMap = new Map(localHistory.map(h => [h.detailPath, h]));
         const allPaths = new Set([...localHistoryMap.keys(), ...cloudHistoryMap.keys()]);
 
-        const historyBatch = writeBatch(db);
-        let historyBatchCount = 0;
-
         for (const path of allPaths) {
             const localItem = localHistoryMap.get(path);
             const cloudItem = cloudHistoryMap.get(path);
 
             if (localItem && cloudItem) {
-                // Both exist - compare timestamps to find latest
                 if (localItem.updatedAt >= cloudItem.updatedAt) {
                     mergedHistory.push(localItem);
-                    const docRef = doc(db, "users", uid, "history", escapeKey(path));
-                    historyBatch.set(docRef, localItem);
-                    historyBatchCount++;
                 } else {
                     mergedHistory.push(cloudItem);
                 }
             } else if (localItem) {
-                // Local only - upload
                 mergedHistory.push(localItem);
-                const docRef = doc(db, "users", uid, "history", escapeKey(path));
-                historyBatch.set(docRef, localItem);
-                historyBatchCount++;
             } else if (cloudItem) {
-                // Cloud only - keep
                 mergedHistory.push(cloudItem);
             }
         }
 
-        // Sort by updatedAt descending and limit to last 40 items
+        // Sort descending by updatedAt
         mergedHistory.sort((a, b) => b.updatedAt - a.updatedAt);
-        const slicedHistory = mergedHistory.slice(0, 40);
+
+        // Deduplicate merged history by clean base title to remove duplicates
+        const seenHistory = new Set<string>();
+        const cleanMergedHistory: HistoryItem[] = [];
+        const historyBatch = writeBatch(db);
+        let historyBatchCount = 0;
+
+        for (const item of mergedHistory) {
+            const baseTitle = item.title.replace(/\[[^\]]+\]/g, "").trim().toLowerCase();
+            if (!seenHistory.has(baseTitle)) {
+                seenHistory.add(baseTitle);
+                cleanMergedHistory.push(item);
+                
+                // Write/Update the latest one to Firestore
+                const docRef = doc(db, "users", uid, "history", escapeKey(item.detailPath));
+                historyBatch.set(docRef, item);
+                historyBatchCount++;
+            } else {
+                // This is a duplicate (older episode or different watch path). Delete from cloud!
+                const docRef = doc(db, "users", uid, "history", escapeKey(item.detailPath));
+                historyBatch.delete(docRef);
+                historyBatchCount++;
+            }
+        }
+
+        const slicedHistory = cleanMergedHistory.slice(0, 40);
         localStorage.setItem("kixo_history", JSON.stringify(slicedHistory));
 
         if (historyBatchCount > 0) {

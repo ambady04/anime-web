@@ -83,11 +83,22 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             historySnap.forEach((doc) => histItems.push(doc.data() as HistoryItem));
             histItems.sort((a, b) => b.updatedAt - a.updatedAt);
 
+            // Deduplicate cloud history by base title to group series-wise
+            const seenHist = new Set<string>();
+            const cleanHist: HistoryItem[] = [];
+            for (const item of histItems) {
+                const baseTitle = item.title.replace(/\[[^\]]+\]/g, "").trim().toLowerCase();
+                if (!seenHist.has(baseTitle)) {
+                    seenHist.add(baseTitle);
+                    cleanHist.push(item);
+                }
+            }
+
             setCloudWatchlist(wlItems);
-            setCloudHistory(histItems);
+            setCloudHistory(cleanHist);
             setCounts({
                 watchlist: wlItems.length,
-                history: histItems.length,
+                history: cleanHist.length,
                 episodes: episodesSnap.size
             });
         } catch (err) {
