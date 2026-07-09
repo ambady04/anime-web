@@ -36,6 +36,7 @@ interface VideoPlayerProps {
     title: string;
     coverUrl: string;
     detailPath: string;
+    seriesDetailPath?: string;
     isSeries: boolean;
     season?: number;
     episode?: number;
@@ -51,6 +52,7 @@ export default function VideoPlayer({
     title,
     coverUrl,
     detailPath,
+    seriesDetailPath,
     isSeries,
     season,
     episode,
@@ -283,7 +285,7 @@ export default function VideoPlayer({
         // Check history to resume
         const history = localStore.getHistory();
         let currentHistoryItem = history.find(
-            (h) => h.detailPath === detailPath,
+            (h) => h.detailPath === (seriesDetailPath || detailPath),
         );
 
         // Fallback: If not found, find by title/season/episode to support audio track swaps
@@ -446,7 +448,7 @@ export default function VideoPlayer({
                 100,
             );
             localStore.saveHistoryItem({
-                detailPath,
+                detailPath: seriesDetailPath || detailPath,
                 title,
                 coverUrl,
                 duration,
@@ -460,7 +462,7 @@ export default function VideoPlayer({
 
         // Mark episode as "watched" after 30 seconds of playback
         if (isSeries && season && episode && current >= 30) {
-            localStore.markEpisodeWatched(detailPath, season, episode);
+            localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
         }
     };
 
@@ -477,7 +479,7 @@ export default function VideoPlayer({
                         100,
                     );
                     localStore.saveHistoryItem({
-                        detailPath,
+                        detailPath: seriesDetailPath || detailPath,
                         title,
                         coverUrl,
                         duration: dur,
@@ -490,7 +492,7 @@ export default function VideoPlayer({
                 }
             }
         };
-    }, [detailPath, title, coverUrl, isSeries, season, episode, duration]);
+    }, [detailPath, seriesDetailPath, title, coverUrl, isSeries, season, episode, duration]);
 
     // Resolution selector handles video source swapping
     const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
@@ -843,11 +845,20 @@ export default function VideoPlayer({
     const handleVideoEnded = () => {
         if (isSeries) {
             if (season && episode) {
-                localStore.markEpisodeWatched(detailPath, season, episode);
+                localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
             }
             if (onNextEpisode) {
                 onNextEpisode();
             }
+        }
+    };
+
+    const handleNextEpisodeClick = () => {
+        if (isSeries && season && episode) {
+            localStore.markEpisodeWatched(seriesDetailPath || detailPath, season, episode);
+        }
+        if (onNextEpisode) {
+            onNextEpisode();
         }
     };
 
@@ -1089,7 +1100,7 @@ export default function VideoPlayer({
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onNextEpisode();
+                        handleNextEpisodeClick();
                     }}
                     className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
                 >
@@ -1245,7 +1256,7 @@ export default function VideoPlayer({
                                 {/* Next Episode */}
                                 {isSeries && onNextEpisode && (
                                     <button
-                                        onClick={onNextEpisode}
+                                        onClick={handleNextEpisodeClick}
                                         className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
                                         title="Next Episode"
                                     >

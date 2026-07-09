@@ -23,8 +23,8 @@ import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
-import { auth } from "@/lib/firebase";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
+import { useAuth } from "@/lib/auth-context";
 
 const cleanTitle = (title: string): string => {
     return title
@@ -50,6 +50,7 @@ export default function WatchClient({
     activeEpisode,
 }: WatchClientProps) {
     const router = useRouter();
+    const { user } = useAuth();
     const [isPageLoading, setIsPageLoading] = useState(false);
     const [loadingEpisode, setLoadingEpisode] = useState<number | null>(null);
     const [loadingAudio, setLoadingAudio] = useState<string | null>(null);
@@ -249,8 +250,8 @@ export default function WatchClient({
         setWatchHistory(localStore.getHistory());
 
         // Bidirectional sync with cloud database in the background if logged in
-        if (auth.currentUser) {
-            syncSeasonWatchedEpisodes(auth.currentUser.uid, subject.detailPath, selectedSeason)
+        if (user) {
+            syncSeasonWatchedEpisodes(user.uid, subject.detailPath, selectedSeason)
                 .then((syncedEps) => {
                     setWatchedEpisodes(syncedEps);
                 })
@@ -258,7 +259,7 @@ export default function WatchClient({
                     console.error("[sync] Background episode sync failed:", err);
                 });
         }
-    }, [subject.detailPath, selectedSeason, activeEpisode]);
+    }, [subject.detailPath, selectedSeason, activeEpisode, user]);
 
     const handleEpisodeContextMenu = (e: React.MouseEvent, epNum: number) => {
         e.preventDefault();
@@ -332,6 +333,7 @@ export default function WatchClient({
                         <VideoPlayer
                             streamData={stream}
                             detailPath={path}
+                            seriesDetailPath={subject.detailPath}
                             title={subject.title}
                             coverUrl={subject.cover?.url || ""}
                             isSeries={isSeries}
