@@ -19,7 +19,6 @@ import {
     SkipBack,
     SkipForward,
     Headphones,
-    Keyboard,
     HelpCircle,
     PictureInPicture2,
 } from "lucide-react";
@@ -110,7 +109,6 @@ export default function VideoPlayer({
     const [showRemaining, setShowRemaining] = useState(false);
 
     // Premium states
-    const [showCheatSheet, setShowCheatSheet] = useState(false);
     const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
     const [showRightSkipAnimation, setShowRightSkipAnimation] = useState(false);
     const [isPiPSupported, setIsPiPSupported] = useState(false);
@@ -737,107 +735,7 @@ export default function VideoPlayer({
     }, []);
 
     // Handle keyboard shortcuts
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore shortcuts if the user is typing in form inputs
-            const activeEl = document.activeElement;
-            if (
-                activeEl &&
-                (activeEl.tagName === "INPUT" ||
-                    activeEl.tagName === "TEXTAREA" ||
-                    activeEl.getAttribute("contenteditable") === "true")
-            ) {
-                return;
-            }
 
-            if (!videoRef.current) return;
-
-            switch (e.key) {
-                case " ":
-                case "Spacebar":
-                    e.preventDefault();
-                    togglePlay();
-                    break;
-                case "f":
-                case "F":
-                    e.preventDefault();
-                    toggleFullscreen();
-                    break;
-                case "ArrowLeft": {
-                    e.preventDefault();
-                    videoRef.current.currentTime = Math.max(
-                        0,
-                        videoRef.current.currentTime - 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    setShowLeftSkipAnimation(true);
-                    if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
-                    leftSkipTimeoutRef.current = setTimeout(() => setShowLeftSkipAnimation(false), 700);
-                    triggerControlsVisibility();
-                    break;
-                }
-                case "ArrowRight": {
-                    e.preventDefault();
-                    videoRef.current.currentTime = Math.min(
-                        videoRef.current.duration || 0,
-                        videoRef.current.currentTime + 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    setShowRightSkipAnimation(true);
-                    if (rightSkipTimeoutRef.current) clearTimeout(rightSkipTimeoutRef.current);
-                    rightSkipTimeoutRef.current = setTimeout(() => setShowRightSkipAnimation(false), 700);
-                    triggerControlsVisibility();
-                    break;
-                }
-                case "ArrowUp": {
-                    e.preventDefault();
-                    const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
-                    videoRef.current.volume = newVolUp;
-                    setVolume(newVolUp);
-                    if (newVolUp > 0) {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                    }
-                    triggerControlsVisibility();
-                    break;
-                }
-                case "ArrowDown": {
-                    e.preventDefault();
-                    const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
-                    videoRef.current.volume = newVolDown;
-                    setVolume(newVolDown);
-                    if (newVolDown === 0) {
-                        videoRef.current.muted = true;
-                        setIsMuted(true);
-                    } else {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                    }
-                    triggerControlsVisibility();
-                    break;
-                }
-                case "m":
-                case "M":
-                    e.preventDefault();
-                    toggleMute();
-                    triggerControlsVisibility();
-                    break;
-                case "?":
-                    e.preventDefault();
-                    setShowCheatSheet((prev) => !prev);
-                    triggerControlsVisibility();
-                    break;
-                default:
-                    break;
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPlaying, isFullscreen, volume, isMuted]);
 
     // Track fullscreen changes directly on document level (e.g. Escape key presses)
     useEffect(() => {
@@ -1339,7 +1237,7 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showSubtitleMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Subtitles
                                                 </p>
@@ -1431,7 +1329,7 @@ export default function VideoPlayer({
                                         </button>
 
                                         {showAudioMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Audio Track
                                                 </p>
@@ -1494,7 +1392,7 @@ export default function VideoPlayer({
  
                                     {showQualityMenu &&
                                         sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[120px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                                 <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                     Quality
                                                 </p>
@@ -1558,7 +1456,7 @@ export default function VideoPlayer({
                                     </button>
 
                                     {showSpeedMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Speed
                                             </p>
@@ -1619,7 +1517,7 @@ export default function VideoPlayer({
                                     </button>
 
                                     {showRatioMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-30 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
+                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-gradient-to-b from-zinc-900 to-black">
                                             <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
                                                 Screen Size
                                             </p>
@@ -1681,25 +1579,7 @@ export default function VideoPlayer({
                                     </button>
                                 )}
 
-                                {/* Keyboard Cheat-Sheet Trigger */}
-                                <button
-                                    onClick={() => {
-                                        setShowCheatSheet(!showCheatSheet);
-                                        setShowQualityMenu(false);
-                                        setShowSpeedMenu(false);
-                                        setShowAudioMenu(false);
-                                        setShowSubtitleMenu(false);
-                                        setShowRatioMenu(false);
-                                    }}
-                                    className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                        showCheatSheet
-                                            ? "text-primary bg-primary/10"
-                                            : "text-white/70 hover:text-white"
-                                    }`}
-                                    title="Keyboard Shortcuts Guide"
-                                >
-                                    <Keyboard className="w-4.5 h-4.5" />
-                                </button>
+
 
                                 {/* Fullscreen Trigger */}
                                 <button
@@ -1715,67 +1595,7 @@ export default function VideoPlayer({
                             </div>
                         </div>
 
-                        {/* Hotkeys Cheat Sheet Modal */}
-                        {showCheatSheet && (
-                            <div
-                                onClick={() => setShowCheatSheet(false)}
-                                className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-40 p-4 animate-fade-in"
-                            >
-                                <div
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="bg-zinc-900 border border-white/10 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4 text-white"
-                                >
-                                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                                        <h3 className="text-sm font-extrabold uppercase tracking-widest text-primary">
-                                            Keyboard Shortcuts
-                                        </h3>
-                                        <button
-                                            onClick={() => setShowCheatSheet(false)}
-                                            className="text-white/45 hover:text-white text-xs font-bold px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
-                                        >
-                                            Close
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Play / Pause</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">Space</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Fullscreen</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">F</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Rewind 10s</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">←</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Forward 10s</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">→</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Volume Up</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">↑</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Volume Down</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">↓</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Mute Toggle</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">M</kbd>
-                                        </div>
-                                        <div className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-xl">
-                                            <span className="text-white/60 font-semibold">Hotkeys Menu</span>
-                                            <kbd className="bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700 font-mono text-[10px]">?</kbd>
-                                        </div>
-                                    </div>
-                                    <p className="text-[10px] text-white/40 text-center font-medium pt-2">
-                                        Tip: You can also double-click left/right side of the video to seek 10s.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
+
                     </div>
                 </div>
             </div>
