@@ -143,6 +143,8 @@ export default function VideoPlayer({
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
+    // Track which episodes have already been marked as watched (prevent duplicate syncs)
+    const markedEpisodesRef = useRef<Set<string>>(new Set());
 
     // Build the video source URL — always use proxy stream mode.
     // Browsers cannot set custom Referer headers on <video> requests,
@@ -477,13 +479,17 @@ export default function VideoPlayer({
             });
         }
 
-        // Mark episode as "watched" after 30 seconds of playback
+        // Mark episode as "watched" after 30 seconds of playback (once per episode)
         if (isSeries && season && episode && current >= 30) {
-            localStore.markEpisodeWatched(
-                seriesDetailPath || detailPath,
-                season,
-                episode,
-            );
+            const epKey = `${seriesDetailPath || detailPath}__s${season}__e${episode}`;
+            if (!markedEpisodesRef.current.has(epKey)) {
+                markedEpisodesRef.current.add(epKey);
+                localStore.markEpisodeWatched(
+                    seriesDetailPath || detailPath,
+                    season,
+                    episode,
+                );
+            }
         }
     };
 
@@ -913,11 +919,24 @@ export default function VideoPlayer({
     const handleVideoEnded = () => {
         if (isSeries) {
             if (season && episode) {
+                // Mark current episode as fully watched
                 localStore.markEpisodeWatched(
                     seriesDetailPath || detailPath,
                     season,
                     episode,
                 );
+                // Save history with 100% progress
+                localStore.saveHistoryItem({
+                    detailPath: seriesDetailPath || detailPath,
+                    title,
+                    coverUrl,
+                    duration,
+                    currentTime: duration,
+                    progress: 100,
+                    isSeries,
+                    season,
+                    episode,
+                });
             }
             if (onNextEpisode) {
                 onNextEpisode();
@@ -927,11 +946,32 @@ export default function VideoPlayer({
 
     const handleNextEpisodeClick = () => {
         if (isSeries && season && episode) {
+            // Mark current episode as watched before switching
             localStore.markEpisodeWatched(
                 seriesDetailPath || detailPath,
                 season,
                 episode,
             );
+            // Save current progress before switching
+            if (videoRef.current && videoRef.current.currentTime > 5) {
+                const current = videoRef.current.currentTime;
+                const dur = videoRef.current.duration || duration;
+                const progressPercent =
+                    dur > 0
+                        ? Math.min(Math.round((current / dur) * 100), 100)
+                        : 0;
+                localStore.saveHistoryItem({
+                    detailPath: seriesDetailPath || detailPath,
+                    title,
+                    coverUrl,
+                    duration: dur,
+                    currentTime: current,
+                    progress: progressPercent,
+                    isSeries,
+                    season,
+                    episode,
+                });
+            }
         }
         if (onNextEpisode) {
             onNextEpisode();

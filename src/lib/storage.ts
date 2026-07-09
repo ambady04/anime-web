@@ -91,17 +91,23 @@ export const localStore = {
             const updated = [newItem, ...filtered].slice(0, 40);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
 
-            // Background Cloud Firestore Sync
+            // Sync to cloud every 15 seconds of progress or on completion
+            // (avoids excessive Firestore writes while still keeping cloud updated)
             const uid = _currentUid;
             if (uid) {
-                import("./sync").then(({ syncHistoryItemToCloud }) => {
-                    syncHistoryItemToCloud(uid, newItem).catch((err) => {
-                        console.error(
-                            "[sync] Background history save failed:",
-                            err,
-                        );
+                const shouldSync =
+                    item.progress >= 95 || // completed
+                    Math.floor(item.currentTime) % 15 === 0; // every 15s
+                if (shouldSync) {
+                    import("./sync").then(({ syncHistoryItemToCloud }) => {
+                        syncHistoryItemToCloud(uid, newItem).catch((err) => {
+                            console.error(
+                                "[sync] Background history save failed:",
+                                err,
+                            );
+                        });
                     });
-                });
+                }
             }
         } catch (e) {
             console.error("Failed to save watch history", e);
@@ -339,20 +345,23 @@ export const localStore = {
         try {
             const key = `kixo_ep__${detailPath}__s${season}`;
             const existing = localStore.getWatchedEpisodes(detailPath, season);
+            const wasAlreadyWatched = existing.has(episode);
             existing.add(episode);
             const epsArr = Array.from(existing);
             localStorage.setItem(key, JSON.stringify(epsArr));
 
-            // Background Cloud Sync
+            // Only sync to cloud if this is a new mark (avoid duplicate writes)
             const uid = _currentUid;
-            if (uid) {
+            if (uid && !wasAlreadyWatched) {
                 import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
                     syncWatchedEpisodesToCloud(
                         uid,
                         detailPath,
                         season,
                         epsArr,
-                    ).catch(() => {});
+                    ).catch((err) => {
+                        console.error("[sync] Episode watch sync failed:", err);
+                    });
                 });
             }
         } catch {}

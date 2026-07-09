@@ -47,12 +47,12 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
 
     if (errorMsg || !details || !stream) {
         return (
-            <div className="max-w-md mx-auto my-32 p-8 rounded-3xl glass-panel border border-white/10 text-center shadow-2xl relative z-20">
+            <div className="max-w-md mx-auto my-32 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20">
                 <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4 animate-bounce" />
-                <h2 className="text-xl font-bold text-white mb-2">
+                <h2 className="text-xl font-bold text-foreground mb-2">
                     Streaming Offline
                 </h2>
-                <p className="text-sm text-white/60 mb-6">
+                <p className="text-sm text-foreground/60 mb-6">
                     This media link cannot be retrieved. It may be
                     geo-restricted or temporarily unavailable on host mirrors.
                 </p>
