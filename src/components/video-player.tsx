@@ -131,6 +131,8 @@ export default function VideoPlayer({
 
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Delay showing loading spinner to avoid flash on quick seeks
+    const waitingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track double click state to distinguish single clicks
     const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track seek animation durations
@@ -1205,8 +1207,20 @@ export default function VideoPlayer({
                             );
                         }
                     }}
-                    onWaiting={() => setIsLoading(true)}
+                    onWaiting={() => {
+                        // Delay showing loader — avoids flash when seeking within buffer
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        waitingTimeoutRef.current = setTimeout(() => {
+                            setIsLoading(true);
+                        }, 350);
+                    }}
                     onPlaying={() => {
+                        // Cancel pending loader and hide it
+                        if (waitingTimeoutRef.current) {
+                            clearTimeout(waitingTimeoutRef.current);
+                            waitingTimeoutRef.current = null;
+                        }
                         setIsLoading(false);
                         setAutoRetryLabel("");
                     }}
