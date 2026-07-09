@@ -9,6 +9,7 @@ import {
     ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
+import { setCurrentUid } from "./storage";
 
 interface AuthContextType {
     user: User | null;
@@ -49,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                 if (firebaseUser) {
                     setUser(firebaseUser);
+                    // Set UID for storage.ts sync operations
+                    setCurrentUid(firebaseUser.uid);
                     // Perform background sync on successful authentication
                     try {
                         const { syncUserData } = await import("./sync");
@@ -58,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }
                 } else {
                     setUser(null);
+                    setCurrentUid(null);
                 }
                 setLoading(false);
             });
@@ -92,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { signOut } = await import("firebase/auth");
             await signOut(auth);
             setUser(null);
+            setCurrentUid(null);
         } catch (error) {
             console.error("Google Auth logout failed:", error);
             throw error;

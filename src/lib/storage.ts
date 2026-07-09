@@ -1,12 +1,14 @@
-// Lazy firebase imports — don't pull in the 360KB bundle at module level
-async function getAuthCurrentUser() {
-    try {
-        const { ensureFirebase, getFirebaseAuth } = await import("./firebase");
-        await ensureFirebase();
-        return getFirebaseAuth().currentUser;
-    } catch {
-        return null;
-    }
+// Module-level UID storage — set by AuthProvider when user logs in.
+// This avoids the race condition where Firebase Auth's currentUser
+// isn't populated yet when sync operations fire.
+let _currentUid: string | null = null;
+
+export function setCurrentUid(uid: string | null) {
+    _currentUid = uid;
+}
+
+export function getCurrentUid(): string | null {
+    return _currentUid;
 }
 
 export interface HistoryItem {
@@ -89,20 +91,18 @@ export const localStore = {
             const updated = [newItem, ...filtered].slice(0, 40);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
 
-            // Background Cloud Firestore Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncHistoryItemToCloud } = await import("./sync");
-                    syncHistoryItemToCloud(currentUser.uid, newItem).catch(
-                        (err) => {
-                            console.error(
-                                "[sync] Background history save failed:",
-                                err,
-                            );
-                        },
-                    );
-                }
-            });
+            // Background Cloud Firestore Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncHistoryItemToCloud }) => {
+                    syncHistoryItemToCloud(uid, newItem).catch((err) => {
+                        console.error(
+                            "[sync] Background history save failed:",
+                            err,
+                        );
+                    });
+                });
+            }
         } catch (e) {
             console.error("Failed to save watch history", e);
         }
@@ -115,30 +115,31 @@ export const localStore = {
             const updated = history.filter((h) => h.detailPath !== detailPath);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { ensureFirebase, getFirebaseDb } =
-                        await import("./firebase");
-                    await ensureFirebase();
-                    const db = getFirebaseDb();
-                    const { doc, deleteDoc } =
-                        await import("firebase/firestore");
-                    const docRef = doc(
-                        db,
-                        "users",
-                        currentUser.uid,
-                        "history",
-                        encodeURIComponent(detailPath),
-                    );
-                    deleteDoc(docRef).catch((err: any) => {
-                        console.error(
-                            "[sync] Background history delete failed:",
-                            err,
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./firebase").then(
+                    async ({ ensureFirebase, getFirebaseDb }) => {
+                        await ensureFirebase();
+                        const db = getFirebaseDb();
+                        const { doc, deleteDoc } =
+                            await import("firebase/firestore");
+                        const docRef = doc(
+                            db,
+                            "users",
+                            uid,
+                            "history",
+                            encodeURIComponent(detailPath),
                         );
-                    });
-                }
-            });
+                        deleteDoc(docRef).catch((err: any) => {
+                            console.error(
+                                "[sync] Background history delete failed:",
+                                err,
+                            );
+                        });
+                    },
+                );
+            }
         } catch {}
     },
 
@@ -146,17 +147,15 @@ export const localStore = {
         if (typeof window === "undefined") return;
         localStorage.removeItem("kixo_history");
 
-        // Background Cloud Sync (lazy)
-        getAuthCurrentUser()
-            .then(async (currentUser) => {
-                if (currentUser) {
-                    const { ensureFirebase, getFirebaseDb } =
-                        await import("./firebase");
+        // Background Cloud Sync
+        const uid = _currentUid;
+        if (uid) {
+            import("./firebase")
+                .then(async ({ ensureFirebase, getFirebaseDb }) => {
                     await ensureFirebase();
                     const db = getFirebaseDb();
                     const { collection, getDocs, writeBatch } =
                         await import("firebase/firestore");
-                    const uid = currentUser.uid;
                     const historyCol = collection(db, "users", uid, "history");
                     const snapshot = await getDocs(historyCol);
                     const batch = writeBatch(db);
@@ -164,11 +163,14 @@ export const localStore = {
                         batch.delete(docSnap.ref);
                     });
                     await batch.commit();
-                }
-            })
-            .catch((err: any) => {
-                console.error("[sync] Background history clear failed:", err);
-            });
+                })
+                .catch((err: any) => {
+                    console.error(
+                        "[sync] Background history clear failed:",
+                        err,
+                    );
+                });
+        }
     },
 
     // Watchlist / Favorites
@@ -207,25 +209,30 @@ export const localStore = {
                         localStorage.removeItem(key);
 
                         // Lazy cloud cleanup
-                        getAuthCurrentUser().then(async (currentUser) => {
-                            if (currentUser && key) {
-                                const { ensureFirebase, getFirebaseDb } =
-                                    await import("./firebase");
-                                await ensureFirebase();
-                                const db = getFirebaseDb();
-                                const { doc, deleteDoc } =
-                                    await import("firebase/firestore");
-                                const cleanKey = key.replace("kixo_ep__", "");
-                                const docRef = doc(
-                                    db,
-                                    "users",
-                                    currentUser.uid,
-                                    "watched_episodes",
-                                    encodeURIComponent(cleanKey),
-                                );
-                                deleteDoc(docRef).catch(() => {});
-                            }
-                        });
+                        const uid = _currentUid;
+                        if (uid) {
+                            const capturedKey = key;
+                            import("./firebase").then(
+                                async ({ ensureFirebase, getFirebaseDb }) => {
+                                    await ensureFirebase();
+                                    const db = getFirebaseDb();
+                                    const { doc, deleteDoc } =
+                                        await import("firebase/firestore");
+                                    const cleanKey = capturedKey.replace(
+                                        "kixo_ep__",
+                                        "",
+                                    );
+                                    const docRef = doc(
+                                        db,
+                                        "users",
+                                        uid,
+                                        "watched_episodes",
+                                        encodeURIComponent(cleanKey),
+                                    );
+                                    deleteDoc(docRef).catch(() => {});
+                                },
+                            );
+                        }
                     }
                 }
             } else {
@@ -235,17 +242,13 @@ export const localStore = {
 
             localStorage.setItem("kixo_watchlist", JSON.stringify(updated));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncWatchlistItemToCloud } = await import("./sync");
-                    syncWatchlistItemToCloud(
-                        currentUser.uid,
-                        item,
-                        exists,
-                    ).catch(() => {});
-                }
-            });
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncWatchlistItemToCloud }) => {
+                    syncWatchlistItemToCloud(uid, item, exists).catch(() => {});
+                });
+            }
             return added;
         } catch {
             return false;
@@ -303,16 +306,13 @@ export const localStore = {
             }
             localStorage.setItem("kixo_watchlist", JSON.stringify(updated));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncWatchlistItemToCloud } = await import("./sync");
-                    syncWatchlistItemToCloud(
-                        currentUser.uid,
-                        updatedItem,
-                    ).catch(() => {});
-                }
-            });
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncWatchlistItemToCloud }) => {
+                    syncWatchlistItemToCloud(uid, updatedItem).catch(() => {});
+                });
+            }
         } catch (e) {
             console.error("Failed to update episode bookmark", e);
         }
@@ -343,19 +343,18 @@ export const localStore = {
             const epsArr = Array.from(existing);
             localStorage.setItem(key, JSON.stringify(epsArr));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncWatchedEpisodesToCloud } =
-                        await import("./sync");
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
                     syncWatchedEpisodesToCloud(
-                        currentUser.uid,
+                        uid,
                         detailPath,
                         season,
                         epsArr,
                     ).catch(() => {});
-                }
-            });
+                });
+            }
         } catch {}
     },
 
@@ -372,19 +371,18 @@ export const localStore = {
             const epsArr = Array.from(existing);
             localStorage.setItem(key, JSON.stringify(epsArr));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncWatchedEpisodesToCloud } =
-                        await import("./sync");
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
                     syncWatchedEpisodesToCloud(
-                        currentUser.uid,
+                        uid,
                         detailPath,
                         season,
                         epsArr,
                     ).catch(() => {});
-                }
-            });
+                });
+            }
         } catch {}
     },
 
@@ -399,19 +397,18 @@ export const localStore = {
             const eps = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
             localStorage.setItem(key, JSON.stringify(eps));
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { syncWatchedEpisodesToCloud } =
-                        await import("./sync");
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
                     syncWatchedEpisodesToCloud(
-                        currentUser.uid,
+                        uid,
                         detailPath,
                         season,
                         eps,
                     ).catch(() => {});
-                }
-            });
+                });
+            }
         } catch {}
     },
 
@@ -421,26 +418,27 @@ export const localStore = {
             const key = `kixo_ep__${detailPath}__s${season}`;
             localStorage.removeItem(key);
 
-            // Background Cloud Sync (lazy)
-            getAuthCurrentUser().then(async (currentUser) => {
-                if (currentUser) {
-                    const { ensureFirebase, getFirebaseDb } =
-                        await import("./firebase");
-                    await ensureFirebase();
-                    const db = getFirebaseDb();
-                    const { doc, deleteDoc } =
-                        await import("firebase/firestore");
-                    const cleanKey = `${detailPath}__s${season}`;
-                    const docRef = doc(
-                        db,
-                        "users",
-                        currentUser.uid,
-                        "watched_episodes",
-                        encodeURIComponent(cleanKey),
-                    );
-                    deleteDoc(docRef).catch(() => {});
-                }
-            });
+            // Background Cloud Sync
+            const uid = _currentUid;
+            if (uid) {
+                import("./firebase").then(
+                    async ({ ensureFirebase, getFirebaseDb }) => {
+                        await ensureFirebase();
+                        const db = getFirebaseDb();
+                        const { doc, deleteDoc } =
+                            await import("firebase/firestore");
+                        const cleanKey = `${detailPath}__s${season}`;
+                        const docRef = doc(
+                            db,
+                            "users",
+                            uid,
+                            "watched_episodes",
+                            encodeURIComponent(cleanKey),
+                        );
+                        deleteDoc(docRef).catch(() => {});
+                    },
+                );
+            }
         } catch {}
     },
 };
