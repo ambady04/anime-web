@@ -599,13 +599,13 @@ export default function WatchClient({
 
                                 {/* Season Progress Bar */}
                                 <div className="space-y-1.5">
-                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-foreground/50">
+                                    <div className="flex items-center justify-between text-[9px] font-bold tracking-wider text-zinc-500 uppercase">
                                         <span>Season Progress</span>
-                                        <span className="text-emerald-400">{watchedCount} / {totalEpisodes} Watched ({seasonProgressPercent}%)</span>
+                                        <span className="text-emerald-400 font-extrabold">{watchedCount} / {totalEpisodes} Watched ({seasonProgressPercent}%)</span>
                                     </div>
-                                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                                    <div className="w-full h-1.5 bg-zinc-950/80 rounded-full overflow-hidden border border-zinc-800/40">
                                         <div
-                                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500 shadow-lg shadow-emerald-500/20"
+                                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
                                             style={{ width: `${seasonProgressPercent}%` }}
                                         />
                                     </div>
@@ -617,8 +617,8 @@ export default function WatchClient({
                                         onClick={toggleActiveEpisodeWatched}
                                         className={`flex-1 border py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black ${
                                             watchedEpisodes.has(activeEpisode)
-                                                ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50"
-                                                : "bg-white/[0.02] border-white/5 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-400"
+                                                ? "bg-emerald-950/20 border-emerald-800/30 text-emerald-400 hover:bg-emerald-950/30 hover:border-emerald-800/50"
+                                                : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:bg-zinc-850 hover:text-white"
                                         }`}
                                     >
                                         <Check className="w-2.5 h-2.5" />
@@ -630,7 +630,7 @@ export default function WatchClient({
                                     </button>
                                     <button
                                         onClick={handleClearSeasonWatched}
-                                        className="flex-1 bg-white/[0.02] border border-white/5 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400 py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black"
+                                        className="flex-1 bg-zinc-900/60 border border-zinc-800 text-zinc-400 hover:bg-red-950/25 hover:border-red-800/30 hover:text-red-400 py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black"
                                     >
                                         <RotateCcw className="w-2.5 h-2.5" />
                                         <span>Clear Progress</span>
@@ -664,7 +664,7 @@ export default function WatchClient({
                                                     h.season === selectedSeason &&
                                                     h.episode === epNum
                                             );
-                                            const hasProgress = epHistory && epHistory.progress > 5 && epHistory.progress < 90;
+                                            const hasProgress = !isActive && epHistory && epHistory.progress > 5 && epHistory.progress < 90;
                                             const progressPercent = epHistory ? epHistory.progress : 0;
 
                                             return (
@@ -678,12 +678,12 @@ export default function WatchClient({
                                                         loadingEpisode === epNum
                                                             ? "bg-primary/50 text-white border-primary/30 animate-pulse scale-105"
                                                             : isActive
-                                                              ? "bg-gradient-to-br from-primary to-primary/80 text-white border-primary/20 shadow-lg shadow-primary-glow/20 scale-105 font-black"
+                                                              ? "bg-gradient-to-br from-primary to-primary/80 text-white border-primary/20 shadow-md shadow-primary-glow/10 scale-105 font-bold"
                                                               : isWatched
-                                                                ? "bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 text-emerald-400 border-emerald-500/30 hover:from-emerald-500/25 hover:to-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/50 hover:scale-105 shadow-sm"
+                                                                ? "bg-emerald-950/20 text-emerald-400 border-emerald-900/30 hover:bg-emerald-950/40 hover:text-emerald-300 hover:border-emerald-700/50"
                                                                 : isFiller
-                                                                  ? "bg-gradient-to-br from-blue-500/15 to-blue-500/5 text-blue-400 border-blue-500/30 hover:from-blue-500/25 hover:to-blue-500/10 hover:text-blue-300 hover:border-blue-500/50 hover:scale-105 shadow-sm"
-                                                                  : "bg-white/[0.02] border-white/5 text-foreground/50 hover:bg-white/[0.08] hover:border-white/15 hover:text-foreground hover:scale-105"
+                                                                  ? "bg-blue-950/20 text-blue-400 border-blue-900/30 hover:bg-blue-950/40 hover:text-blue-300 hover:border-blue-700/50"
+                                                                  : "bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
                                                     }`}
                                                 >
                                                     {loadingEpisode === epNum ? (
@@ -691,14 +691,17 @@ export default function WatchClient({
                                                     ) : (
                                                         epNum
                                                     )}
-                                                    {/* Small dot indicator for watched episodes */}
-                                                    {isWatched && loadingEpisode !== epNum && (
-                                                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-md shadow-emerald-400/50 animate-pulse z-10" />
+                                                    
+                                                    {/* Small check indicator for watched episodes (only when not active) */}
+                                                    {isWatched && !isActive && loadingEpisode !== epNum && (
+                                                        <span className="absolute top-1 right-1 text-[8px] text-emerald-400 font-extrabold leading-none">✓</span>
                                                     )}
+
                                                     {/* Small dot indicator for filler episodes (only if not watched) */}
                                                     {!isWatched && isFiller && loadingEpisode !== epNum && (
                                                         <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-400 z-10" />
                                                     )}
+
                                                     {/* Partial progress bar */}
                                                     {hasProgress && (
                                                         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/5 overflow-hidden">
