@@ -306,13 +306,26 @@ export default function VideoPlayer({
         setPlayerError(false);
         setAutoRetryLabel("");
 
-        // Check history to resume
+        // Check history to resume from last position
         const history = localStore.getHistory();
-        let currentHistoryItem = history.find(
-            (h) => h.detailPath === (seriesDetailPath || detailPath),
-        );
+        let currentHistoryItem: (typeof history)[number] | undefined;
 
-        // Fallback: If not found, find by title/season/episode to support audio track swaps
+        if (isSeries && season && episode) {
+            // For series: match by detailPath AND season/episode to avoid resuming wrong episode
+            currentHistoryItem = history.find(
+                (h) =>
+                    h.detailPath === (seriesDetailPath || detailPath) &&
+                    h.season === season &&
+                    h.episode === episode,
+            );
+        } else {
+            // For movies: match by detailPath
+            currentHistoryItem = history.find(
+                (h) => h.detailPath === (seriesDetailPath || detailPath),
+            );
+        }
+
+        // Fallback: find by title/season/episode to support audio track swaps
         if (!currentHistoryItem) {
             currentHistoryItem = history.find(
                 (h) =>
@@ -615,15 +628,6 @@ export default function VideoPlayer({
             videoRef.current.play().catch(() => {});
             setIsPlaying(true);
         }
-    };
-
-    // Seek bar scrubber scrubbing
-    const handleScrubberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!videoRef.current) return;
-        const seekTime = Number(e.target.value);
-        videoRef.current.currentTime = seekTime;
-        setCurrentTime(seekTime);
-        triggerControlsVisibility();
     };
 
     // Mute volume toggle

@@ -19,8 +19,6 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
     let errorMsg = "";
 
     try {
-        // Fetch details and stream in parallel to reduce waterfall latency
-        const isFetchingStream = true;
         const detailsPromise = movieApi.getDetails(path);
 
         details = await detailsPromise;
