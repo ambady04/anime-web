@@ -1378,21 +1378,132 @@ export default function VideoPlayer({
                             </span>
 
                             {/* Custom progress bar with buffer indicator */}
-                            <div className="grow relative group/scrub">
-                                {/* Clickable/draggable range input (invisible, on top) */}
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max={duration || 100}
-                                    value={currentTime}
-                                    onChange={handleScrubberChange}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                                />
+                            <div
+                                className="grow relative h-4 flex items-center cursor-pointer group/scrub select-none"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!videoRef.current || !duration) return;
+                                    const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    const percent = Math.max(
+                                        0,
+                                        Math.min(x / rect.width, 1),
+                                    );
+                                    const seekTime = percent * duration;
+                                    videoRef.current.currentTime = seekTime;
+                                    setCurrentTime(seekTime);
+                                    triggerControlsVisibility();
+                                    // Ensure video keeps playing after seek
+                                    if (!videoRef.current.paused) {
+                                        videoRef.current.play().catch(() => {});
+                                    }
+                                }}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const track = e.currentTarget;
+                                    const seek = (ev: MouseEvent) => {
+                                        if (!videoRef.current || !duration)
+                                            return;
+                                        const rect =
+                                            track.getBoundingClientRect();
+                                        const x = Math.max(
+                                            0,
+                                            Math.min(
+                                                ev.clientX - rect.left,
+                                                rect.width,
+                                            ),
+                                        );
+                                        const percent = x / rect.width;
+                                        const seekTime = percent * duration;
+                                        videoRef.current.currentTime = seekTime;
+                                        setCurrentTime(seekTime);
+                                    };
+                                    const onUp = () => {
+                                        document.removeEventListener(
+                                            "mousemove",
+                                            seek,
+                                        );
+                                        document.removeEventListener(
+                                            "mouseup",
+                                            onUp,
+                                        );
+                                        // Resume playback after drag seek
+                                        if (
+                                            videoRef.current &&
+                                            !videoRef.current.paused
+                                        ) {
+                                            videoRef.current
+                                                .play()
+                                                .catch(() => {});
+                                        }
+                                    };
+                                    document.addEventListener(
+                                        "mousemove",
+                                        seek,
+                                    );
+                                    document.addEventListener("mouseup", onUp);
+                                }}
+                                onTouchStart={(e) => {
+                                    e.stopPropagation();
+                                    const track = e.currentTarget;
+                                    const seek = (ev: TouchEvent) => {
+                                        if (
+                                            !videoRef.current ||
+                                            !duration ||
+                                            !ev.touches[0]
+                                        )
+                                            return;
+                                        const rect =
+                                            track.getBoundingClientRect();
+                                        const x = Math.max(
+                                            0,
+                                            Math.min(
+                                                ev.touches[0].clientX -
+                                                    rect.left,
+                                                rect.width,
+                                            ),
+                                        );
+                                        const percent = x / rect.width;
+                                        const seekTime = percent * duration;
+                                        videoRef.current.currentTime = seekTime;
+                                        setCurrentTime(seekTime);
+                                    };
+                                    const onEnd = () => {
+                                        document.removeEventListener(
+                                            "touchmove",
+                                            seek,
+                                        );
+                                        document.removeEventListener(
+                                            "touchend",
+                                            onEnd,
+                                        );
+                                        // Resume playback after touch seek
+                                        if (
+                                            videoRef.current &&
+                                            !videoRef.current.paused
+                                        ) {
+                                            videoRef.current
+                                                .play()
+                                                .catch(() => {});
+                                        }
+                                    };
+                                    document.addEventListener(
+                                        "touchmove",
+                                        seek,
+                                    );
+                                    document.addEventListener(
+                                        "touchend",
+                                        onEnd,
+                                    );
+                                }}
+                            >
                                 {/* Visual track */}
-                                <div className="relative w-full h-1 group-hover/scrub:h-1.5 transition-all rounded-full bg-white/20 overflow-hidden">
+                                <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
                                     {/* Buffered range (light grey) */}
                                     <div
-                                        className="absolute top-0 left-0 h-full bg-white/30 rounded-full transition-all duration-300"
+                                        className="absolute top-0 left-0 h-full bg-white/25 rounded-full"
                                         style={{
                                             width:
                                                 duration > 0
@@ -1413,11 +1524,11 @@ export default function VideoPlayer({
                                 </div>
                                 {/* Scrub thumb indicator */}
                                 <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg shadow-primary-glow/30 opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
+                                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-primary rounded-full shadow-lg opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
                                     style={{
                                         left:
                                             duration > 0
-                                                ? `calc(${(currentTime / duration) * 100}% - 6px)`
+                                                ? `calc(${(currentTime / duration) * 100}% - 7px)`
                                                 : "0px",
                                     }}
                                 />
