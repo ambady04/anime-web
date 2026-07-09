@@ -84,30 +84,7 @@ export function getGoogleProvider(): GoogleAuthProviderType {
     return _googleProvider;
 }
 
-// Legacy exports for backward compatibility — these are synchronous getters
-// that work ONLY after ensureFirebase() has resolved.
-// Components using these MUST call ensureFirebase() in useEffect first.
-Object.defineProperty(exports, "auth", {
-    get: () => _auth,
-    enumerable: true,
-});
-
-Object.defineProperty(exports, "db", {
-    get: () => _db,
-    enumerable: true,
-});
-
-Object.defineProperty(exports, "googleProvider", {
-    get: () => _googleProvider,
-    enumerable: true,
-});
-
-Object.defineProperty(exports, "app", {
-    get: () => _app,
-    enumerable: true,
-});
-
-// Type exports for legacy code
+// Type exports for consumers
 export type { FirebaseApp } from "firebase/app";
 export type { Auth } from "firebase/auth";
 export type { Firestore } from "firebase/firestore";
