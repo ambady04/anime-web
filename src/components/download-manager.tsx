@@ -34,7 +34,7 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
     const activeTasksCount = tasks.filter((t) => t.status === "downloading").length;
 
     return (
-        <div className="absolute right-0 mt-2.5 w-80 sm:w-96 rounded-2xl border border-glass-border bg-zinc-950/80 backdrop-blur-md shadow-2xl z-50 overflow-hidden flex flex-col max-h-[420px]">
+        <div className="absolute right-0 top-full mt-5 w-80 sm:w-96 rounded-2xl border border-glass-border bg-zinc-950/80 backdrop-blur-md shadow-2xl z-50 overflow-hidden flex flex-col max-h-[420px]">
             {/* Header */}
             <div className="px-4 py-3 border-b border-glass-border flex items-center justify-between bg-white/2 shrink-0">
                 <div className="flex items-center space-x-2">
@@ -82,7 +82,7 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
                                         <p className="text-xs font-bold text-foreground line-clamp-1 pr-6 group-hover:text-primary transition-colors">
                                             {task.filename}
                                         </p>
-                                        
+
                                         {/* Status Message */}
                                         <div className="flex items-center gap-1.5 text-[10px] text-foreground/50">
                                             {isDownloading && (
@@ -158,15 +158,14 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
                                 {(isDownloading || isCompleted) && (
                                     <div className="mt-2.5 w-full h-1 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
                                         <div
-                                            className={`h-full rounded-full transition-all duration-300 ${
-                                                isCompleted ? "bg-emerald-500" : "bg-primary"
-                                            } ${isDownloading && !hasDeterminateProgress ? "animate-pulse w-full" : ""}`}
+                                            className={`h-full rounded-full transition-all duration-300 ${isCompleted ? "bg-emerald-500" : "bg-primary"
+                                                } ${isDownloading && !hasDeterminateProgress ? "animate-pulse w-full" : ""}`}
                                             style={{
                                                 width: isCompleted
                                                     ? "100%"
                                                     : hasDeterminateProgress
-                                                    ? `${task.progress}%`
-                                                    : "100%"
+                                                        ? `${task.progress}%`
+                                                        : "100%"
                                             }}
                                         />
                                     </div>

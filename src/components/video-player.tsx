@@ -137,7 +137,7 @@ export default function VideoPlayer({
 
     useEffect(() => {
         if (!isSeries || !episode) return;
-        
+
         let active = true;
         const fetchSkipTimes = async () => {
             try {
@@ -167,7 +167,7 @@ export default function VideoPlayer({
                 // 2. Get Skip times from AniSkip API
                 const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
                 const skipRes = await fetch(skipUrl);
-                if (!skipRes.ok) throw new Error("AniSkip failed");
+                if (!skipRes.ok) return; // AniSkip unavailable for this episode - skip silently
                 const skipData = await skipRes.json();
 
                 if (skipData.found) {
@@ -232,16 +232,16 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
-    // Track URLs that failed via proxy — used to decide when to try direct
+    // Track URLs that failed via proxy â€” used to decide when to try direct
     const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
-    // Stall watchdog timer — fires if video stays in "loading" for too long
+    // Stall watchdog timer â€” fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
 
-    // Build the video source URL — always use proxy stream mode.
+    // Build the video source URL â€” always use proxy stream mode.
     // Browsers cannot set custom Referer headers on <video> requests,
     // so direct CDN URLs fail for CDNs that validate referer.
     const buildVideoSrc = (url: string): string => {
@@ -288,7 +288,7 @@ export default function VideoPlayer({
             }
         }
 
-        // Convert SRT to WebVTT if subtitle exists — prefer English, fallback to first available
+        // Convert SRT to WebVTT if subtitle exists â€” prefer English, fallback to first available
         if (captions.length > 0) {
             const englishCaption = captions.find(
                 (c) =>
@@ -330,9 +330,9 @@ export default function VideoPlayer({
         if (typeof document !== "undefined") {
             setIsPiPSupported(
                 document.pictureInPictureEnabled ||
-                    (videoRef.current &&
-                        "requestPictureInPicture" in videoRef.current) ||
-                    false,
+                (videoRef.current &&
+                    "requestPictureInPicture" in videoRef.current) ||
+                false,
             );
         }
     }, []);
@@ -466,7 +466,7 @@ export default function VideoPlayer({
             setIsLoading(true);
             setActiveDownload(nextQuality);
         } else if (!useDirectUrl && sortedDownloads.length > 0) {
-            // All proxy attempts failed — try direct CDN URLs as fallback
+            // All proxy attempts failed â€” try direct CDN URLs as fallback
             // (bypasses proxy, may work if CDN doesn't check referer for browser requests)
             setAutoRetryLabel("Trying direct connection...");
             setIsLoading(true);
@@ -479,14 +479,14 @@ export default function VideoPlayer({
             setActiveDownload(null);
             setTimeout(() => setActiveDownload(best), 50);
         } else if (refreshCountRef.current < 2) {
-            // All local qualities exhausted (both proxy and direct) — try fetching fresh stream URLs
+            // All local qualities exhausted (both proxy and direct) â€” try fetching fresh stream URLs
             refreshCountRef.current += 1;
             setAutoRetryLabel("Fetching fresh stream links...");
             setIsLoading(true);
             setUseDirectUrl(false); // Reset to proxy mode for fresh URLs
             refreshStreamData();
         } else {
-            // Everything exhausted — show error screen
+            // Everything exhausted â€” show error screen
             console.error(
                 "Video player: all qualities, direct mode, and refreshes failed",
                 e,
@@ -544,7 +544,7 @@ export default function VideoPlayer({
         }
     };
 
-    // Stall watchdog — if isLoading stays true for 10 seconds, treat it as an error
+    // Stall watchdog â€” if isLoading stays true for 10 seconds, treat it as an error
     // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
     useEffect(() => {
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
@@ -685,7 +685,7 @@ export default function VideoPlayer({
             if (videoRef.current) {
                 videoRef.current.currentTime = currentPlayTime;
                 if (wasPlaying) {
-                    videoRef.current.play().catch(() => {});
+                    videoRef.current.play().catch(() => { });
                     setIsPlaying(true);
                 }
                 setIsLoading(false);
@@ -717,7 +717,7 @@ export default function VideoPlayer({
             videoRef.current.pause();
             setIsPlaying(false);
         } else {
-            videoRef.current.play().catch(() => {});
+            videoRef.current.play().catch(() => { });
             setIsPlaying(true);
         }
     };
@@ -753,7 +753,7 @@ export default function VideoPlayer({
         setShowSpeedMenu(false);
     };
 
-    // Fullscreen implementation
+    // Fullscreen implementation with landscape lock on mobile
     const toggleFullscreen = () => {
         if (!containerRef.current) return;
         if (!document.fullscreenElement) {
@@ -761,6 +761,14 @@ export default function VideoPlayer({
                 .requestFullscreen()
                 .then(() => {
                     setIsFullscreen(true);
+                    // Lock to landscape on mobile devices
+                    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+                        window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
+                    if (isMobileDevice && screen.orientation && (screen.orientation as any).lock) {
+                        (screen.orientation as any).lock("landscape").catch(() => {
+                            // Orientation lock not supported â€” silently ignore
+                        });
+                    }
                 })
                 .catch((err) => {
                     console.error("Fullscreen request failed:", err);
@@ -768,6 +776,10 @@ export default function VideoPlayer({
         } else {
             document.exitFullscreen();
             setIsFullscreen(false);
+            // Unlock orientation when leaving fullscreen
+            if (screen.orientation && (screen.orientation as any).unlock) {
+                try { (screen.orientation as any).unlock(); } catch (_) { }
+            }
         }
     };
 
@@ -807,7 +819,8 @@ export default function VideoPlayer({
             clickTarget.closest("button") ||
             clickTarget.closest("input") ||
             clickTarget.closest("select") ||
-            clickTarget.closest(".bg-zinc-950/80") ||
+            clickTarget.closest("[data-controls-panel]") ||
+            clickTarget.closest("[data-skip-zone]") ||
             clickTarget.closest(".absolute.bottom-14")
         ) {
             return;
@@ -926,7 +939,12 @@ export default function VideoPlayer({
     // Track fullscreen changes directly on document level (e.g. Escape key presses)
     useEffect(() => {
         const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
+            const isNowFullscreen = !!document.fullscreenElement;
+            setIsFullscreen(isNowFullscreen);
+            // Unlock orientation if exiting fullscreen (e.g. via Escape key)
+            if (!isNowFullscreen && screen.orientation && (screen.orientation as any).unlock) {
+                try { (screen.orientation as any).unlock(); } catch (_) { }
+            }
         };
         document.addEventListener("fullscreenchange", handleFullscreenChange);
         return () =>
@@ -1203,9 +1221,8 @@ export default function VideoPlayer({
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
             onClickCapture={handlePlayerClickCapture}
-            className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
-                isPlaying && !showControls ? "cursor-none" : ""
-            }`}
+            className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${isPlaying && !showControls ? "cursor-none" : ""
+                }`}
         >
             <style
                 dangerouslySetInnerHTML={{
@@ -1263,13 +1280,12 @@ export default function VideoPlayer({
                     ref={videoRef}
                     src={buildVideoSrc(activeDownload.url)}
                     onEnded={handleVideoEnded}
-                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
-                        aspectRatio === "contain"
+                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${aspectRatio === "contain"
                             ? "object-contain"
                             : aspectRatio === "fill"
-                              ? "object-fill"
-                              : "object-cover"
-                    }`}
+                                ? "object-fill"
+                                : "object-cover"
+                        }`}
                     onPlay={() => {
                         setIsPlaying(true);
                         setAutoRetryLabel("");
@@ -1304,7 +1320,7 @@ export default function VideoPlayer({
                         }
                     }}
                     onWaiting={() => {
-                        // Delay showing loader — avoids flash when seeking within buffer
+                        // Delay showing loader â€” avoids flash when seeking within buffer
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
@@ -1342,11 +1358,10 @@ export default function VideoPlayer({
             {/* Click Catcher Overlay */}
             {!playerError && (
                 <div
-                    className={`absolute inset-0 z-10 ${
-                        isPlaying && !showControls
+                    className={`absolute inset-0 z-10 ${isPlaying && !showControls
                             ? "cursor-none"
                             : "cursor-pointer"
-                    }`}
+                        }`}
                     onClick={handleScreenClick}
                     onDoubleClick={handleScreenDoubleClick}
                 />
@@ -1434,11 +1449,11 @@ export default function VideoPlayer({
                     </h3>
                     <p className="text-sm text-white/50 max-w-sm mb-6">
                         All available mirrors have been tried. This stream may
-                        be temporarily unavailable — please try again later.
+                        be temporarily unavailable â€” please try again later.
                     </p>
                     <button
                         onClick={() => {
-                            // Full reset — clear failed URLs, reset refresh count, restart from highest quality
+                            // Full reset â€” clear failed URLs, reset refresh count, restart from highest quality
                             failedUrlsRef.current = new Set();
                             proxyFailedUrlsRef.current = new Set();
                             refreshCountRef.current = 0;
@@ -1451,7 +1466,7 @@ export default function VideoPlayer({
                                 setActiveDownload(null);
                                 setTimeout(() => setActiveDownload(best), 50);
                             } else {
-                                // No downloads in current data — try fresh fetch
+                                // No downloads in current data â€” try fresh fetch
                                 refreshStreamData();
                             }
                         }}
@@ -1464,11 +1479,10 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
-                    showControls
+                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
-                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+                    } ${isPlaying && !showControls ? "cursor-none" : ""}`}
                 onClick={handleScreenClick}
                 onDoubleClick={handleScreenDoubleClick}
             >
@@ -1480,7 +1494,7 @@ export default function VideoPlayer({
                         </h2>
                         {isSeries && season && episode && (
                             <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                                Season {season} • Episode {episode}
+                                Season {season} â€¢ Episode {episode}
                             </p>
                         )}
                     </div>
@@ -1496,9 +1510,10 @@ export default function VideoPlayer({
                     </button>
                 )}
 
+
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
-                <div className="w-full max-w-6xl mx-auto px-4 pb-4 sm:px-6 sm:pb-6">
-                    <div className="bg-zinc-950/80 backdrop-blur-md border border-white/10 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4 transition-all duration-300 hover:border-white/15">
+                <div className="w-full max-w-6xl mx-auto px-2 pb-2 sm:px-6 sm:pb-6" data-controls-panel>
+                    <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-2xl space-y-2.5 sm:space-y-4 transition-all duration-300 hover:border-white/15">
                         {/* Timeline Seek Scrubber Track */}
                         <div className="flex items-center space-x-3">
                             <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">
@@ -1507,7 +1522,7 @@ export default function VideoPlayer({
 
                             {/* Custom progress bar with buffer indicator */}
                             <div
-                                className="grow relative h-4 flex items-center cursor-pointer group/scrub select-none"
+                                className="grow relative h-5 sm:h-4 flex items-center cursor-pointer group/scrub select-none"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (!videoRef.current || !duration) return;
@@ -1524,7 +1539,7 @@ export default function VideoPlayer({
                                     triggerControlsVisibility();
                                     // Ensure video keeps playing after seek
                                     if (!videoRef.current.paused) {
-                                        videoRef.current.play().catch(() => {});
+                                        videoRef.current.play().catch(() => { });
                                     }
                                 }}
                                 onMouseDown={(e) => {
@@ -1564,7 +1579,7 @@ export default function VideoPlayer({
                                         ) {
                                             videoRef.current
                                                 .play()
-                                                .catch(() => {});
+                                                .catch(() => { });
                                         }
                                     };
                                     document.addEventListener(
@@ -1589,7 +1604,7 @@ export default function VideoPlayer({
                                             0,
                                             Math.min(
                                                 ev.touches[0].clientX -
-                                                    rect.left,
+                                                rect.left,
                                                 rect.width,
                                             ),
                                         );
@@ -1614,7 +1629,7 @@ export default function VideoPlayer({
                                         ) {
                                             videoRef.current
                                                 .play()
-                                                .catch(() => {});
+                                                .catch(() => { });
                                         }
                                     };
                                     document.addEventListener(
@@ -1714,8 +1729,8 @@ export default function VideoPlayer({
                                     </button>
                                 )}
 
-                                {/* Volume Panel */}
-                                <div className="flex items-center space-x-2">
+                                {/* Volume Panel â€” hidden on mobile, shown sm+ */}
+                                <div className="hidden sm:flex items-center space-x-2">
                                     <button
                                         onClick={toggleMute}
                                         className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
@@ -1738,473 +1753,473 @@ export default function VideoPlayer({
                                         className="w-16 sm:w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all"
                                     />
                                 </div>
+                                {/* Mobile-only mute button */}
+                                <button
+                                    onClick={toggleMute}
+                                    className="sm:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                >
+                                    {isMuted || volume === 0 ? (
+                                        <VolumeX className="w-4 h-4 text-primary" />
+                                    ) : (
+                                        <Volume2 className="w-4 h-4" />
+                                    )}
+                                </button>
                             </div>
 
                             {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Screen Size, Fullscreen */}
-                            <div className="flex items-center space-x-2 sm:space-x-3 relative">
-                                {/* Subtitle Selector */}
-                                {captions.length > 0 && (
-                                    <div
-                                        ref={subtitleMenuRef}
-                                        className="relative"
-                                    >
+                            <div className="flex items-center space-x-1 sm:space-x-2 relative">
+
+                                {/* â”€â”€ SECONDARY CONTROLS (hidden on mobile, visible sm+) â”€â”€ */}
+                                <div className="hidden sm:flex items-center space-x-2 relative">
+
+                                    {/* Subtitle Selector */}
+                                    {captions.length > 0 && (
+                                        <div ref={subtitleMenuRef} className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    setShowSubtitleMenu(!showSubtitleMenu);
+                                                    setShowQualityMenu(false);
+                                                    setShowSpeedMenu(false);
+                                                    setShowAudioMenu(false);
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu || showSubtitles
+                                                        ? "text-primary bg-primary/10"
+                                                        : "text-white/70 hover:text-white"
+                                                    }`}
+                                                title="Subtitles"
+                                            >
+                                                <Subtitles className="w-4.5 h-4.5" />
+                                            </button>
+
+                                            {showSubtitleMenu && (
+                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                        Subtitles
+                                                    </p>
+                                                    <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                        <button
+                                                            onClick={() => handleSubtitleChange(null)}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"
+                                                                }`}
+                                                        >
+                                                            Off
+                                                        </button>
+                                                        {captions.map((caption) => (
+                                                            <button
+                                                                key={caption.id || caption.url}
+                                                                onClick={() => handleSubtitleChange(caption)}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id
+                                                                        ? "text-primary bg-primary/10"
+                                                                        : "text-white/80"
+                                                                    }`}
+                                                            >
+                                                                {caption.lanName}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                        Size
+                                                    </p>
+                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                                                        {["16px", "22px", "28px", "36px"].map((size, i) => (
+                                                            <button
+                                                                key={size}
+                                                                onClick={() => setSubtitleSize(size)}
+                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"
+                                                                    }`}
+                                                            >
+                                                                {["SM", "MD", "LG", "XL"][i]}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Audio/Dub selector */}
+                                    {dubs && dubs.length > 0 && (
+                                        <div ref={audioMenuRef} className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    setShowAudioMenu(!showAudioMenu);
+                                                    setShowQualityMenu(false);
+                                                    setShowSpeedMenu(false);
+                                                    setShowSubtitleMenu(false);
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
+                                                    }`}
+                                                title="Change Audio Track"
+                                            >
+                                                <Headphones className="w-4.5 h-4.5" />
+                                            </button>
+
+                                            {showAudioMenu && (
+                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                        Audio Track
+                                                    </p>
+                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                        {dubs.map((dub, idx) => {
+                                                            const isCurrent = detailPath === dub.detailPath;
+                                                            return (
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={() => {
+                                                                        setShowAudioMenu(false);
+                                                                        window.location.href = `/watch/${dub.detailPath}`;
+                                                                    }}
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isCurrent ? "text-primary bg-primary/10" : "text-white/80"
+                                                                        }`}
+                                                                >
+                                                                    {dub.lanName}{" "}{dub.original ? "(Original)" : ""}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Quality (desktop full pill) */}
+                                    <div ref={qualityMenuRef} className="relative">
                                         <button
                                             onClick={() => {
-                                                setShowSubtitleMenu(
-                                                    !showSubtitleMenu,
-                                                );
-                                                setShowQualityMenu(false);
+                                                setShowQualityMenu(!showQualityMenu);
                                                 setShowSpeedMenu(false);
                                                 setShowAudioMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                showSubtitleMenu ||
-                                                showSubtitles
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/70 hover:text-white"
-                                            }`}
-                                            title="Subtitles"
-                                        >
-                                            <Subtitles className="w-4.5 h-4.5" />
-                                        </button>
-
-                                        {showSubtitleMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                    Subtitles
-                                                </p>
-                                                <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                    <button
-                                                        onClick={() =>
-                                                            handleSubtitleChange(
-                                                                null,
-                                                            )
-                                                        }
-                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            !activeCaption
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/80"
-                                                        }`}
-                                                    >
-                                                        Off
-                                                    </button>
-                                                    {captions.map((caption) => (
-                                                        <button
-                                                            key={
-                                                                caption.id ||
-                                                                caption.url
-                                                            }
-                                                            onClick={() =>
-                                                                handleSubtitleChange(
-                                                                    caption,
-                                                                )
-                                                            }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                activeCaption?.id ===
-                                                                caption.id
-                                                                    ? "text-primary bg-primary/10"
-                                                                    : "text-white/80"
-                                                            }`}
-                                                        >
-                                                            {caption.lanName}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                    Size
-                                                </p>
-                                                <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                    <button
-                                                        onClick={() =>
-                                                            setSubtitleSize(
-                                                                "16px",
-                                                            )
-                                                        }
-                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize ===
-                                                            "16px"
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/60"
-                                                        }`}
-                                                    >
-                                                        SM
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            setSubtitleSize(
-                                                                "22px",
-                                                            )
-                                                        }
-                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize ===
-                                                            "22px"
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/60"
-                                                        }`}
-                                                    >
-                                                        MD
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            setSubtitleSize(
-                                                                "28px",
-                                                            )
-                                                        }
-                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize ===
-                                                            "28px"
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/60"
-                                                        }`}
-                                                    >
-                                                        LG
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            setSubtitleSize(
-                                                                "36px",
-                                                            )
-                                                        }
-                                                        className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                            subtitleSize ===
-                                                            "36px"
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/60"
-                                                        }`}
-                                                    >
-                                                        XL
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Audio/Dub selector popup */}
-                                {dubs && dubs.length > 0 && (
-                                    <div
-                                        ref={audioMenuRef}
-                                        className="relative"
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowAudioMenu(
-                                                    !showAudioMenu,
-                                                );
-                                                setShowQualityMenu(false);
-                                                setShowSpeedMenu(false);
                                                 setShowSubtitleMenu(false);
                                                 setShowRatioMenu(false);
                                             }}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                showAudioMenu
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/70 hover:text-white"
-                                            }`}
-                                            title="Change Audio Track"
+                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${showQualityMenu
+                                                    ? "bg-primary/20 text-primary-light border-primary/30"
+                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                                                }`}
                                         >
-                                            <Headphones className="w-4.5 h-4.5" />
+                                            <span>
+                                                {activeDownload
+                                                    ? isAutoQuality
+                                                        ? `Auto (${activeDownload.resolution}p)`
+                                                        : `${activeDownload.resolution}p`
+                                                    : "Auto"}
+                                            </span>
+                                            <Settings className="w-3.5 h-3.5" />
                                         </button>
 
-                                        {showAudioMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                    Audio Track
-                                                </p>
+                                        {showQualityMenu && sortedDownloads.length > 0 && (
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
                                                 <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                    {dubs.map((dub, idx) => {
-                                                        const isCurrent =
-                                                            detailPath ===
-                                                            dub.detailPath;
-                                                        return (
-                                                            <button
-                                                                key={idx}
-                                                                onClick={() => {
-                                                                    setShowAudioMenu(
-                                                                        false,
-                                                                    );
-                                                                    window.location.href = `/watch/${dub.detailPath}`;
-                                                                }}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                    isCurrent
-                                                                        ? "text-primary bg-primary/10"
-                                                                        : "text-white/80"
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsAutoQuality(true);
+                                                            setShowQualityMenu(false);
+                                                            const defaultQuality = sortedDownloads.find((d) => d.resolution === 720) || sortedDownloads.find((d) => d.resolution === 1080) || sortedDownloads[0];
+                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
+                                                                handleQualityChange(defaultQuality, true);
+                                                            }
+                                                        }}
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                    >
+                                                        Auto
+                                                    </button>
+                                                    {sortedDownloads.map((link) => (
+                                                        <button
+                                                            key={link.id}
+                                                            onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id === link.id ? "text-primary bg-primary/10" : "text-white/80"
                                                                 }`}
-                                                            >
-                                                                {dub.lanName}{" "}
-                                                                {dub.original
-                                                                    ? "(Original)"
-                                                                    : ""}
-                                                            </button>
-                                                        );
-                                                    })}
+                                                        >
+                                                            {link.resolution}p
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
                                         )}
                                     </div>
-                                )}
 
-                                {/* Quality Settings Dial Selector */}
-                                <div ref={qualityMenuRef} className="relative">
-                                    <button
-                                        onClick={() => {
-                                            setShowQualityMenu(
-                                                !showQualityMenu,
-                                            );
-                                            setShowSpeedMenu(false);
-                                            setShowAudioMenu(false);
-                                            setShowSubtitleMenu(false);
-                                            setShowRatioMenu(false);
-                                        }}
-                                        className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                                            showQualityMenu
-                                                ? "bg-primary/20 text-primary-light border-primary/30"
-                                                : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
-                                        }`}
-                                    >
-                                        <span>
-                                            {activeDownload
-                                                ? isAutoQuality
-                                                    ? `Auto (${activeDownload.resolution}p)`
-                                                    : `${activeDownload.resolution}p`
-                                                : "Auto"}
-                                        </span>
-                                        <Settings className="w-3.5 h-3.5" />
-                                    </button>
+                                    {/* Speed */}
+                                    <div ref={speedMenuRef} className="relative">
+                                        <button
+                                            onClick={() => {
+                                                setShowSpeedMenu(!showSpeedMenu);
+                                                setShowQualityMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowSubtitleMenu(false);
+                                                setShowRatioMenu(false);
+                                            }}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${showSpeedMenu ? "text-primary bg-primary/10" : "text-white/80 hover:text-white"
+                                                }`}
+                                        >
+                                            {playbackRate}x
+                                        </button>
 
-                                    {showQualityMenu &&
-                                        sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                    Quality
-                                                </p>
-                                                <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                        {showSpeedMenu && (
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Speed</p>
+                                                {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                                                    <button
+                                                        key={rate}
+                                                        onClick={() => handleSpeedChange(rate)}
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${playbackRate === rate ? "text-primary bg-primary/10" : "text-white/80"
+                                                            }`}
+                                                    >
+                                                        {rate.toFixed(1)}x
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Aspect Ratio */}
+                                    <div ref={ratioMenuRef} className="relative">
+                                        <button
+                                            onClick={() => {
+                                                setShowRatioMenu(!showRatioMenu);
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowSubtitleMenu(false);
+                                            }}
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
+                                                }`}
+                                            title="Aspect Ratio"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+                                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                                <path d="M 9 15 L 15 9" />
+                                                <path d="M 12 9 L 15 9 L 15 12" />
+                                                <path d="M 12 15 L 9 15 L 9 12" />
+                                            </svg>
+                                        </button>
+
+                                        {showRatioMenu && (
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen Size</p>
+                                                {[
+                                                    { value: "contain" as const, label: "Fit Screen" },
+                                                    { value: "fill" as const, label: "Stretch Screen" },
+                                                    { value: "cover" as const, label: "Zoom / Fill" },
+                                                ].map(({ value, label }) => (
+                                                    <button
+                                                        key={value}
+                                                        onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }}
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"
+                                                            }`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* PiP (desktop only) */}
+                                    {isPiPSupported && (
+                                        <button
+                                            onClick={togglePiP}
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${isPiPActive ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
+                                                }`}
+                                            title="Picture-in-Picture"
+                                        >
+                                            <PictureInPicture2 className="w-4.5 h-4.5" />
+                                        </button>
+                                    )}
+                                </div>
+                                {/* ── MOBILE-ONLY: compact icon controls ── */}
+                                <div className="sm:hidden flex items-center space-x-0.5">
+
+                                    {/* Subtitle (mobile icon) */}
+                                    {captions.length > 0 && (
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    setShowSubtitleMenu(!showSubtitleMenu);
+                                                    setShowQualityMenu(false);
+                                                    setShowSpeedMenu(false);
+                                                    setShowAudioMenu(false);
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showSubtitleMenu || showSubtitles
+                                                        ? "text-primary bg-primary/10"
+                                                        : "text-white/60 hover:text-white hover:bg-white/10"
+                                                    }`}
+                                                title="Subtitles"
+                                            >
+                                                <Subtitles className="w-4 h-4" />
+                                            </button>
+                                            {showSubtitleMenu && (
+                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Subtitles</p>
+                                                    <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                        <button
+                                                            onClick={() => handleSubtitleChange(null)}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                        >
+                                                            Off
+                                                        </button>
+                                                        {captions.map((caption) => (
+                                                            <button
+                                                                key={caption.id || caption.url}
+                                                                onClick={() => handleSubtitleChange(caption)}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id ? "text-primary bg-primary/10" : "text-white/80"
+                                                                    }`}
+                                                            >
+                                                                {caption.lanName}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                    <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">Size</p>
+                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                                                        {["16px", "22px", "28px", "36px"].map((size, i) => (
+                                                            <button
+                                                                key={size}
+                                                                onClick={() => setSubtitleSize(size)}
+                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
+                                                            >
+                                                                {["SM", "MD", "LG", "XL"][i]}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Audio/Dub (mobile icon) */}
+                                    {dubs && dubs.length > 0 && (
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    setShowAudioMenu(!showAudioMenu);
+                                                    setShowQualityMenu(false);
+                                                    setShowSpeedMenu(false);
+                                                    setShowSubtitleMenu(false);
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"
+                                                    }`}
+                                                title="Audio Track"
+                                            >
+                                                <Headphones className="w-4 h-4" />
+                                            </button>
+                                            {showAudioMenu && (
+                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Audio Track</p>
+                                                    <div className="max-h-[160px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                        {dubs.map((dub, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() => { setShowAudioMenu(false); window.location.href = `/watch/${dub.detailPath}`; }}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${detailPath === dub.detailPath ? "text-primary bg-primary/10" : "text-white/80"
+                                                                    }`}
+                                                            >
+                                                                {dub.lanName}{dub.original ? " (Orig)" : ""}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Aspect Ratio (mobile icon) */}
+                                    <div className="relative">
+                                        <button
+                                            onClick={() => {
+                                                setShowRatioMenu(!showRatioMenu);
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowSubtitleMenu(false);
+                                            }}
+                                            className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"
+                                                }`}
+                                            title="Aspect Ratio"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                                                <rect x="3" y="5" width="18" height="14" rx="2" />
+                                                <path d="M 9 15 L 15 9" /><path d="M 12 9 L 15 9 L 15 12" /><path d="M 12 15 L 9 15 L 9 12" />
+                                            </svg>
+                                        </button>
+                                        {showRatioMenu && (
+                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[120px] flex flex-col space-y-0.5 z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen Size</p>
+                                                {[
+                                                    { value: "contain" as const, label: "Fit Screen" },
+                                                    { value: "fill" as const, label: "Stretch" },
+                                                    { value: "cover" as const, label: "Zoom / Fill" },
+                                                ].map(({ value, label }) => (
+                                                    <button
+                                                        key={value}
+                                                        onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }}
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quality compact badge (mobile) */}
+                                    <div className="relative" ref={qualityMenuRef}>
+                                        <button
+                                            onClick={() => {
+                                                setShowQualityMenu(!showQualityMenu);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowSubtitleMenu(false);
+                                                setShowRatioMenu(false);
+                                            }}
+                                            className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${showQualityMenu
+                                                    ? "bg-primary/20 text-primary-light border-primary/30"
+                                                    : "bg-white/5 border-white/10 text-white/80"
+                                                }`}
+                                        >
+                                            {activeDownload ? `${activeDownload.resolution}p` : "Auto"}
+                                        </button>
+                                        {showQualityMenu && sortedDownloads.length > 0 && (
+                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
+                                                <div className="max-h-[150px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
                                                     <button
                                                         onClick={() => {
-                                                            setIsAutoQuality(
-                                                                true,
-                                                            );
-                                                            setShowQualityMenu(
-                                                                false,
-                                                            );
-                                                            const defaultQuality =
-                                                                sortedDownloads.find(
-                                                                    (d) =>
-                                                                        d.resolution ===
-                                                                        720,
-                                                                ) ||
-                                                                sortedDownloads.find(
-                                                                    (d) =>
-                                                                        d.resolution ===
-                                                                        1080,
-                                                                ) ||
-                                                                sortedDownloads[0];
-                                                            if (
-                                                                defaultQuality &&
-                                                                activeDownload?.id !==
-                                                                    defaultQuality.id
-                                                            ) {
-                                                                handleQualityChange(
-                                                                    defaultQuality,
-                                                                    true,
-                                                                );
-                                                            }
+                                                            setIsAutoQuality(true);
+                                                            setShowQualityMenu(false);
+                                                            const defaultQuality = sortedDownloads.find((d) => d.resolution === 720) || sortedDownloads[0];
+                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) handleQualityChange(defaultQuality, true);
                                                         }}
-                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            isAutoQuality
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/80"
-                                                        }`}
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
                                                     >
                                                         Auto
                                                     </button>
-                                                    {sortedDownloads.map(
-                                                        (link) => (
-                                                            <button
-                                                                key={link.id}
-                                                                onClick={() => {
-                                                                    handleQualityChange(
-                                                                        link,
-                                                                    );
-                                                                    setShowQualityMenu(
-                                                                        false,
-                                                                    );
-                                                                }}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                    !isAutoQuality &&
-                                                                    activeDownload?.id ===
-                                                                        link.id
-                                                                        ? "text-primary bg-primary/10"
-                                                                        : "text-white/80"
+                                                    {sortedDownloads.map((link) => (
+                                                        <button
+                                                            key={link.id}
+                                                            onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id === link.id ? "text-primary bg-primary/10" : "text-white/80"
                                                                 }`}
-                                                            >
-                                                                {
-                                                                    link.resolution
-                                                                }
-                                                                p
-                                                            </button>
-                                                        ),
-                                                    )}
+                                                        >
+                                                            {link.resolution}p
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
                                 </div>
 
-                                {/* Speed Settings Dial Selector */}
-                                <div ref={speedMenuRef} className="relative">
-                                    <button
-                                        onClick={() => {
-                                            setShowSpeedMenu(!showSpeedMenu);
-                                            setShowQualityMenu(false);
-                                            setShowAudioMenu(false);
-                                            setShowSubtitleMenu(false);
-                                            setShowRatioMenu(false);
-                                        }}
-                                        className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
-                                            showSpeedMenu
-                                                ? "text-primary bg-primary/10"
-                                                : "text-white/80 hover:text-white"
-                                        }`}
-                                    >
-                                        {playbackRate}x
-                                    </button>
-
-                                    {showSpeedMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                Speed
-                                            </p>
-                                            {[
-                                                0.5, 0.75, 1.0, 1.25, 1.5, 2.0,
-                                            ].map((rate) => (
-                                                <button
-                                                    key={rate}
-                                                    onClick={() =>
-                                                        handleSpeedChange(rate)
-                                                    }
-                                                    className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                        playbackRate === rate
-                                                            ? "text-primary bg-primary/10"
-                                                            : "text-white/80"
-                                                    }`}
-                                                >
-                                                    {rate.toFixed(1)}x
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Aspect Ratio Settings Dial Selector */}
-                                <div ref={ratioMenuRef} className="relative">
-                                    <button
-                                        onClick={() => {
-                                            setShowRatioMenu(!showRatioMenu);
-                                            setShowQualityMenu(false);
-                                            setShowSpeedMenu(false);
-                                            setShowAudioMenu(false);
-                                            setShowSubtitleMenu(false);
-                                        }}
-                                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                            showRatioMenu
-                                                ? "text-primary bg-primary/10"
-                                                : "text-white/70 hover:text-white"
-                                        }`}
-                                        title="Aspect Ratio"
-                                    >
-                                        <svg
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            className="w-4.5 h-4.5"
-                                        >
-                                            {/* Outer screen frame */}
-                                            <rect
-                                                x="3"
-                                                y="5"
-                                                width="18"
-                                                height="14"
-                                                rx="2"
-                                            />
-                                            {/* Diagonal scale arrows */}
-                                            <path d="M 9 15 L 15 9" />
-                                            <path d="M 12 9 L 15 9 L 15 12" />
-                                            <path d="M 12 15 L 9 15 L 9 12" />
-                                        </svg>
-                                    </button>
-
-                                    {showRatioMenu && (
-                                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                Screen Size
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    setAspectRatio("contain");
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                    aspectRatio === "contain"
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/80"
-                                                }`}
-                                            >
-                                                Fit Screen
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setAspectRatio("fill");
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                    aspectRatio === "fill"
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/80"
-                                                }`}
-                                            >
-                                                Stretch Screen
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setAspectRatio("cover");
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                    aspectRatio === "cover"
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/80"
-                                                }`}
-                                            >
-                                                Zoom / Fill
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Picture-in-Picture Trigger */}
-                                {isPiPSupported && (
-                                    <button
-                                        onClick={togglePiP}
-                                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                            isPiPActive
-                                                ? "text-primary bg-primary/10"
-                                                : "text-white/70 hover:text-white"
-                                        }`}
-                                        title="Picture-in-Picture"
-                                    >
-                                        <PictureInPicture2 className="w-4.5 h-4.5" />
-                                    </button>
-                                )}
-
-                                {/* Fullscreen Trigger */}
+                                {/* Fullscreen (always visible) */}
                                 <button
                                     onClick={toggleFullscreen}
                                     className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
                                 >
                                     {isFullscreen ? (
                                         <Minimize className="w-4.5 h-4.5" />

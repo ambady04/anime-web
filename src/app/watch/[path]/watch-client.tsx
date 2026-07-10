@@ -515,7 +515,7 @@ export default function WatchClient({
                 {/* ══ LEFT — Video Player + Info ══ */}
                 <div className="flex-1 min-w-0 space-y-4">
                     {/* Video Player */}
-                    <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-card border border-glass-border relative bg-black">
+                    <div className="w-full aspect-video min-h-[200px] rounded-2xl overflow-hidden shadow-card border border-glass-border relative bg-black">
                         <VideoPlayer
                             key={`${path}-s${activeSeason}-e${activeEpisode}`}
                             streamData={stream}

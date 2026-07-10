@@ -10,6 +10,7 @@ export interface DownloadTask {
     error?: string;
     isNative?: boolean;
     cancel?: () => void;
+    currentIdx?: number;
 }
 
 type Listener = (tasks: DownloadTask[]) => void;
@@ -18,32 +19,32 @@ let listeners: Set<Listener> = new Set();
 let tasks: DownloadTask[] = [];
 
 // Vanilla TS helper to compute CRC32 checksum for ZIP headers
-function crc32(data: Uint8Array): number {
-    let crc = 0xffffffff;
-    for (let i = 0; i < data.length; i++) {
-        const byte = data[i];
-        let lookup = (crc ^ byte) & 0xff;
-        for (let j = 0; j < 8; j++) {
-            if (lookup & 1) {
-                lookup = (lookup >>> 1) ^ 0xedb88320;
-            } else {
-                lookup = lookup >>> 1;
-            }
-        }
-        crc = (crc >>> 8) ^ lookup;
+const crcTable = new Int32Array(256);
+for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
     }
-    return (crc ^ 0xffffffff) >>> 0;
+    crcTable[i] = c;
+}
+
+function crc32(data: Uint8Array): number {
+    let crc = 0 ^ (-1);
+    for (let i = 0; i < data.length; i++) {
+        crc = (crc >>> 8) ^ crcTable[(crc ^ data[i]) & 0xff];
+    }
+    return (crc ^ (-1)) >>> 0;
 }
 
 // Vanilla TS helper to construct a standard uncompressed ZIP archive (Store mode) in the browser
-function createSimpleZip(files: { name: string; content: string }[]): Blob {
+function createSimpleZip(files: { name: string; content: Uint8Array | string }[]): Blob {
     const textEncoder = new TextEncoder();
     const parts: Uint8Array[] = [];
     const directoryHeaders: Uint8Array[] = [];
     let offset = 0;
 
     for (const file of files) {
-        const fileData = textEncoder.encode(file.content);
+        const fileData = typeof file.content === "string" ? textEncoder.encode(file.content) : file.content;
         const filenameData = textEncoder.encode(file.name);
         
         // 1. Local File Header
@@ -295,12 +296,6 @@ export const downloadStore = {
         const id = `${url}-${Date.now()}`;
         const controller = new AbortController();
 
-        // Trigger subtitles zip download immediately at the start of the download action
-        // to separate it in time from the video blob save, avoiding browser popup/multiple-file blocks.
-        if (captions && captions.length > 0) {
-            this.downloadSubtitles(captions, filename);
-        }
-
         const cancel = () => {
             try {
                 controller.abort();
@@ -310,7 +305,40 @@ export const downloadStore = {
             this.updateTask(id, { status: "failed", error: "Cancelled by user" });
         };
 
+        // Add task to store immediately so the UI shows it started!
         this.addTask(id, filename, false, cancel);
+
+        // Fetch subtitles in parallel at the start
+        const subtitleFiles: { name: string; content: string }[] = [];
+        const baseName = filename.endsWith(".mp4") ? filename.slice(0, -4) : filename;
+        const folderName = baseName
+            .replace(/_S(\d+)E(\d+)_/i, " S$1 E$2 ")
+            .replace(/_/g, " ")
+            .trim();
+
+        if (captions && captions.length > 0) {
+            try {
+                const fetchPromises = captions.map(async (caption) => {
+                    try {
+                        const proxyUrl = `/api/video?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                        const res = await fetch(proxyUrl, { signal: controller.signal });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        
+                        const text = await res.text();
+                        const ext = caption.url.endsWith(".vtt") ? ".vtt" : ".srt";
+                        subtitleFiles.push({
+                            name: `${folderName}/${baseName}.${caption.lan}${ext}`,
+                            content: text,
+                        });
+                    } catch (e) {
+                        console.error("Failed to fetch subtitle track:", caption.lanName, e);
+                    }
+                });
+                await Promise.all(fetchPromises);
+            } catch (e) {
+                console.error("Failed to pre-download subtitles:", e);
+            }
+        }
 
         try {
             const dlUrl = `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
@@ -349,18 +377,48 @@ export const downloadStore = {
 
             this.updateTask(id, { status: "completed", progress: 100 });
 
-            // Package chunks and trigger save dialog
-            const blob = new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") || "video/mp4" });
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = blobUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            
-            // Release memory URL
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            // If we successfully fetched subtitles, package everything into a single ZIP file
+            if (subtitleFiles.length > 0) {
+                const videoData = new Uint8Array(downloadedBytes);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    videoData.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                const filesToZip = [
+                    {
+                        name: `${folderName}/${filename}`,
+                        content: videoData,
+                    },
+                    ...subtitleFiles
+                ];
+
+                const zipBlob = createSimpleZip(filesToZip);
+                const zipFilename = `${folderName}.zip`;
+
+                const blobUrl = URL.createObjectURL(zipBlob);
+                const a = document.createElement("a");
+                a.href = blobUrl;
+                a.download = zipFilename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            } else {
+                // Fallback to normal single video file download
+                const blob = new Blob(chunks as BlobPart[], { type: response.headers.get("content-type") || "video/mp4" });
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            }
 
         } catch (error: any) {
             if (error.name === "AbortError") {
@@ -368,6 +426,149 @@ export const downloadStore = {
             }
             console.error("Download failed:", error);
             this.updateTask(id, { status: "failed", error: error.message || "Unknown download error" });
+        }
+    },
+
+    // 3. Bulk Season Download (Downloads items sequentially to avoid memory pressure and packages into one ZIP)
+    async startBulkDownload(
+        items: { url: string; referer: string; filename: string; size?: number; captions?: Caption[] }[],
+        bulkFilename: string
+    ) {
+        const id = `bulk-${Date.now()}`;
+        const controller = new AbortController();
+
+        const cancel = () => {
+            try {
+                controller.abort();
+            } catch (e) {
+                console.error("Abort failed:", e);
+            }
+            this.updateTask(id, { status: "failed", error: "Cancelled by user" });
+        };
+
+        const totalExpectedSize = items.reduce((acc, item) => acc + (item.size || 0), 0);
+        this.addTask(id, bulkFilename, false, cancel);
+        this.updateTask(id, { size: totalExpectedSize });
+
+        try {
+            const filesToZip: { name: string; content: Uint8Array | string }[] = [];
+            let totalDownloadedBytes = 0;
+
+            for (let i = 0; i < items.length; i++) {
+                if (controller.signal.aborted) break;
+
+                const item = items[i];
+                this.updateTask(id, { currentIdx: i });
+                
+                // 1. Fetch subtitles for this item in parallel
+                const subtitleFiles: { name: string; content: string }[] = [];
+                const baseName = item.filename.endsWith(".mp4") ? item.filename.slice(0, -4) : item.filename;
+                const epFolderName = baseName
+                    .replace(/_S(\d+)E(\d+)_/i, " S$1 E$2 ")
+                    .replace(/_/g, " ")
+                    .trim();
+
+                const folderPrefix = `${bulkFilename.replace(/\.zip$/i, "")}/${epFolderName}`;
+
+                if (item.captions && item.captions.length > 0) {
+                    try {
+                        const fetchPromises = item.captions.map(async (caption) => {
+                            try {
+                                const proxyUrl = `/api/video?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                                const res = await fetch(proxyUrl, { signal: controller.signal });
+                                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                                const text = await res.text();
+                                const ext = caption.url.endsWith(".vtt") ? ".vtt" : ".srt";
+                                subtitleFiles.push({
+                                    name: `${folderPrefix}/${baseName}.${caption.lan}${ext}`,
+                                    content: text,
+                                });
+                            } catch (e) {
+                                console.error("Failed to fetch subtitle track:", caption.lanName, e);
+                            }
+                        });
+                        await Promise.all(fetchPromises);
+                    } catch (e) {
+                        console.error("Failed to download subtitles:", e);
+                    }
+                }
+
+                // 2. Fetch video file chunks
+                const dlUrl = `/api/video?url=${encodeURIComponent(item.url)}&referer=${encodeURIComponent(item.referer)}&mode=stream`;
+                const response = await fetch(dlUrl, {
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server returned HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const contentLength = response.headers.get("content-length");
+                const responseSize = contentLength ? parseInt(contentLength, 10) : 0;
+                const itemSize = item.size && item.size > 0 ? item.size : responseSize;
+
+                const reader = response.body?.getReader();
+                if (!reader) {
+                    throw new Error("Response body stream is not readable.");
+                }
+
+                const chunks: Uint8Array[] = [];
+                let itemDownloadedBytes = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    chunks.push(value);
+                    itemDownloadedBytes += value.length;
+                    
+                    const currentTotalDownloaded = totalDownloadedBytes + itemDownloadedBytes;
+                    const progress = totalExpectedSize > 0 ? Math.round((currentTotalDownloaded / totalExpectedSize) * 100) : 0;
+                    this.updateTask(id, { progress, downloadedBytes: currentTotalDownloaded, currentIdx: i });
+                }
+
+                totalDownloadedBytes += itemDownloadedBytes;
+
+                // Concatenate video chunks
+                const videoData = new Uint8Array(itemDownloadedBytes);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    videoData.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                // Add video file to ZIP entries
+                filesToZip.push({
+                    name: `${folderPrefix}/${item.filename}`,
+                    content: videoData,
+                });
+
+                // Add subtitle files to ZIP entries
+                filesToZip.push(...subtitleFiles);
+            }
+
+            if (controller.signal.aborted) return;
+
+            this.updateTask(id, { status: "completed", progress: 100 });
+
+            // Create single bulk ZIP file
+            const zipBlob = createSimpleZip(filesToZip);
+            const blobUrl = URL.createObjectURL(zipBlob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = bulkFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+        } catch (error: any) {
+            if (error.name === "AbortError") {
+                return;
+            }
+            console.error("Bulk download failed:", error);
+            this.updateTask(id, { status: "failed", error: error.message || "Unknown bulk download error" });
         }
     }
 };
