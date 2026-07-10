@@ -19,6 +19,7 @@ import {
     Bookmark,
     Check,
     RotateCcw,
+    Download,
 } from "lucide-react";
 import { ItemDetails, StreamData } from "@/lib/api";
 import { localStore, HistoryItem } from "@/lib/storage";
@@ -27,6 +28,7 @@ import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 import { useAuth } from "@/lib/auth-context";
+import DownloadModal from "@/components/download-modal";
 
 const cleanTitle = (title: string): string => {
     return title
@@ -57,6 +59,7 @@ export default function WatchClient({
     const [loadingEpisode, setLoadingEpisode] = useState<number | null>(null);
     const [loadingAudio, setLoadingAudio] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
+    const [isDownloadOpen, setIsDownloadOpen] = useState(false);
 
     const { subject, stars, resource, related, metadata } = details;
 
@@ -604,6 +607,14 @@ export default function WatchClient({
                                     </span>
                                 </button>
                             )}
+                            <button
+                                onClick={() => setIsDownloadOpen(true)}
+                                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel hover:text-white hover:border-glass-border-hover text-foreground/70 transition-all cursor-pointer text-xs font-bold uppercase tracking-wider"
+                                title="Download Content"
+                            >
+                                <Download className="w-3 h-3 text-primary" />
+                                <span>Download</span>
+                            </button>
                         </div>
 
                         {/* Genres */}
@@ -987,6 +998,17 @@ export default function WatchClient({
                     <MovieShelf title="You May Also Like" subjects={related} />
                 </div>
             )}
+
+            <DownloadModal
+                isOpen={isDownloadOpen}
+                onClose={() => setIsDownloadOpen(false)}
+                path={path}
+                subject={subject}
+                resource={resource}
+                activeSeason={activeSeason}
+                activeEpisode={activeEpisode}
+                currentEpisodeStream={stream}
+            />
         </div>
     );
 }
