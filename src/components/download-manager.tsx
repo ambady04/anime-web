@@ -34,7 +34,7 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
     const activeTasksCount = tasks.filter((t) => t.status === "downloading").length;
 
     return (
-        <div className="absolute right-0 mt-2.5 w-80 sm:w-96 rounded-2xl border border-glass-border bg-zinc-950/95 backdrop-blur-md shadow-2xl z-50 overflow-hidden flex flex-col max-h-[420px]">
+        <div className="absolute right-0 mt-2.5 w-80 sm:w-96 rounded-2xl border border-glass-border bg-zinc-950/80 backdrop-blur-md shadow-2xl z-50 overflow-hidden flex flex-col max-h-[420px]">
             {/* Header */}
             <div className="px-4 py-3 border-b border-glass-border flex items-center justify-between bg-white/2 shrink-0">
                 <div className="flex items-center space-x-2">
@@ -69,6 +69,7 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
                         const isDownloading = task.status === "downloading";
                         const isCompleted = task.status === "completed";
                         const isFailed = task.status === "failed";
+                        const hasDeterminateProgress = isDownloading && task.size !== undefined && task.size > 0 && !task.isNative;
 
                         return (
                             <div
@@ -76,45 +77,60 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
                                 className="p-3 rounded-xl border border-white/5 bg-white/1 hover:bg-white/2 transition-colors relative overflow-hidden group"
                             >
                                 <div className="flex items-start justify-between gap-3">
-                                    <div className="space-y-1 flex-1 min-w-0">
+                                    <div className="space-y-1 flex-1 min-w-0 font-medium">
                                         {/* Filename */}
                                         <p className="text-xs font-bold text-foreground line-clamp-1 pr-6 group-hover:text-primary transition-colors">
                                             {task.filename}
                                         </p>
                                         
                                         {/* Status Message */}
-                                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/50">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-foreground/50">
                                             {isDownloading && (
                                                 <>
                                                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
                                                     <span>
-                                                        Downloading ({task.progress}%)
-                                                        {task.downloadedBytes !== undefined && task.size !== undefined && (
-                                                            <span className="text-foreground/35 ml-1">
-                                                                • {formatBytes(task.downloadedBytes)} of {formatBytes(task.size)}
-                                                            </span>
+                                                        {task.isNative ? (
+                                                            <span>Browser downloading (Safe to refresh page)</span>
+                                                        ) : hasDeterminateProgress ? (
+                                                            <>
+                                                                Downloading ({task.progress}%)
+                                                                {task.downloadedBytes !== undefined && (
+                                                                    <span className="text-foreground/35 ml-1">
+                                                                        • {formatBytes(task.downloadedBytes)} of {formatBytes(task.size || 0)}
+                                                                    </span>
+                                                                )}
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                Downloading (Indeterminate)
+                                                                {task.downloadedBytes !== undefined && (
+                                                                    <span className="text-foreground/35 ml-1">
+                                                                        • {formatBytes(task.downloadedBytes)} transferred
+                                                                    </span>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </span>
                                                 </>
                                             )}
                                             {isCompleted && (
                                                 <span className="text-emerald-400 flex items-center gap-1">
-                                                    <CheckCircle className="w-3 h-3 shrink-0" />
-                                                    Finished Successfully
+                                                    <CheckCircle className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                                                    <span>Finished successfully</span>
                                                 </span>
                                             )}
                                             {isFailed && (
                                                 <span className="text-red-400 flex items-center gap-1">
-                                                    <AlertCircle className="w-3 h-3 shrink-0" />
-                                                    {task.error || "Download Failed"}
+                                                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+                                                    {task.error || "Download failed"}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
 
                                     {/* Action button */}
-                                    <div className="shrink-0 relative z-10">
-                                        {isDownloading ? (
+                                    <div className="shrink-0 relative z-10 font-bold">
+                                        {isDownloading && !task.isNative ? (
                                             <button
                                                 onClick={() => task.cancel?.()}
                                                 className="p-1.5 rounded-lg border border-red-500/25 hover:bg-red-500/10 text-red-400 cursor-pointer transition-colors"
@@ -126,22 +142,32 @@ export default function DownloadManager({ isOpen, onClose }: DownloadManagerProp
                                             <button
                                                 onClick={() => downloadStore.removeTask(task.id)}
                                                 className="p-1.5 rounded-lg border border-glass-border bg-glass-card hover:bg-glass-panel hover:text-white text-foreground/50 cursor-pointer transition-colors"
-                                                title="Dismiss Task"
+                                                title={task.isNative ? "Dismiss" : "Dismiss Task"}
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                {task.isNative ? (
+                                                    <X className="w-3.5 h-3.5" />
+                                                ) : (
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                )}
                                             </button>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Progress bar (only for active or completed) */}
+                                {/* Progress bar */}
                                 {(isDownloading || isCompleted) && (
                                     <div className="mt-2.5 w-full h-1 bg-zinc-950 rounded-full overflow-hidden border border-white/5">
                                         <div
                                             className={`h-full rounded-full transition-all duration-300 ${
                                                 isCompleted ? "bg-emerald-500" : "bg-primary"
-                                            }`}
-                                            style={{ width: `${task.progress}%` }}
+                                            } ${isDownloading && !hasDeterminateProgress ? "animate-pulse w-full" : ""}`}
+                                            style={{
+                                                width: isCompleted
+                                                    ? "100%"
+                                                    : hasDeterminateProgress
+                                                    ? `${task.progress}%`
+                                                    : "100%"
+                                            }}
                                         />
                                     </div>
                                 )}

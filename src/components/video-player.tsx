@@ -129,6 +129,98 @@ export default function VideoPlayer({
         localStorage.setItem("player-subtitle-size", subtitleSize);
     }, [subtitleSize]);
 
+    // Dynamic AniSkip intro/outro states
+    const [introStart, setIntroStart] = useState<number | null>(null);
+    const [introEnd, setIntroEnd] = useState<number | null>(null);
+    const [outroStart, setOutroStart] = useState<number | null>(null);
+    const [outroEnd, setOutroEnd] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!isSeries || !episode) return;
+        
+        let active = true;
+        const fetchSkipTimes = async () => {
+            try {
+                // Check sessionStorage cache first to prevent Jikan rate limit issues
+                const cacheKey = `aniskip-${title}-${episode}`;
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    if (data && active) {
+                        setIntroStart(data.introStart);
+                        setIntroEnd(data.introEnd);
+                        setOutroStart(data.outroStart);
+                        setOutroEnd(data.outroEnd);
+                    }
+                    return;
+                }
+
+                // 1. Get MAL ID by searching title on Jikan API
+                const searchRes = await fetch(
+                    `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=1`
+                );
+                if (!searchRes.ok) throw new Error("Jikan search failed");
+                const searchData = await searchRes.json();
+                const malId = searchData.data?.[0]?.mal_id;
+                if (!malId) throw new Error("No MAL ID found for title");
+
+                // 2. Get Skip times from AniSkip API
+                const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
+                const skipRes = await fetch(skipUrl);
+                if (!skipRes.ok) throw new Error("AniSkip failed");
+                const skipData = await skipRes.json();
+
+                if (skipData.found) {
+                    let opStart: number | null = null;
+                    let opEnd: number | null = null;
+                    let edStart: number | null = null;
+                    let edEnd: number | null = null;
+
+                    for (const result of skipData.results) {
+                        if (result["skip-type"] === "op") {
+                            opStart = result.interval["start-time"];
+                            opEnd = result.interval["end-time"];
+                        } else if (result["skip-type"] === "ed") {
+                            edStart = result.interval["start-time"];
+                            edEnd = result.interval["end-time"];
+                        }
+                    }
+
+                    if (active) {
+                        setIntroStart(opStart);
+                        setIntroEnd(opEnd);
+                        setOutroStart(edStart);
+                        setOutroEnd(edEnd);
+                    }
+
+                    // Save to cache
+                    sessionStorage.setItem(
+                        cacheKey,
+                        JSON.stringify({
+                            introStart: opStart,
+                            introEnd: opEnd,
+                            outroStart: edStart,
+                            outroEnd: edEnd,
+                        })
+                    );
+                }
+            } catch (e) {
+                console.error("Failed to load skip times dynamically:", e);
+                // Fallback to sensible default intro skip (from 2s to 95s)
+                if (active) {
+                    setIntroStart(2);
+                    setIntroEnd(95);
+                }
+            }
+        };
+
+        fetchSkipTimes();
+
+        return () => {
+            active = false;
+        };
+    }, [title, episode, isSeries, duration]);
+
     // Track user inactivity to auto-hide controls
     const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Delay showing loading spinner to avoid flash on quick seeks
@@ -1280,20 +1372,17 @@ export default function VideoPlayer({
             )}
 
             {/* Skip Intro Floating Button */}
-            {currentTime >= 2 && currentTime <= 95 && (
+            {introStart !== null && introEnd !== null && currentTime >= introStart && currentTime <= introEnd && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
                         if (videoRef.current) {
-                            videoRef.current.currentTime = Math.min(
-                                videoRef.current.duration || 0,
-                                videoRef.current.currentTime + 85,
-                            );
-                            setCurrentTime(videoRef.current.currentTime);
+                            videoRef.current.currentTime = introEnd;
+                            setCurrentTime(introEnd);
                         }
                         triggerControlsVisibility();
                     }}
-                    className="absolute bottom-32 right-6 z-25 bg-zinc-950/90 border border-white/10 hover:bg-zinc-900 hover:border-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+                    className="absolute bottom-32 right-6 z-25 bg-zinc-950/80 border border-white/10 hover:bg-zinc-900 hover:border-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
                 >
                     <span>Skip Intro</span>
                     <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
@@ -1304,8 +1393,9 @@ export default function VideoPlayer({
             {isSeries &&
                 onNextEpisode &&
                 duration > 0 &&
-                currentTime >= duration - 150 &&
-                currentTime < duration - 10 && (
+                (outroStart !== null && outroEnd !== null
+                    ? currentTime >= outroStart && currentTime <= outroEnd
+                    : currentTime >= duration - 150 && currentTime < duration - 10) && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();

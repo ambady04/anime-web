@@ -328,3 +328,25 @@ html.light .shimmer-bg {
         background-position: 0% 50%;
     }
 }
+
+/* Custom Native Select Dropdown Color-Scheme Fix */
+select, option {
+    color-scheme: dark;
+}
+html.light select, html.light option {
+    color-scheme: light;
+}
+
+/* Enable Safari backdrop-filter blur support for Tailwind backdrop-blur classes */
+.backdrop-blur-sm {
+    -webkit-backdrop-filter: blur(4px);
+}
+.backdrop-blur-md {
+    -webkit-backdrop-filter: blur(12px);
+}
+.backdrop-blur-lg {
+    -webkit-backdrop-filter: blur(16px);
+}
+.backdrop-blur-xl {
+    -webkit-backdrop-filter: blur(24px);
+}

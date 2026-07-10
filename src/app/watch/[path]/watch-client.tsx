@@ -78,6 +78,7 @@ export default function WatchClient({
     const [showInfo, setShowInfo] = useState(false);
     const [isDownloadOpen, setIsDownloadOpen] = useState(false);
     const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+    const [showSeasonDropdown, setShowSeasonDropdown] = useState(false);
 
     useEffect(() => {
         if (!showDownloadMenu) return;
@@ -92,6 +93,20 @@ export default function WatchClient({
             document.removeEventListener("click", handleOutsideClick);
         };
     }, [showDownloadMenu]);
+
+    useEffect(() => {
+        if (!showSeasonDropdown) return;
+        const handleOutsideClick = (event: MouseEvent) => {
+            const container = document.getElementById("season-selector-container");
+            if (container && !container.contains(event.target as Node)) {
+                setShowSeasonDropdown(false);
+            }
+        };
+        document.addEventListener("click", handleOutsideClick);
+        return () => {
+            document.removeEventListener("click", handleOutsideClick);
+        };
+    }, [showSeasonDropdown]);
 
     const { subject, stars, resource, related, metadata } = details;
 
@@ -665,10 +680,11 @@ export default function WatchClient({
                                                             key={link.id}
                                                             onClick={() => {
                                                                 setShowDownloadMenu(false);
-                                                                downloadStore.startDownload(
+                                                                downloadStore.startBrowserDownload(
                                                                     link.url,
                                                                     stream.stream_domain || "https://videodownloader.site/",
-                                                                    filename
+                                                                    filename,
+                                                                    stream.captions
                                                                 );
                                                             }}
                                                             className="w-full flex items-center justify-between px-3 py-2 text-xs text-foreground/80 hover:text-white hover:bg-white/5 transition-colors cursor-pointer text-left font-bold"
@@ -793,29 +809,39 @@ export default function WatchClient({
                                         </h2>
                                         {resource?.seasons &&
                                             resource.seasons.length > 1 && (
-                                                <select
-                                                    value={selectedSeason}
-                                                    onChange={(e) =>
-                                                        setSelectedSeason(
-                                                            Number(
-                                                                e.target.value,
-                                                            ),
-                                                        )
-                                                    }
-                                                    className="text-[10px] font-black bg-glass-card hover:bg-glass-panel border border-glass-border rounded-xl px-2.5 py-1.5 text-foreground focus:outline-none cursor-pointer uppercase tracking-wider transition-all"
-                                                >
-                                                    {resource.seasons.map(
-                                                        (se) => (
-                                                            <option
-                                                                key={se.se}
-                                                                value={se.se}
-                                                                className="bg-background text-foreground"
-                                                            >
-                                                                Season {se.se}
-                                                            </option>
-                                                        ),
+                                                <div className="relative inline-block text-left" id="season-selector-container">
+                                                    <button
+                                                        onClick={() => setShowSeasonDropdown(!showSeasonDropdown)}
+                                                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-[10px] font-black text-foreground focus:outline-none cursor-pointer uppercase tracking-wider transition-all"
+                                                    >
+                                                        <span>Season {selectedSeason}</span>
+                                                        <ChevronDown className="w-3 h-3 text-foreground/45 ml-0.5" />
+                                                    </button>
+                                                    
+                                                    {showSeasonDropdown && (
+                                                        <div className="absolute right-0 mt-2 w-32 rounded-xl border border-glass-border bg-zinc-950/80 backdrop-blur-md shadow-2xl z-50 py-1 overflow-hidden">
+                                                            {resource.seasons.map((se) => (
+                                                                <button
+                                                                    key={se.se}
+                                                                    onClick={() => {
+                                                                        setSelectedSeason(se.se);
+                                                                        setShowSeasonDropdown(false);
+                                                                    }}
+                                                                    className={`w-full text-left px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-between cursor-pointer ${
+                                                                        selectedSeason === se.se
+                                                                            ? "bg-primary text-white"
+                                                                            : "text-foreground/80 hover:text-white hover:bg-white/5"
+                                                                    }`}
+                                                                >
+                                                                    <span>Season {se.se}</span>
+                                                                    {selectedSeason === se.se && (
+                                                                        <Check className="w-3 h-3 text-white" />
+                                                                    )}
+                                                                </button>
+                                                            ))}
+                                                        </div>
                                                     )}
-                                                </select>
+                                                </div>
                                             )}
                                     </div>
 

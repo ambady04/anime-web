@@ -16,25 +16,22 @@ import {
     ChevronRight,
     Sparkles,
 } from "lucide-react";
-import { movieApi, DownloadLink, Subject, ResourceModel, StreamData } from "@/lib/api";
+import { movieApi, DownloadLink, Subject, ResourceModel, StreamData, Caption } from "@/lib/api";
 import { downloadStore } from "@/lib/download-store";
 
 // Helper to format bytes to human readable format
 function formatBytes(bytes: number): string {
-    if (!bytes || bytes === 0) return "Unknown Size";
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // Clean titles for filenames
-const cleanFilename = (title: string): string => {
-    return title
-        .replace(/[^a-zA-Z0-9.\-\s_]/g, "")
-        .replace(/\s+/g, "_")
-        .trim();
-};
+function cleanFilename(title: string): string {
+    return title.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/__+/g, "_");
+}
 
 interface DownloadModalProps {
     isOpen: boolean;
@@ -55,6 +52,7 @@ interface ResolvedEpisode {
     success: boolean;
     referer?: string;
     error?: string;
+    captions?: Caption[];
 }
 
 export default function DownloadModal({
@@ -201,6 +199,7 @@ export default function DownloadModal({
                                 size: selectedLink.size,
                                 success: true,
                                 referer: streamData.stream_domain || "https://videodownloader.site/",
+                                captions: streamData.captions,
                             };
                         } catch (err: any) {
                             return {
@@ -247,7 +246,7 @@ export default function DownloadModal({
             setTimeout(() => {
                 const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
                 const referer = ep.referer || "https://videodownloader.site/";
-                downloadStore.startDownload(ep.url, referer, filename);
+                downloadStore.startBrowserDownload(ep.url, referer, filename, ep.captions);
             }, index * 1200); // 1.2s delay to prevent request overlapping/throttling
         });
     };
@@ -480,10 +479,11 @@ export default function DownloadModal({
                                                              <button
                                                                 onClick={() => {
                                                                     const filename = `${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
-                                                                    downloadStore.startDownload(
+                                                                    downloadStore.startBrowserDownload(
                                                                         link.url,
                                                                         singleStream?.stream_domain || "https://videodownloader.site/",
-                                                                        filename
+                                                                        filename,
+                                                                        singleStream?.captions || undefined
                                                                     );
                                                                 }}
                                                                 className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all cursor-pointer"
@@ -690,10 +690,11 @@ export default function DownloadModal({
                                                                 <button
                                                                     onClick={() => {
                                                                         const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
-                                                                        downloadStore.startDownload(
+                                                                        downloadStore.startBrowserDownload(
                                                                             ep.url,
                                                                             ep.referer || "https://videodownloader.site/",
-                                                                            filename
+                                                                            filename,
+                                                                            ep.captions
                                                                         );
                                                                     }}
                                                                     className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all cursor-pointer"
