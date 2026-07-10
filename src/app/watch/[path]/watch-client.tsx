@@ -29,6 +29,7 @@ import Link from "next/link";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 import { useAuth } from "@/lib/auth-context";
 import DownloadModal from "@/components/download-modal";
+import { downloadStore } from "@/lib/download-store";
 
 const cleanTitle = (title: string): string => {
     return title
@@ -659,19 +660,22 @@ export default function WatchClient({
                                                 .sort((a, b) => b.resolution - a.resolution)
                                                 .map((link) => {
                                                     const filename = `${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
-                                                    const dlUrl = `/api/video?url=${encodeURIComponent(link.url)}&referer=${encodeURIComponent(stream.stream_domain || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
                                                     return (
-                                                        <a
+                                                        <button
                                                             key={link.id}
-                                                            href={dlUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            onClick={() => setShowDownloadMenu(false)}
-                                                            className="flex items-center justify-between px-3 py-2 text-xs text-foreground/80 hover:text-white hover:bg-white/5 transition-colors"
+                                                            onClick={() => {
+                                                                setShowDownloadMenu(false);
+                                                                downloadStore.startDownload(
+                                                                    link.url,
+                                                                    stream.stream_domain || "https://videodownloader.site/",
+                                                                    filename
+                                                                );
+                                                            }}
+                                                            className="w-full flex items-center justify-between px-3 py-2 text-xs text-foreground/80 hover:text-white hover:bg-white/5 transition-colors cursor-pointer text-left font-bold"
                                                         >
-                                                            <span className="font-bold">{link.resolution}p</span>
-                                                            <span className="text-[10px] text-foreground/45">{formatBytes(link.size)}</span>
-                                                        </a>
+                                                            <span>{link.resolution}p</span>
+                                                            <span className="text-[10px] text-foreground/45 font-medium">{formatBytes(link.size)}</span>
+                                                        </button>
                                                     );
                                                 })
                                         ) : (

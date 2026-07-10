@@ -17,6 +17,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import { movieApi, DownloadLink, Subject, ResourceModel, StreamData } from "@/lib/api";
+import { downloadStore } from "@/lib/download-store";
 
 // Helper to format bytes to human readable format
 function formatBytes(bytes: number): string {
@@ -244,16 +245,10 @@ export default function DownloadModal({
 
         successful.forEach((ep, index) => {
             setTimeout(() => {
-                const a = document.createElement("a");
                 const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
                 const referer = ep.referer || "https://videodownloader.site/";
-                a.href = `/api/video?url=${encodeURIComponent(ep.url)}&referer=${encodeURIComponent(referer)}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
-                a.target = "_blank";
-                a.rel = "noopener noreferrer";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }, index * 1200); // 1.2s delay to prevent pop-up blocking
+                downloadStore.startDownload(ep.url, referer, filename);
+            }, index * 1200); // 1.2s delay to prevent request overlapping/throttling
         });
     };
 
@@ -482,16 +477,21 @@ export default function DownloadModal({
                                                                     <Copy className="w-3.5 h-3.5" />
                                                                 )}
                                                             </button>
-                                                            <a
-                                                                href={`/api/video?url=${encodeURIComponent(link.url)}&referer=${encodeURIComponent(singleStream?.stream_domain || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(`${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`)}`}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all"
+                                                             <button
+                                                                onClick={() => {
+                                                                    const filename = `${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
+                                                                    downloadStore.startDownload(
+                                                                        link.url,
+                                                                        singleStream?.stream_domain || "https://videodownloader.site/",
+                                                                        filename
+                                                                    );
+                                                                }}
+                                                                className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all cursor-pointer"
                                                                 title="Download Now"
                                                             >
                                                                 <Download className="w-3.5 h-3.5" />
                                                                 <span>Download</span>
-                                                            </a>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 );
@@ -687,15 +687,20 @@ export default function DownloadModal({
                                                                         <Copy className="w-3 h-3" />
                                                                     )}
                                                                 </button>
-                                                                <a
-                                                                    href={`/api/video?url=${encodeURIComponent(ep.url)}&referer=${encodeURIComponent(ep.referer || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(`${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`)}`}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all"
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                                                                        downloadStore.startDownload(
+                                                                            ep.url,
+                                                                            ep.referer || "https://videodownloader.site/",
+                                                                            filename
+                                                                        );
+                                                                    }}
+                                                                    className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all cursor-pointer"
                                                                     title="Download Episode"
                                                                 >
                                                                     <Download className="w-3 h-3" />
-                                                                </a>
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>
