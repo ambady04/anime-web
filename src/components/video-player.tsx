@@ -2,1231 +2,1211 @@
 
 import { useRef, useState, useEffect } from "react";
 import {
-    Play,
-    Pause,
-    Volume2,
-    VolumeX,
-    Maximize,
-    Minimize,
-    Settings,
-    Subtitles,
-    Loader2,
-    RotateCcw,
-    Volume1,
-    Maximize2,
-    AlertTriangle,
-    Scan,
-    SkipBack,
-    SkipForward,
-    Headphones,
-    HelpCircle,
-    PictureInPicture2,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
+  Minimize,
+  Settings,
+  Subtitles,
+  Loader2,
+  RotateCcw,
+  Volume1,
+  Maximize2,
+  AlertTriangle,
+  Scan,
+  SkipBack,
+  SkipForward,
+  Headphones,
+  HelpCircle,
+  PictureInPicture2,
 } from "lucide-react";
 import {
-    StreamData,
-    DownloadLink,
-    Caption,
-    DubModel,
-    movieApi,
+  StreamData,
+  DownloadLink,
+  Caption,
+  DubModel,
+  movieApi,
 } from "@/lib/api";
 import { localStore } from "@/lib/storage";
 
 interface VideoPlayerProps {
-    streamData: StreamData;
-    title: string;
-    coverUrl: string;
-    detailPath: string;
-    seriesDetailPath?: string;
-    isSeries: boolean;
-    season?: number;
-    episode?: number;
-    dubs?: DubModel[];
-    onStreamRefresh?: (newStream: StreamData) => void;
-    onNextEpisode?: () => void;
-    onPrevEpisode?: () => void;
-    shouldPause?: boolean;
+  streamData: StreamData;
+  title: string;
+  coverUrl: string;
+  detailPath: string;
+  seriesDetailPath?: string;
+  isSeries: boolean;
+  season?: number;
+  episode?: number;
+  dubs?: DubModel[];
+  onStreamRefresh?: (newStream: StreamData) => void;
+  onNextEpisode?: () => void;
+  onPrevEpisode?: () => void;
+  shouldPause?: boolean;
 }
 
 export default function VideoPlayer({
-    streamData,
-    title,
-    coverUrl,
-    detailPath,
-    seriesDetailPath,
-    isSeries,
-    season,
-    episode,
-    dubs,
-    onStreamRefresh,
-    onNextEpisode,
-    onPrevEpisode,
-    shouldPause,
+  streamData,
+  title,
+  coverUrl,
+  detailPath,
+  seriesDetailPath,
+  isSeries,
+  season,
+  episode,
+  dubs,
+  onStreamRefresh,
+  onNextEpisode,
+  onPrevEpisode,
+  shouldPause,
 }: VideoPlayerProps) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const audioMenuRef = useRef<HTMLDivElement>(null);
-    const qualityMenuRef = useRef<HTMLDivElement>(null);
-    const speedMenuRef = useRef<HTMLDivElement>(null);
-    const subtitleMenuRef = useRef<HTMLDivElement>(null);
-    const ratioMenuRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const audioMenuRef = useRef<HTMLDivElement>(null);
+  const qualityMenuRef = useRef<HTMLDivElement>(null);
+  const speedMenuRef = useRef<HTMLDivElement>(null);
+  const subtitleMenuRef = useRef<HTMLDivElement>(null);
+  const ratioMenuRef = useRef<HTMLDivElement>(null);
 
-    // Stream options
-    const downloads = streamData.downloads || [];
-    const captions = streamData.captions || [];
+  // Stream options
+  const downloads = streamData.downloads || [];
+  const captions = streamData.captions || [];
 
-    // Sort qualities from highest to lowest
-    const sortedDownloads = [...downloads].sort(
-        (a, b) => b.resolution - a.resolution,
-    );
+  // Sort qualities from highest to lowest
+  const sortedDownloads = [...downloads].sort(
+    (a, b) => b.resolution - a.resolution,
+  );
 
-    // States
-    const [activeDownload, setActiveDownload] = useState<DownloadLink | null>(
-        null,
-    );
-    const [subtitleUrl, setSubtitleUrl] = useState<string>("");
-    const [activeCaption, setActiveCaption] = useState<Caption | null>(null);
+  // States
+  const [activeDownload, setActiveDownload] = useState<DownloadLink | null>(
+    null,
+  );
+  const [subtitleUrl, setSubtitleUrl] = useState<string>("");
+  const [activeCaption, setActiveCaption] = useState<Caption | null>(null);
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-    const [bufferedPercent, setBufferedPercent] = useState(0);
-    const [volume, setVolume] = useState(1);
-    const [isMuted, setIsMuted] = useState(false);
-    const [playbackRate, setPlaybackRate] = useState(1);
-    const [isFullscreen, setIsFullscreen] = useState(false);
-    const [aspectRatio, setAspectRatio] = useState<
-        "contain" | "fill" | "cover"
-    >("contain");
-    const [isAutoQuality, setIsAutoQuality] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [bufferedPercent, setBufferedPercent] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<"contain" | "fill" | "cover">(
+    "contain",
+  );
+  const [isAutoQuality, setIsAutoQuality] = useState(true);
 
-    const [showControls, setShowControls] = useState(true);
-    const [isLoading, setIsLoading] = useState(true);
-    const [showQualityMenu, setShowQualityMenu] = useState(false);
-    const [showSpeedMenu, setShowSpeedMenu] = useState(false);
-    const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
-    const [showRatioMenu, setShowRatioMenu] = useState(false);
-    const [showSubtitles, setShowSubtitles] = useState(true);
-    const [playerError, setPlayerError] = useState(false);
-    const [showAudioMenu, setShowAudioMenu] = useState(false);
-    const [autoRetryLabel, setAutoRetryLabel] = useState("");
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [useDirectUrl, setUseDirectUrl] = useState(false);
-    const [showRemaining, setShowRemaining] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const [showRatioMenu, setShowRatioMenu] = useState(false);
+  const [showSubtitles, setShowSubtitles] = useState(true);
+  const [playerError, setPlayerError] = useState(false);
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
+  const [autoRetryLabel, setAutoRetryLabel] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [useDirectUrl, setUseDirectUrl] = useState(false);
+  const [showRemaining, setShowRemaining] = useState(false);
 
-    // Premium states
-    const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
-    const [showRightSkipAnimation, setShowRightSkipAnimation] = useState(false);
-    const [isPiPSupported, setIsPiPSupported] = useState(false);
-    const [isPiPActive, setIsPiPActive] = useState(false);
-    const [subtitleSize, setSubtitleSize] = useState<string>(() => {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem("player-subtitle-size") || "22px";
+  // Premium states
+  const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
+  const [showRightSkipAnimation, setShowRightSkipAnimation] = useState(false);
+  const [isPiPSupported, setIsPiPSupported] = useState(false);
+  const [isPiPActive, setIsPiPActive] = useState(false);
+  const [subtitleSize, setSubtitleSize] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("player-subtitle-size") || "22px";
+    }
+    return "22px";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("player-subtitle-size", subtitleSize);
+  }, [subtitleSize]);
+
+  // Dynamic AniSkip intro/outro states
+  const [introStart, setIntroStart] = useState<number | null>(null);
+  const [introEnd, setIntroEnd] = useState<number | null>(null);
+  const [outroStart, setOutroStart] = useState<number | null>(null);
+  const [outroEnd, setOutroEnd] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isSeries || !episode) return;
+
+    let active = true;
+    const fetchSkipTimes = async () => {
+      try {
+        // Check sessionStorage cache first to prevent Jikan rate limit issues
+        const cacheKey = `aniskip-${title}-${episode}`;
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const data = JSON.parse(cached);
+          if (data && active) {
+            setIntroStart(data.introStart);
+            setIntroEnd(data.introEnd);
+            setOutroStart(data.outroStart);
+            setOutroEnd(data.outroEnd);
+          }
+          return;
         }
-        return "22px";
-    });
 
-    useEffect(() => {
-        localStorage.setItem("player-subtitle-size", subtitleSize);
-    }, [subtitleSize]);
+        // 1. Get MAL ID by searching title on Jikan API
+        const searchRes = await fetch(
+          `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=1`,
+        );
+        if (!searchRes.ok) throw new Error("Jikan search failed");
+        const searchData = await searchRes.json();
+        const malId = searchData.data?.[0]?.mal_id;
+        if (!malId) throw new Error("No MAL ID found for title");
 
-    // Dynamic AniSkip intro/outro states
-    const [introStart, setIntroStart] = useState<number | null>(null);
-    const [introEnd, setIntroEnd] = useState<number | null>(null);
-    const [outroStart, setOutroStart] = useState<number | null>(null);
-    const [outroEnd, setOutroEnd] = useState<number | null>(null);
+        // 2. Get Skip times from AniSkip API
+        const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
+        const skipRes = await fetch(skipUrl);
+        if (!skipRes.ok) return; // AniSkip unavailable for this episode - skip silently
+        const skipData = await skipRes.json();
 
-    useEffect(() => {
-        if (!isSeries || !episode) return;
+        if (skipData.found) {
+          let opStart: number | null = null;
+          let opEnd: number | null = null;
+          let edStart: number | null = null;
+          let edEnd: number | null = null;
 
-        let active = true;
-        const fetchSkipTimes = async () => {
-            try {
-                // Check sessionStorage cache first to prevent Jikan rate limit issues
-                const cacheKey = `aniskip-${title}-${episode}`;
-                const cached = sessionStorage.getItem(cacheKey);
-                if (cached) {
-                    const data = JSON.parse(cached);
-                    if (data && active) {
-                        setIntroStart(data.introStart);
-                        setIntroEnd(data.introEnd);
-                        setOutroStart(data.outroStart);
-                        setOutroEnd(data.outroEnd);
-                    }
-                    return;
-                }
-
-                // 1. Get MAL ID by searching title on Jikan API
-                const searchRes = await fetch(
-                    `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=1`
-                );
-                if (!searchRes.ok) throw new Error("Jikan search failed");
-                const searchData = await searchRes.json();
-                const malId = searchData.data?.[0]?.mal_id;
-                if (!malId) throw new Error("No MAL ID found for title");
-
-                // 2. Get Skip times from AniSkip API
-                const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
-                const skipRes = await fetch(skipUrl);
-                if (!skipRes.ok) return; // AniSkip unavailable for this episode - skip silently
-                const skipData = await skipRes.json();
-
-                if (skipData.found) {
-                    let opStart: number | null = null;
-                    let opEnd: number | null = null;
-                    let edStart: number | null = null;
-                    let edEnd: number | null = null;
-
-                    for (const result of skipData.results) {
-                        if (result["skip-type"] === "op") {
-                            opStart = result.interval["start-time"];
-                            opEnd = result.interval["end-time"];
-                        } else if (result["skip-type"] === "ed") {
-                            edStart = result.interval["start-time"];
-                            edEnd = result.interval["end-time"];
-                        }
-                    }
-
-                    if (active) {
-                        setIntroStart(opStart);
-                        setIntroEnd(opEnd);
-                        setOutroStart(edStart);
-                        setOutroEnd(edEnd);
-                    }
-
-                    // Save to cache
-                    sessionStorage.setItem(
-                        cacheKey,
-                        JSON.stringify({
-                            introStart: opStart,
-                            introEnd: opEnd,
-                            outroStart: edStart,
-                            outroEnd: edEnd,
-                        })
-                    );
-                }
-            } catch (e) {
-                console.error("Failed to load skip times dynamically:", e);
-                // Fallback to sensible default intro skip (from 2s to 95s)
-                if (active) {
-                    setIntroStart(2);
-                    setIntroEnd(95);
-                }
+          for (const result of skipData.results) {
+            if (result["skip-type"] === "op") {
+              opStart = result.interval["start-time"];
+              opEnd = result.interval["end-time"];
+            } else if (result["skip-type"] === "ed") {
+              edStart = result.interval["start-time"];
+              edEnd = result.interval["end-time"];
             }
-        };
+          }
 
-        fetchSkipTimes();
+          if (active) {
+            setIntroStart(opStart);
+            setIntroEnd(opEnd);
+            setOutroStart(edStart);
+            setOutroEnd(edEnd);
+          }
 
-        return () => {
-            active = false;
-        };
-    }, [title, episode, isSeries, duration]);
-
-    // Track user inactivity to auto-hide controls
-    const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    // Delay showing loading spinner to avoid flash on quick seeks
-    const waitingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    // Track double click state to distinguish single clicks
-    const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    // Track seek animation durations
-    const leftSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    // Track which qualities have failed so we don't re-try them
-    const failedUrlsRef = useRef<Set<string>>(new Set());
-    // Track URLs that failed via proxy â€” used to decide when to try direct
-    const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
-    // Stall watchdog timer â€” fires if video stays in "loading" for too long
-    const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
-    // Track how many times we've refreshed streams to avoid infinite loops
-    const refreshCountRef = useRef(0);
-    // Track which episodes have already been marked as watched (prevent duplicate syncs)
-    const markedEpisodesRef = useRef<Set<string>>(new Set());
-
-    // Build the video source URL â€” always use proxy stream mode.
-    // Browsers cannot set custom Referer headers on <video> requests,
-    // so direct CDN URLs fail for CDNs that validate referer.
-    const buildVideoSrc = (url: string): string => {
-        if (useDirectUrl) {
-            return url; // Last-resort fallback for CDNs without referer check
+          // Save to cache
+          sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              introStart: opStart,
+              introEnd: opEnd,
+              outroStart: edStart,
+              outroEnd: edEnd,
+            }),
+          );
         }
-        const referer =
-            streamData.stream_domain || "https://videodownloader.site/";
-        return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+      } catch (e) {
+        console.error("Failed to load skip times dynamically:", e);
+        // Fallback to sensible default intro skip (from 2s to 95s)
+        if (active) {
+          setIntroStart(2);
+          setIntroEnd(95);
+        }
+      }
     };
 
-    // Initialize source on mount or stream data update
-    useEffect(() => {
-        // Reset failed URLs tracker and refresh counter when stream changes
+    fetchSkipTimes();
+
+    return () => {
+      active = false;
+    };
+  }, [title, episode, isSeries, duration]);
+
+  // Track user inactivity to auto-hide controls
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Delay showing loading spinner to avoid flash on quick seeks
+  const waitingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track double click state to distinguish single clicks
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track seek animation durations
+  const leftSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Track which qualities have failed so we don't re-try them
+  const failedUrlsRef = useRef<Set<string>>(new Set());
+  // Track URLs that failed via proxy â€” used to decide when to try direct
+  const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
+  // Stall watchdog timer â€” fires if video stays in "loading" for too long
+  const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Track how many times we've refreshed streams to avoid infinite loops
+  const refreshCountRef = useRef(0);
+  // Track which episodes have already been marked as watched (prevent duplicate syncs)
+  const markedEpisodesRef = useRef<Set<string>>(new Set());
+
+  // Build the video source URL â€” always use proxy stream mode.
+  // Browsers cannot set custom Referer headers on <video> requests,
+  // so direct CDN URLs fail for CDNs that validate referer.
+  const buildVideoSrc = (url: string): string => {
+    if (useDirectUrl) {
+      return url; // Last-resort fallback for CDNs without referer check
+    }
+    const referer = streamData.stream_domain || "https://videodownloader.site/";
+    return `/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+  };
+
+  // Initialize source on mount or stream data update
+  useEffect(() => {
+    // Reset failed URLs tracker and refresh counter when stream changes
+    failedUrlsRef.current = new Set();
+    proxyFailedUrlsRef.current = new Set();
+    refreshCountRef.current = 0;
+    setUseDirectUrl(false);
+    setIsAutoQuality(true);
+
+    if (sortedDownloads.length > 0) {
+      // Pick 720p first (better reliability than 1080p on slow CDNs)
+      // then fall to highest available if no 720p
+      const defaultQuality =
+        sortedDownloads.find((d) => d.resolution === 720) ||
+        sortedDownloads.find((d) => d.resolution === 1080) ||
+        sortedDownloads[0];
+      setActiveDownload(defaultQuality);
+      setIsLoading(true);
+      setPlayerError(false);
+      setAutoRetryLabel("");
+    } else {
+      setActiveDownload(null);
+      if (refreshCountRef.current < 2) {
+        refreshCountRef.current += 1;
+        setAutoRetryLabel("Fetching fresh stream links...");
+        setIsLoading(true);
+        setPlayerError(false);
+        refreshStreamData();
+      } else {
+        setIsLoading(false);
+        setPlayerError(true);
+        setAutoRetryLabel("");
+      }
+    }
+
+    // Convert SRT to WebVTT if subtitle exists â€” prefer English, fallback to first available
+    if (captions.length > 0) {
+      const englishCaption = captions.find(
+        (c) => c.lan === "en" || c.lanName?.toLowerCase().includes("english"),
+      );
+      const defaultCaption = englishCaption || captions[0];
+      setActiveCaption(defaultCaption);
+      loadSubtitleTrack(defaultCaption.url);
+      setShowSubtitles(true);
+    } else {
+      setActiveCaption(null);
+      setSubtitleUrl("");
+      setShowSubtitles(false);
+    }
+
+    setIsPlaying(false);
+    setShowAudioMenu(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamData]);
+
+  // Pause player immediately on page navigation
+  useEffect(() => {
+    if (shouldPause && videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }, [shouldPause]);
+
+  // Set referrerPolicy directly on the video DOM element to bypass TypeScript's type check limit
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.setAttribute("referrerpolicy", "no-referrer");
+    }
+  }, [activeDownload]);
+
+  // Check for Picture-in-Picture support
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      setIsPiPSupported(
+        document.pictureInPictureEnabled ||
+          (videoRef.current && "requestPictureInPicture" in videoRef.current) ||
+          false,
+      );
+    }
+  }, []);
+
+  // Monitor Picture-in-Picture enter/leave events to synchronize isPiPActive state
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    const handleEnterPiP = () => setIsPiPActive(true);
+    const handleLeavePiP = () => setIsPiPActive(false);
+
+    if (videoElement) {
+      videoElement.addEventListener("enterpictureinpicture", handleEnterPiP);
+      videoElement.addEventListener("leavepictureinpicture", handleLeavePiP);
+    }
+
+    return () => {
+      if (videoElement) {
+        videoElement.removeEventListener(
+          "enterpictureinpicture",
+          handleEnterPiP,
+        );
+        videoElement.removeEventListener(
+          "leavepictureinpicture",
+          handleLeavePiP,
+        );
+      }
+    };
+  }, [activeDownload]);
+
+  // Convert SRT to WebVTT Blob URL
+  const loadSubtitleTrack = async (srtUrl: string) => {
+    try {
+      const res = await fetch(srtUrl);
+      if (!res.ok) throw new Error("Subtitles failed to load.");
+      const srtText = await res.text();
+
+      // Simple SRT to WebVTT formatting conversion
+      let vttText = "WEBVTT\n\n";
+      // Replace SRT comma decimals with WebVTT periods
+      vttText += srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+
+      const blob = new Blob([vttText], { type: "text/vtt" });
+      const objectUrl = URL.createObjectURL(blob);
+      setSubtitleUrl(objectUrl);
+    } catch (e) {
+      console.error("Subtitle parse error:", e);
+      setSubtitleUrl("");
+    }
+  };
+
+  // Setup continue watching resume timestamp on load
+  const handleLoadedMetadata = () => {
+    const videoDur = videoRef.current?.duration || 0;
+    // Only set duration if it's a finite number (not Infinity from live streams)
+    setDuration(isFinite(videoDur) ? videoDur : 0);
+    setIsLoading(false);
+    setPlayerError(false);
+    setAutoRetryLabel("");
+
+    // Check history to resume from last position
+    const history = localStore.getHistory();
+    let currentHistoryItem: (typeof history)[number] | undefined;
+
+    if (isSeries && season && episode) {
+      // For series: match by detailPath AND season/episode to avoid resuming wrong episode
+      currentHistoryItem = history.find(
+        (h) =>
+          h.detailPath === (seriesDetailPath || detailPath) &&
+          h.season === season &&
+          h.episode === episode,
+      );
+    } else {
+      // For movies: match by detailPath
+      currentHistoryItem = history.find(
+        (h) => h.detailPath === (seriesDetailPath || detailPath),
+      );
+    }
+
+    // Fallback: find by title/season/episode to support audio track swaps
+    if (!currentHistoryItem) {
+      currentHistoryItem = history.find(
+        (h) =>
+          h.title === title &&
+          (!isSeries || (h.season === season && h.episode === episode)),
+      );
+    }
+
+    if (currentHistoryItem && videoRef.current) {
+      // Resume only if watched less than 95% and more than 5 seconds
+      if (
+        currentHistoryItem.progress < 95 &&
+        currentHistoryItem.currentTime > 5
+      ) {
+        videoRef.current.currentTime = currentHistoryItem.currentTime;
+      }
+    }
+  };
+
+  const handlePlayerError = (e: any) => {
+    if (!activeDownload) {
+      setPlayerError(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // Mark this URL as failed
+    failedUrlsRef.current.add(activeDownload.url);
+
+    // Also track proxy failures specifically
+    if (!useDirectUrl) {
+      proxyFailedUrlsRef.current.add(activeDownload.url);
+    }
+
+    // Try to find the next quality that hasn't failed yet
+    const nextQuality = sortedDownloads.find(
+      (d) => !failedUrlsRef.current.has(d.url),
+    );
+
+    if (nextQuality) {
+      // Auto-switch to next quality silently
+      setAutoRetryLabel(`Auto-switching to ${nextQuality.resolution}p...`);
+      setIsLoading(true);
+      setActiveDownload(nextQuality);
+    } else if (!useDirectUrl && sortedDownloads.length > 0) {
+      // All proxy attempts failed â€” try direct CDN URLs as fallback
+      // (bypasses proxy, may work if CDN doesn't check referer for browser requests)
+      setAutoRetryLabel("Trying direct connection...");
+      setIsLoading(true);
+      failedUrlsRef.current = new Set(); // Reset so all qualities get tried again
+      setUseDirectUrl(true);
+      const best =
+        sortedDownloads.find((d) => d.resolution === 720) ||
+        sortedDownloads.find((d) => d.resolution === 480) ||
+        sortedDownloads[0];
+      setActiveDownload(null);
+      setTimeout(() => setActiveDownload(best), 50);
+    } else if (refreshCountRef.current < 2) {
+      // All local qualities exhausted (both proxy and direct) â€” try fetching fresh stream URLs
+      refreshCountRef.current += 1;
+      setAutoRetryLabel("Fetching fresh stream links...");
+      setIsLoading(true);
+      setUseDirectUrl(false); // Reset to proxy mode for fresh URLs
+      refreshStreamData();
+    } else {
+      // Everything exhausted â€” show error screen
+      console.error(
+        "Video player: all qualities, direct mode, and refreshes failed",
+        e,
+      );
+      setPlayerError(true);
+      setIsLoading(false);
+      setAutoRetryLabel("");
+    }
+  };
+
+  // Fetch fresh stream URLs from the API (called when all CDN URLs fail)
+  const refreshStreamData = async () => {
+    setIsRefreshing(true);
+    try {
+      const freshStream = await movieApi.getStream(
+        detailPath,
+        season || 0,
+        episode || 0,
+      );
+
+      if (freshStream.downloads && freshStream.downloads.length > 0) {
+        // Reset failed URLs and use new stream data
         failedUrlsRef.current = new Set();
         proxyFailedUrlsRef.current = new Set();
-        refreshCountRef.current = 0;
         setUseDirectUrl(false);
-        setIsAutoQuality(true);
+        setAutoRetryLabel("Fresh links found! Resuming...");
 
-        if (sortedDownloads.length > 0) {
-            // Pick 720p first (better reliability than 1080p on slow CDNs)
-            // then fall to highest available if no 720p
-            const defaultQuality =
-                sortedDownloads.find((d) => d.resolution === 720) ||
-                sortedDownloads.find((d) => d.resolution === 1080) ||
-                sortedDownloads[0];
-            setActiveDownload(defaultQuality);
-            setIsLoading(true);
-            setPlayerError(false);
-            setAutoRetryLabel("");
-        } else {
-            setActiveDownload(null);
-            if (refreshCountRef.current < 2) {
-                refreshCountRef.current += 1;
-                setAutoRetryLabel("Fetching fresh stream links...");
-                setIsLoading(true);
-                setPlayerError(false);
-                refreshStreamData();
-            } else {
-                setIsLoading(false);
-                setPlayerError(true);
-                setAutoRetryLabel("");
-            }
-        }
+        // Notify parent if callback provided
+        if (onStreamRefresh) onStreamRefresh(freshStream);
 
-        // Convert SRT to WebVTT if subtitle exists â€” prefer English, fallback to first available
-        if (captions.length > 0) {
-            const englishCaption = captions.find(
-                (c) =>
-                    c.lan === "en" ||
-                    c.lanName?.toLowerCase().includes("english"),
-            );
-            const defaultCaption = englishCaption || captions[0];
-            setActiveCaption(defaultCaption);
-            loadSubtitleTrack(defaultCaption.url);
-            setShowSubtitles(true);
-        } else {
-            setActiveCaption(null);
-            setSubtitleUrl("");
-            setShowSubtitles(false);
-        }
-
-        setIsPlaying(false);
-        setShowAudioMenu(false);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [streamData]);
-
-    // Pause player immediately on page navigation
-    useEffect(() => {
-        if (shouldPause && videoRef.current) {
-            videoRef.current.pause();
-            setIsPlaying(false);
-        }
-    }, [shouldPause]);
-
-    // Set referrerPolicy directly on the video DOM element to bypass TypeScript's type check limit
-    useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.setAttribute("referrerpolicy", "no-referrer");
-        }
-    }, [activeDownload]);
-
-    // Check for Picture-in-Picture support
-    useEffect(() => {
-        if (typeof document !== "undefined") {
-            setIsPiPSupported(
-                document.pictureInPictureEnabled ||
-                (videoRef.current &&
-                    "requestPictureInPicture" in videoRef.current) ||
-                false,
-            );
-        }
-    }, []);
-
-    // Monitor Picture-in-Picture enter/leave events to synchronize isPiPActive state
-    useEffect(() => {
-        const videoElement = videoRef.current;
-        const handleEnterPiP = () => setIsPiPActive(true);
-        const handleLeavePiP = () => setIsPiPActive(false);
-
-        if (videoElement) {
-            videoElement.addEventListener(
-                "enterpictureinpicture",
-                handleEnterPiP,
-            );
-            videoElement.addEventListener(
-                "leavepictureinpicture",
-                handleLeavePiP,
-            );
-        }
-
-        return () => {
-            if (videoElement) {
-                videoElement.removeEventListener(
-                    "enterpictureinpicture",
-                    handleEnterPiP,
-                );
-                videoElement.removeEventListener(
-                    "leavepictureinpicture",
-                    handleLeavePiP,
-                );
-            }
-        };
-    }, [activeDownload]);
-
-    // Convert SRT to WebVTT Blob URL
-    const loadSubtitleTrack = async (srtUrl: string) => {
-        try {
-            const res = await fetch(srtUrl);
-            if (!res.ok) throw new Error("Subtitles failed to load.");
-            const srtText = await res.text();
-
-            // Simple SRT to WebVTT formatting conversion
-            let vttText = "WEBVTT\n\n";
-            // Replace SRT comma decimals with WebVTT periods
-            vttText += srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
-
-            const blob = new Blob([vttText], { type: "text/vtt" });
-            const objectUrl = URL.createObjectURL(blob);
-            setSubtitleUrl(objectUrl);
-        } catch (e) {
-            console.error("Subtitle parse error:", e);
-            setSubtitleUrl("");
-        }
-    };
-
-    // Setup continue watching resume timestamp on load
-    const handleLoadedMetadata = () => {
-        const videoDur = videoRef.current?.duration || 0;
-        // Only set duration if it's a finite number (not Infinity from live streams)
-        setDuration(isFinite(videoDur) ? videoDur : 0);
-        setIsLoading(false);
-        setPlayerError(false);
-        setAutoRetryLabel("");
-
-        // Check history to resume from last position
-        const history = localStore.getHistory();
-        let currentHistoryItem: (typeof history)[number] | undefined;
-
-        if (isSeries && season && episode) {
-            // For series: match by detailPath AND season/episode to avoid resuming wrong episode
-            currentHistoryItem = history.find(
-                (h) =>
-                    h.detailPath === (seriesDetailPath || detailPath) &&
-                    h.season === season &&
-                    h.episode === episode,
-            );
-        } else {
-            // For movies: match by detailPath
-            currentHistoryItem = history.find(
-                (h) => h.detailPath === (seriesDetailPath || detailPath),
-            );
-        }
-
-        // Fallback: find by title/season/episode to support audio track swaps
-        if (!currentHistoryItem) {
-            currentHistoryItem = history.find(
-                (h) =>
-                    h.title === title &&
-                    (!isSeries ||
-                        (h.season === season && h.episode === episode)),
-            );
-        }
-
-        if (currentHistoryItem && videoRef.current) {
-            // Resume only if watched less than 95% and more than 5 seconds
-            if (
-                currentHistoryItem.progress < 95 &&
-                currentHistoryItem.currentTime > 5
-            ) {
-                videoRef.current.currentTime = currentHistoryItem.currentTime;
-            }
-        }
-    };
-
-    const handlePlayerError = (e: any) => {
-        if (!activeDownload) {
-            setPlayerError(true);
-            setIsLoading(false);
-            return;
-        }
-
-        // Mark this URL as failed
-        failedUrlsRef.current.add(activeDownload.url);
-
-        // Also track proxy failures specifically
-        if (!useDirectUrl) {
-            proxyFailedUrlsRef.current.add(activeDownload.url);
-        }
-
-        // Try to find the next quality that hasn't failed yet
-        const nextQuality = sortedDownloads.find(
-            (d) => !failedUrlsRef.current.has(d.url),
+        // Pick best available quality from fresh data
+        const freshSorted = [...freshStream.downloads].sort(
+          (a, b) => b.resolution - a.resolution,
         );
+        const pick =
+          freshSorted.find((d) => d.resolution === 720) ||
+          freshSorted.find((d) => d.resolution === 1080) ||
+          freshSorted[0];
 
-        if (nextQuality) {
-            // Auto-switch to next quality silently
-            setAutoRetryLabel(
-                `Auto-switching to ${nextQuality.resolution}p...`,
-            );
-            setIsLoading(true);
-            setActiveDownload(nextQuality);
-        } else if (!useDirectUrl && sortedDownloads.length > 0) {
-            // All proxy attempts failed â€” try direct CDN URLs as fallback
-            // (bypasses proxy, may work if CDN doesn't check referer for browser requests)
-            setAutoRetryLabel("Trying direct connection...");
-            setIsLoading(true);
-            failedUrlsRef.current = new Set(); // Reset so all qualities get tried again
-            setUseDirectUrl(true);
-            const best =
-                sortedDownloads.find((d) => d.resolution === 720) ||
-                sortedDownloads.find((d) => d.resolution === 480) ||
-                sortedDownloads[0];
-            setActiveDownload(null);
-            setTimeout(() => setActiveDownload(best), 50);
-        } else if (refreshCountRef.current < 2) {
-            // All local qualities exhausted (both proxy and direct) â€” try fetching fresh stream URLs
-            refreshCountRef.current += 1;
-            setAutoRetryLabel("Fetching fresh stream links...");
-            setIsLoading(true);
-            setUseDirectUrl(false); // Reset to proxy mode for fresh URLs
-            refreshStreamData();
-        } else {
-            // Everything exhausted â€” show error screen
-            console.error(
-                "Video player: all qualities, direct mode, and refreshes failed",
-                e,
-            );
-            setPlayerError(true);
-            setIsLoading(false);
-            setAutoRetryLabel("");
+        setActiveDownload(null);
+        setTimeout(() => setActiveDownload(pick), 50);
+      } else {
+        // API returned no streams
+        setPlayerError(true);
+        setIsLoading(false);
+        setAutoRetryLabel("");
+      }
+    } catch (err) {
+      console.error("Stream refresh failed:", err);
+      setPlayerError(true);
+      setIsLoading(false);
+      setAutoRetryLabel("");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Stall watchdog â€” if isLoading stays true for 10 seconds, treat it as an error
+  // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
+  useEffect(() => {
+    if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
+
+    if (isLoading && activeDownload && !playerError) {
+      stallTimerRef.current = setTimeout(() => {
+        // Only trigger if still in a loading state (not yet playing)
+        if (!videoRef.current || videoRef.current.readyState < 2) {
+          handlePlayerError(new Error("Stream stall timeout"));
         }
+      }, 20_000);
+    }
+
+    return () => {
+      if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, activeDownload, playerError]);
 
-    // Fetch fresh stream URLs from the API (called when all CDN URLs fail)
-    const refreshStreamData = async () => {
-        setIsRefreshing(true);
-        try {
-            const freshStream = await movieApi.getStream(
-                detailPath,
-                season || 0,
-                episode || 0,
-            );
+  // Listen to time updates and sync progress with storage
+  const handleTimeUpdate = () => {
+    if (!videoRef.current) return;
+    const current = videoRef.current.currentTime;
+    const videoDuration = videoRef.current.duration;
+    setCurrentTime(current);
 
-            if (freshStream.downloads && freshStream.downloads.length > 0) {
-                // Reset failed URLs and use new stream data
-                failedUrlsRef.current = new Set();
-                proxyFailedUrlsRef.current = new Set();
-                setUseDirectUrl(false);
-                setAutoRetryLabel("Fresh links found! Resuming...");
+    // Update buffered percentage
+    if (
+      videoRef.current.buffered.length > 0 &&
+      videoDuration > 0 &&
+      isFinite(videoDuration)
+    ) {
+      const buf = videoRef.current.buffered;
+      let maxEnd = 0;
+      for (let i = 0; i < buf.length; i++) {
+        if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
+      }
+      setBufferedPercent((maxEnd / videoDuration) * 100);
+    }
 
-                // Notify parent if callback provided
-                if (onStreamRefresh) onStreamRefresh(freshStream);
+    // Use the video element's duration directly (more reliable than state)
+    const effectiveDuration =
+      videoDuration && isFinite(videoDuration) ? videoDuration : duration;
 
-                // Pick best available quality from fresh data
-                const freshSorted = [...freshStream.downloads].sort(
-                    (a, b) => b.resolution - a.resolution,
-                );
-                const pick =
-                    freshSorted.find((d) => d.resolution === 720) ||
-                    freshSorted.find((d) => d.resolution === 1080) ||
-                    freshSorted[0];
-
-                setActiveDownload(null);
-                setTimeout(() => setActiveDownload(pick), 50);
-            } else {
-                // API returned no streams
-                setPlayerError(true);
-                setIsLoading(false);
-                setAutoRetryLabel("");
-            }
-        } catch (err) {
-            console.error("Stream refresh failed:", err);
-            setPlayerError(true);
-            setIsLoading(false);
-            setAutoRetryLabel("");
-        } finally {
-            setIsRefreshing(false);
-        }
-    };
-
-    // Stall watchdog â€” if isLoading stays true for 10 seconds, treat it as an error
-    // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
-    useEffect(() => {
-        if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
-
-        if (isLoading && activeDownload && !playerError) {
-            stallTimerRef.current = setTimeout(() => {
-                // Only trigger if still in a loading state (not yet playing)
-                if (!videoRef.current || videoRef.current.readyState < 2) {
-                    handlePlayerError(new Error("Stream stall timeout"));
-                }
-            }, 20_000);
-        }
-
-        return () => {
-            if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isLoading, activeDownload, playerError]);
-
-    // Listen to time updates and sync progress with storage
-    const handleTimeUpdate = () => {
-        if (!videoRef.current) return;
-        const current = videoRef.current.currentTime;
-        const videoDuration = videoRef.current.duration;
-        setCurrentTime(current);
-
-        // Update buffered percentage
-        if (
-            videoRef.current.buffered.length > 0 &&
-            videoDuration > 0 &&
-            isFinite(videoDuration)
-        ) {
-            const buf = videoRef.current.buffered;
-            let maxEnd = 0;
-            for (let i = 0; i < buf.length; i++) {
-                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
-            }
-            setBufferedPercent((maxEnd / videoDuration) * 100);
-        }
-
-        // Use the video element's duration directly (more reliable than state)
-        const effectiveDuration =
-            videoDuration && isFinite(videoDuration) ? videoDuration : duration;
-
-        // Save history progress every ~5 seconds (throttled by integer check)
-        if (
-            effectiveDuration > 0 &&
-            current > 0 &&
-            Math.floor(current) % 5 === 0 &&
-            Math.floor(current) !== Math.floor(currentTime)
-        ) {
-            const progressPercent = Math.min(
-                Math.round((current / effectiveDuration) * 100),
-                100,
-            );
-            localStore.saveHistoryItem({
-                detailPath: seriesDetailPath || detailPath,
-                title,
-                coverUrl,
-                duration: effectiveDuration,
-                currentTime: current,
-                progress: progressPercent,
-                isSeries,
-                season,
-                episode,
-            });
-        }
-
-        // Mark episode as "watched" after 30 seconds of playback (once per episode)
-        if (isSeries && season && episode && current >= 30) {
-            const epKey = `${seriesDetailPath || detailPath}__s${season}__e${episode}`;
-            if (!markedEpisodesRef.current.has(epKey)) {
-                markedEpisodesRef.current.add(epKey);
-                localStore.markEpisodeWatched(
-                    seriesDetailPath || detailPath,
-                    season,
-                    episode,
-                );
-            }
-        }
-    };
-
-    // Save history on unmount/cleanup to capture exact progress
-    useEffect(() => {
-        const videoElement = videoRef.current;
-        return () => {
-            if (videoElement && videoElement.currentTime > 5) {
-                const current = videoElement.currentTime;
-                const dur = videoElement.duration || duration;
-                if (dur > 0) {
-                    const progressPercent = Math.min(
-                        Math.round((current / dur) * 100),
-                        100,
-                    );
-                    localStore.saveHistoryItem({
-                        detailPath: seriesDetailPath || detailPath,
-                        title,
-                        coverUrl,
-                        duration: dur,
-                        currentTime: current,
-                        progress: progressPercent,
-                        isSeries,
-                        season,
-                        episode,
-                    });
-                }
-            }
-        };
-    }, [
-        detailPath,
-        seriesDetailPath,
+    // Save history progress every ~5 seconds (throttled by integer check)
+    if (
+      effectiveDuration > 0 &&
+      current > 0 &&
+      Math.floor(current) % 5 === 0 &&
+      Math.floor(current) !== Math.floor(currentTime)
+    ) {
+      const progressPercent = Math.min(
+        Math.round((current / effectiveDuration) * 100),
+        100,
+      );
+      localStore.saveHistoryItem({
+        detailPath: seriesDetailPath || detailPath,
         title,
         coverUrl,
+        duration: effectiveDuration,
+        currentTime: current,
+        progress: progressPercent,
         isSeries,
         season,
         episode,
-        duration,
-    ]);
+      });
+    }
 
-    // Resolution selector handles video source swapping
-    const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
-        if (!videoRef.current || !activeDownload) return;
-        if (!keepAuto) {
-            setIsAutoQuality(false);
+    // Mark episode as "watched" after 30 seconds of playback (once per episode)
+    if (isSeries && season && episode && current >= 30) {
+      const epKey = `${seriesDetailPath || detailPath}__s${season}__e${episode}`;
+      if (!markedEpisodesRef.current.has(epKey)) {
+        markedEpisodesRef.current.add(epKey);
+        localStore.markEpisodeWatched(
+          seriesDetailPath || detailPath,
+          season,
+          episode,
+        );
+      }
+    }
+  };
+
+  // Save history on unmount/cleanup to capture exact progress
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    return () => {
+      if (videoElement && videoElement.currentTime > 5) {
+        const current = videoElement.currentTime;
+        const dur = videoElement.duration || duration;
+        if (dur > 0) {
+          const progressPercent = Math.min(
+            Math.round((current / dur) * 100),
+            100,
+          );
+          localStore.saveHistoryItem({
+            detailPath: seriesDetailPath || detailPath,
+            title,
+            coverUrl,
+            duration: dur,
+            currentTime: current,
+            progress: progressPercent,
+            isSeries,
+            season,
+            episode,
+          });
         }
-        const currentPlayTime = videoRef.current.currentTime;
-        const wasPlaying = !videoRef.current.paused;
+      }
+    };
+  }, [
+    detailPath,
+    seriesDetailPath,
+    title,
+    coverUrl,
+    isSeries,
+    season,
+    episode,
+    duration,
+  ]);
 
-        setIsLoading(true);
-        setActiveDownload(quality);
+  // Resolution selector handles video source swapping
+  const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
+    if (!videoRef.current || !activeDownload) return;
+    if (!keepAuto) {
+      setIsAutoQuality(false);
+    }
+    const currentPlayTime = videoRef.current.currentTime;
+    const wasPlaying = !videoRef.current.paused;
 
-        // Swap source via the proxy (not the raw CDN URL which will 403)
-        videoRef.current.src = buildVideoSrc(quality.url);
-        videoRef.current.load();
+    setIsLoading(true);
+    setActiveDownload(quality);
 
-        // Restore timestamp
-        const restoreTime = () => {
-            if (videoRef.current) {
-                videoRef.current.currentTime = currentPlayTime;
-                if (wasPlaying) {
-                    videoRef.current.play().catch(() => { });
-                    setIsPlaying(true);
-                }
-                setIsLoading(false);
-                videoRef.current.removeEventListener("canplay", restoreTime);
-            }
-        };
+    // Swap source via the proxy (not the raw CDN URL which will 403)
+    videoRef.current.src = buildVideoSrc(quality.url);
+    videoRef.current.load();
 
-        videoRef.current.addEventListener("canplay", restoreTime);
+    // Restore timestamp
+    const restoreTime = () => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = currentPlayTime;
+        if (wasPlaying) {
+          videoRef.current.play().catch(() => {});
+          setIsPlaying(true);
+        }
+        setIsLoading(false);
+        videoRef.current.removeEventListener("canplay", restoreTime);
+      }
+    };
+
+    videoRef.current.addEventListener("canplay", restoreTime);
+    setShowQualityMenu(false);
+  };
+
+  const handleSubtitleChange = (caption: Caption | null) => {
+    if (!caption) {
+      setActiveCaption(null);
+      setSubtitleUrl("");
+      setShowSubtitles(false);
+    } else {
+      setActiveCaption(caption);
+      loadSubtitleTrack(caption.url);
+      setShowSubtitles(true);
+    }
+    setShowSubtitleMenu(false);
+  };
+
+  // Basic Playback Action
+  const togglePlay = () => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play().catch(() => {});
+      setIsPlaying(true);
+    }
+  };
+
+  // Mute volume toggle
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    const newMutedState = !isMuted;
+    videoRef.current.muted = newMutedState;
+    setIsMuted(newMutedState);
+  };
+
+  // Volume slider adjustment
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!videoRef.current) return;
+    const newVolume = Number(e.target.value);
+    videoRef.current.volume = newVolume;
+    setVolume(newVolume);
+    if (newVolume === 0) {
+      videoRef.current.muted = true;
+      setIsMuted(true);
+    } else {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+    }
+  };
+
+  // Playback speeds multiplier
+  const handleSpeedChange = (rate: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.playbackRate = rate;
+    setPlaybackRate(rate);
+    setShowSpeedMenu(false);
+  };
+
+  // Fullscreen implementation with landscape lock on mobile
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current
+        .requestFullscreen()
+        .then(() => {
+          setIsFullscreen(true);
+          // Lock to landscape on mobile devices
+          const isMobileDevice =
+            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            window.matchMedia("(max-width: 768px) and (pointer: coarse)")
+              .matches;
+          if (
+            isMobileDevice &&
+            screen.orientation &&
+            (screen.orientation as any).lock
+          ) {
+            (screen.orientation as any).lock("landscape").catch(() => {
+              // Orientation lock not supported â€” silently ignore
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Fullscreen request failed:", err);
+        });
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+      // Unlock orientation when leaving fullscreen
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+        } catch (_) {}
+      }
+    }
+  };
+
+  // Picture-in-Picture implementation
+  const togglePiP = async () => {
+    if (!videoRef.current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPiPActive(false);
+      } else {
+        await videoRef.current.requestPictureInPicture();
+        setIsPiPActive(true);
+      }
+    } catch (err) {
+      console.error("PiP toggle failed:", err);
+    }
+  };
+
+  // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
+  const handlePlayerClickCapture = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const focusable = target.closest(
+      "button, input[type='range'], [role='button']",
+    );
+    if (focusable) {
+      setTimeout(() => {
+        (focusable as HTMLElement).blur();
+      }, 100);
+    }
+  };
+
+  // Handle single clicks on the screen
+  const handleScreenClick = (e: React.MouseEvent) => {
+    const clickTarget = e.target as HTMLElement;
+    if (
+      clickTarget.closest("button") ||
+      clickTarget.closest("input") ||
+      clickTarget.closest("select") ||
+      clickTarget.closest("[data-controls-panel]") ||
+      clickTarget.closest("[data-skip-zone]") ||
+      clickTarget.closest(".absolute.bottom-14")
+    ) {
+      return;
+    }
+
+    e.stopPropagation();
+    e.preventDefault();
+    togglePlay();
+  };
+
+  // Handle double clicks on the screen to toggle fullscreen or seek
+  const handleScreenDoubleClick = (e: React.MouseEvent) => {
+    const target = e.currentTarget as HTMLElement;
+    const clickTarget = e.target as HTMLElement;
+    if (
+      clickTarget.closest("button") ||
+      clickTarget.closest("input") ||
+      clickTarget.closest("select") ||
+      clickTarget.closest("[data-controls-panel]")
+    ) {
+      return;
+    }
+
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const clickRatio = x / rect.width;
+
+    if (clickRatio < 0.35) {
+      // Skip backward 10s
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.max(
+          0,
+          videoRef.current.currentTime - 10,
+        );
+        setCurrentTime(videoRef.current.currentTime);
+      }
+      setShowLeftSkipAnimation(true);
+      if (leftSkipTimeoutRef.current) clearTimeout(leftSkipTimeoutRef.current);
+      leftSkipTimeoutRef.current = setTimeout(
+        () => setShowLeftSkipAnimation(false),
+        800,
+      );
+      triggerControlsVisibility();
+    } else if (clickRatio > 0.65) {
+      // Skip forward 10s
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.min(
+          videoRef.current.duration || 0,
+          videoRef.current.currentTime + 10,
+        );
+        setCurrentTime(videoRef.current.currentTime);
+      }
+      setShowRightSkipAnimation(true);
+      if (rightSkipTimeoutRef.current)
+        clearTimeout(rightSkipTimeoutRef.current);
+      rightSkipTimeoutRef.current = setTimeout(
+        () => setShowRightSkipAnimation(false),
+        800,
+      );
+      triggerControlsVisibility();
+    } else {
+      // Double click in the middle: toggle fullscreen
+      toggleFullscreen();
+    }
+  };
+
+  // Handle click outside of dropdowns to close them
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (audioMenuRef.current && !audioMenuRef.current.contains(target)) {
+        setShowAudioMenu(false);
+      }
+      if (qualityMenuRef.current && !qualityMenuRef.current.contains(target)) {
         setShowQualityMenu(false);
-    };
-
-    const handleSubtitleChange = (caption: Caption | null) => {
-        if (!caption) {
-            setActiveCaption(null);
-            setSubtitleUrl("");
-            setShowSubtitles(false);
-        } else {
-            setActiveCaption(caption);
-            loadSubtitleTrack(caption.url);
-            setShowSubtitles(true);
-        }
+      }
+      if (speedMenuRef.current && !speedMenuRef.current.contains(target)) {
+        setShowSpeedMenu(false);
+      }
+      if (
+        subtitleMenuRef.current &&
+        !subtitleMenuRef.current.contains(target)
+      ) {
         setShowSubtitleMenu(false);
+      }
+      if (ratioMenuRef.current && !ratioMenuRef.current.contains(target)) {
+        setShowRatioMenu(false);
+      }
     };
 
-    // Basic Playback Action
-    const togglePlay = () => {
-        if (!videoRef.current) return;
-        if (isPlaying) {
-            videoRef.current.pause();
-            setIsPlaying(false);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Handle keyboard shortcuts
+
+  // Track fullscreen changes directly on document level (e.g. Escape key presses)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isNowFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(isNowFullscreen);
+      // Unlock orientation if exiting fullscreen (e.g. via Escape key)
+      if (
+        !isNowFullscreen &&
+        screen.orientation &&
+        (screen.orientation as any).unlock
+      ) {
+        try {
+          (screen.orientation as any).unlock();
+        } catch (_) {}
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Controls Visibility Timers
+  const triggerControlsVisibility = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+
+    // Hide controls after 1.2 seconds of inactivity while playing
+    if (isPlaying) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+        setShowQualityMenu(false);
+        setShowSpeedMenu(false);
+        setShowAudioMenu(false);
+        setShowSubtitleMenu(false);
+        setShowRatioMenu(false);
+      }, 1200);
+    }
+  };
+
+  // Auto hide controls when playing, show them when paused, and clean up timers
+  useEffect(() => {
+    if (isPlaying) {
+      setShowControls(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+        setShowQualityMenu(false);
+        setShowSpeedMenu(false);
+        setShowAudioMenu(false);
+        setShowSubtitleMenu(false);
+        setShowRatioMenu(false);
+      }, 1200);
+    } else {
+      setShowControls(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    }
+
+    return () => {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, [isPlaying]);
+
+  // Format second timestamps to HH:MM:SS text
+  const formatTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    }
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  // Toggle Subtitle track display mode and disable other tracks to prevent duplicates
+  useEffect(() => {
+    const handleTrackChange = () => {
+      if (!videoRef.current || !videoRef.current.textTracks) return;
+      const tracks = videoRef.current.textTracks;
+      let enabledAny = false;
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        if (showSubtitles && activeCaption) {
+          const isMatch =
+            track.language === activeCaption.lan ||
+            track.label === activeCaption.lanName;
+
+          if (isMatch && !enabledAny) {
+            track.mode = "showing";
+            enabledAny = true;
+          } else {
+            track.mode = "disabled";
+          }
         } else {
-            videoRef.current.play().catch(() => { });
-            setIsPlaying(true);
+          track.mode = "disabled";
         }
+      }
     };
 
-    // Mute volume toggle
-    const toggleMute = () => {
-        if (!videoRef.current) return;
-        const newMutedState = !isMuted;
-        videoRef.current.muted = newMutedState;
-        setIsMuted(newMutedState);
-    };
+    const tracksList = videoRef.current?.textTracks;
+    if (tracksList) {
+      tracksList.addEventListener("addtrack", handleTrackChange);
+      tracksList.addEventListener("change", handleTrackChange);
+    }
 
-    // Volume slider adjustment
-    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!videoRef.current) return;
-        const newVolume = Number(e.target.value);
-        videoRef.current.volume = newVolume;
-        setVolume(newVolume);
-        if (newVolume === 0) {
-            videoRef.current.muted = true;
-            setIsMuted(true);
-        } else {
+    // Run initially
+    handleTrackChange();
+
+    return () => {
+      if (tracksList) {
+        tracksList.removeEventListener("addtrack", handleTrackChange);
+        tracksList.removeEventListener("change", handleTrackChange);
+      }
+    };
+  }, [showSubtitles, subtitleUrl, activeCaption]);
+
+  const handleVideoEnded = () => {
+    if (isSeries) {
+      if (season && episode) {
+        // Mark current episode as fully watched
+        localStore.markEpisodeWatched(
+          seriesDetailPath || detailPath,
+          season,
+          episode,
+        );
+        // Save history with 100% progress
+        localStore.saveHistoryItem({
+          detailPath: seriesDetailPath || detailPath,
+          title,
+          coverUrl,
+          duration,
+          currentTime: duration,
+          progress: 100,
+          isSeries,
+          season,
+          episode,
+        });
+      }
+      if (onNextEpisode) {
+        onNextEpisode();
+      }
+    }
+  };
+
+  const handleNextEpisodeClick = () => {
+    if (isSeries && season && episode) {
+      // Mark current episode as watched before switching
+      localStore.markEpisodeWatched(
+        seriesDetailPath || detailPath,
+        season,
+        episode,
+      );
+      // Save current progress before switching
+      if (videoRef.current && videoRef.current.currentTime > 5) {
+        const current = videoRef.current.currentTime;
+        const dur = videoRef.current.duration || duration;
+        const progressPercent =
+          dur > 0 ? Math.min(Math.round((current / dur) * 100), 100) : 0;
+        localStore.saveHistoryItem({
+          detailPath: seriesDetailPath || detailPath,
+          title,
+          coverUrl,
+          duration: dur,
+          currentTime: current,
+          progress: progressPercent,
+          isSeries,
+          season,
+          episode,
+        });
+      }
+    }
+    if (onNextEpisode) {
+      onNextEpisode();
+    }
+  };
+
+  // Handle keyboard shortcuts (Space to Play/Pause, Arrows to Seek/Volume, M to Mute, F to Fullscreen)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.getAttribute("contenteditable") === "true")
+      ) {
+        return;
+      }
+
+      if (!videoRef.current) return;
+
+      switch (e.key) {
+        case " ":
+        case "Spacebar":
+          e.preventDefault();
+          togglePlay();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          videoRef.current.currentTime = Math.max(
+            0,
+            videoRef.current.currentTime - 10,
+          );
+          setCurrentTime(videoRef.current.currentTime);
+          triggerControlsVisibility();
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          videoRef.current.currentTime = Math.min(
+            videoRef.current.duration || 0,
+            videoRef.current.currentTime + 10,
+          );
+          setCurrentTime(videoRef.current.currentTime);
+          triggerControlsVisibility();
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
+          videoRef.current.volume = newVolUp;
+          setVolume(newVolUp);
+          if (newVolUp > 0) {
             videoRef.current.muted = false;
             setIsMuted(false);
-        }
+          }
+          triggerControlsVisibility();
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          const newVolDown = Math.max(0, videoRef.current.volume - 0.1);
+          videoRef.current.volume = newVolDown;
+          setVolume(newVolDown);
+          if (newVolDown === 0) {
+            videoRef.current.muted = true;
+            setIsMuted(true);
+          } else {
+            videoRef.current.muted = false;
+            setIsMuted(false);
+          }
+          triggerControlsVisibility();
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          toggleMute();
+          triggerControlsVisibility();
+          break;
+        case "f":
+        case "F":
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        default:
+          break;
+      }
     };
 
-    // Playback speeds multiplier
-    const handleSpeedChange = (rate: number) => {
-        if (!videoRef.current) return;
-        videoRef.current.playbackRate = rate;
-        setPlaybackRate(rate);
-        setShowSpeedMenu(false);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, {
+        capture: true,
+      });
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, isFullscreen, volume, isMuted]);
 
-    // Fullscreen implementation with landscape lock on mobile
-    const toggleFullscreen = () => {
-        if (!containerRef.current) return;
-        if (!document.fullscreenElement) {
-            containerRef.current
-                .requestFullscreen()
-                .then(() => {
-                    setIsFullscreen(true);
-                    // Lock to landscape on mobile devices
-                    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-                        window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches;
-                    if (isMobileDevice && screen.orientation && (screen.orientation as any).lock) {
-                        (screen.orientation as any).lock("landscape").catch(() => {
-                            // Orientation lock not supported â€” silently ignore
-                        });
-                    }
-                })
-                .catch((err) => {
-                    console.error("Fullscreen request failed:", err);
-                });
-        } else {
-            document.exitFullscreen();
-            setIsFullscreen(false);
-            // Unlock orientation when leaving fullscreen
-            if (screen.orientation && (screen.orientation as any).unlock) {
-                try { (screen.orientation as any).unlock(); } catch (_) { }
-            }
-        }
-    };
-
-    // Picture-in-Picture implementation
-    const togglePiP = async () => {
-        if (!videoRef.current) return;
-        try {
-            if (document.pictureInPictureElement) {
-                await document.exitPictureInPicture();
-                setIsPiPActive(false);
-            } else {
-                await videoRef.current.requestPictureInPicture();
-                setIsPiPActive(true);
-            }
-        } catch (err) {
-            console.error("PiP toggle failed:", err);
-        }
-    };
-
-    // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
-    const handlePlayerClickCapture = (e: React.MouseEvent) => {
-        const target = e.target as HTMLElement;
-        const focusable = target.closest(
-            "button, input[type='range'], [role='button']",
-        );
-        if (focusable) {
-            setTimeout(() => {
-                (focusable as HTMLElement).blur();
-            }, 100);
-        }
-    };
-
-    // Handle single clicks on the screen
-    const handleScreenClick = (e: React.MouseEvent) => {
-        const clickTarget = e.target as HTMLElement;
-        if (
-            clickTarget.closest("button") ||
-            clickTarget.closest("input") ||
-            clickTarget.closest("select") ||
-            clickTarget.closest("[data-controls-panel]") ||
-            clickTarget.closest("[data-skip-zone]") ||
-            clickTarget.closest(".absolute.bottom-14")
-        ) {
-            return;
-        }
-
-        e.stopPropagation();
-        e.preventDefault();
-        togglePlay();
-    };
-
-    // Handle double clicks on the screen to toggle fullscreen or seek
-    const handleScreenDoubleClick = (e: React.MouseEvent) => {
-        const target = e.currentTarget as HTMLElement;
-        const clickTarget = e.target as HTMLElement;
-        if (
-            clickTarget.closest("button") ||
-            clickTarget.closest("input") ||
-            clickTarget.closest("select") ||
-            clickTarget.closest(".bg-zinc-950/80") ||
-            clickTarget.closest(".absolute.bottom-14")
-        ) {
-            return;
-        }
-
-        e.stopPropagation();
-        e.preventDefault();
-
-        const rect = target.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const clickRatio = x / rect.width;
-
-        if (clickRatio < 0.35) {
-            // Skip backward 10s
-            if (videoRef.current) {
-                videoRef.current.currentTime = Math.max(
-                    0,
-                    videoRef.current.currentTime - 10,
-                );
-                setCurrentTime(videoRef.current.currentTime);
-            }
-            setShowLeftSkipAnimation(true);
-            if (leftSkipTimeoutRef.current)
-                clearTimeout(leftSkipTimeoutRef.current);
-            leftSkipTimeoutRef.current = setTimeout(
-                () => setShowLeftSkipAnimation(false),
-                800,
-            );
-            triggerControlsVisibility();
-        } else if (clickRatio > 0.65) {
-            // Skip forward 10s
-            if (videoRef.current) {
-                videoRef.current.currentTime = Math.min(
-                    videoRef.current.duration || 0,
-                    videoRef.current.currentTime + 10,
-                );
-                setCurrentTime(videoRef.current.currentTime);
-            }
-            setShowRightSkipAnimation(true);
-            if (rightSkipTimeoutRef.current)
-                clearTimeout(rightSkipTimeoutRef.current);
-            rightSkipTimeoutRef.current = setTimeout(
-                () => setShowRightSkipAnimation(false),
-                800,
-            );
-            triggerControlsVisibility();
-        } else {
-            // Double click in the middle: toggle fullscreen
-            toggleFullscreen();
-        }
-    };
-
-    // Handle click outside of dropdowns to close them
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as Node;
-            if (
-                audioMenuRef.current &&
-                !audioMenuRef.current.contains(target)
-            ) {
-                setShowAudioMenu(false);
-            }
-            if (
-                qualityMenuRef.current &&
-                !qualityMenuRef.current.contains(target)
-            ) {
-                setShowQualityMenu(false);
-            }
-            if (
-                speedMenuRef.current &&
-                !speedMenuRef.current.contains(target)
-            ) {
-                setShowSpeedMenu(false);
-            }
-            if (
-                subtitleMenuRef.current &&
-                !subtitleMenuRef.current.contains(target)
-            ) {
-                setShowSubtitleMenu(false);
-            }
-            if (
-                ratioMenuRef.current &&
-                !ratioMenuRef.current.contains(target)
-            ) {
-                setShowRatioMenu(false);
-            }
-        };
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
-
-    // Handle keyboard shortcuts
-
-    // Track fullscreen changes directly on document level (e.g. Escape key presses)
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            const isNowFullscreen = !!document.fullscreenElement;
-            setIsFullscreen(isNowFullscreen);
-            // Unlock orientation if exiting fullscreen (e.g. via Escape key)
-            if (!isNowFullscreen && screen.orientation && (screen.orientation as any).unlock) {
-                try { (screen.orientation as any).unlock(); } catch (_) { }
-            }
-        };
-        document.addEventListener("fullscreenchange", handleFullscreenChange);
-        return () =>
-            document.removeEventListener(
-                "fullscreenchange",
-                handleFullscreenChange,
-            );
-    }, []);
-
-    // Controls Visibility Timers
-    const triggerControlsVisibility = () => {
-        setShowControls(true);
-        if (controlsTimeoutRef.current) {
-            clearTimeout(controlsTimeoutRef.current);
-        }
-
-        // Hide controls after 1.2 seconds of inactivity while playing
-        if (isPlaying) {
-            controlsTimeoutRef.current = setTimeout(() => {
-                setShowControls(false);
-                setShowQualityMenu(false);
-                setShowSpeedMenu(false);
-                setShowAudioMenu(false);
-                setShowSubtitleMenu(false);
-                setShowRatioMenu(false);
-            }, 1200);
-        }
-    };
-
-    // Auto hide controls when playing, show them when paused, and clean up timers
-    useEffect(() => {
-        if (isPlaying) {
-            setShowControls(true);
-            if (controlsTimeoutRef.current) {
-                clearTimeout(controlsTimeoutRef.current);
-            }
-            controlsTimeoutRef.current = setTimeout(() => {
-                setShowControls(false);
-                setShowQualityMenu(false);
-                setShowSpeedMenu(false);
-                setShowAudioMenu(false);
-                setShowSubtitleMenu(false);
-                setShowRatioMenu(false);
-            }, 1200);
-        } else {
-            setShowControls(true);
-            if (controlsTimeoutRef.current) {
-                clearTimeout(controlsTimeoutRef.current);
-            }
-        }
-
-        return () => {
-            if (controlsTimeoutRef.current) {
-                clearTimeout(controlsTimeoutRef.current);
-            }
-            if (clickTimeoutRef.current) {
-                clearTimeout(clickTimeoutRef.current);
-            }
-        };
-    }, [isPlaying]);
-
-    // Format second timestamps to HH:MM:SS text
-    const formatTime = (seconds: number) => {
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        if (hrs > 0) {
-            return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
-        }
-        return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-    };
-
-    // Toggle Subtitle track display mode and disable other tracks to prevent duplicates
-    useEffect(() => {
-        const handleTrackChange = () => {
-            if (!videoRef.current || !videoRef.current.textTracks) return;
-            const tracks = videoRef.current.textTracks;
-            let enabledAny = false;
-            for (let i = 0; i < tracks.length; i++) {
-                const track = tracks[i];
-                if (showSubtitles && activeCaption) {
-                    const isMatch =
-                        track.language === activeCaption.lan ||
-                        track.label === activeCaption.lanName;
-
-                    if (isMatch && !enabledAny) {
-                        track.mode = "showing";
-                        enabledAny = true;
-                    } else {
-                        track.mode = "disabled";
-                    }
-                } else {
-                    track.mode = "disabled";
-                }
-            }
-        };
-
-        const tracksList = videoRef.current?.textTracks;
-        if (tracksList) {
-            tracksList.addEventListener("addtrack", handleTrackChange);
-            tracksList.addEventListener("change", handleTrackChange);
-        }
-
-        // Run initially
-        handleTrackChange();
-
-        return () => {
-            if (tracksList) {
-                tracksList.removeEventListener("addtrack", handleTrackChange);
-                tracksList.removeEventListener("change", handleTrackChange);
-            }
-        };
-    }, [showSubtitles, subtitleUrl, activeCaption]);
-
-    const handleVideoEnded = () => {
-        if (isSeries) {
-            if (season && episode) {
-                // Mark current episode as fully watched
-                localStore.markEpisodeWatched(
-                    seriesDetailPath || detailPath,
-                    season,
-                    episode,
-                );
-                // Save history with 100% progress
-                localStore.saveHistoryItem({
-                    detailPath: seriesDetailPath || detailPath,
-                    title,
-                    coverUrl,
-                    duration,
-                    currentTime: duration,
-                    progress: 100,
-                    isSeries,
-                    season,
-                    episode,
-                });
-            }
-            if (onNextEpisode) {
-                onNextEpisode();
-            }
-        }
-    };
-
-    const handleNextEpisodeClick = () => {
-        if (isSeries && season && episode) {
-            // Mark current episode as watched before switching
-            localStore.markEpisodeWatched(
-                seriesDetailPath || detailPath,
-                season,
-                episode,
-            );
-            // Save current progress before switching
-            if (videoRef.current && videoRef.current.currentTime > 5) {
-                const current = videoRef.current.currentTime;
-                const dur = videoRef.current.duration || duration;
-                const progressPercent =
-                    dur > 0
-                        ? Math.min(Math.round((current / dur) * 100), 100)
-                        : 0;
-                localStore.saveHistoryItem({
-                    detailPath: seriesDetailPath || detailPath,
-                    title,
-                    coverUrl,
-                    duration: dur,
-                    currentTime: current,
-                    progress: progressPercent,
-                    isSeries,
-                    season,
-                    episode,
-                });
-            }
-        }
-        if (onNextEpisode) {
-            onNextEpisode();
-        }
-    };
-
-    // Handle keyboard shortcuts (Space to Play/Pause, Arrows to Seek/Volume, M to Mute, F to Fullscreen)
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const activeEl = document.activeElement;
-            if (
-                activeEl &&
-                (activeEl.tagName === "INPUT" ||
-                    activeEl.tagName === "TEXTAREA" ||
-                    activeEl.getAttribute("contenteditable") === "true")
-            ) {
-                return;
-            }
-
-            if (!videoRef.current) return;
-
-            switch (e.key) {
-                case " ":
-                case "Spacebar":
-                    e.preventDefault();
-                    togglePlay();
-                    break;
-                case "ArrowLeft":
-                    e.preventDefault();
-                    videoRef.current.currentTime = Math.max(
-                        0,
-                        videoRef.current.currentTime - 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    triggerControlsVisibility();
-                    break;
-                case "ArrowRight":
-                    e.preventDefault();
-                    videoRef.current.currentTime = Math.min(
-                        videoRef.current.duration || 0,
-                        videoRef.current.currentTime + 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    triggerControlsVisibility();
-                    break;
-                case "ArrowUp":
-                    e.preventDefault();
-                    const newVolUp = Math.min(1, videoRef.current.volume + 0.1);
-                    videoRef.current.volume = newVolUp;
-                    setVolume(newVolUp);
-                    if (newVolUp > 0) {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                    }
-                    triggerControlsVisibility();
-                    break;
-                case "ArrowDown":
-                    e.preventDefault();
-                    const newVolDown = Math.max(
-                        0,
-                        videoRef.current.volume - 0.1,
-                    );
-                    videoRef.current.volume = newVolDown;
-                    setVolume(newVolDown);
-                    if (newVolDown === 0) {
-                        videoRef.current.muted = true;
-                        setIsMuted(true);
-                    } else {
-                        videoRef.current.muted = false;
-                        setIsMuted(false);
-                    }
-                    triggerControlsVisibility();
-                    break;
-                case "m":
-                case "M":
-                    e.preventDefault();
-                    toggleMute();
-                    triggerControlsVisibility();
-                    break;
-                case "f":
-                case "F":
-                    e.preventDefault();
-                    toggleFullscreen();
-                    break;
-                default:
-                    break;
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown, { capture: true });
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown, {
-                capture: true,
-            });
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPlaying, isFullscreen, volume, isMuted]);
-
-    return (
-        <div
-            ref={containerRef}
-            onMouseMove={triggerControlsVisibility}
-            onMouseLeave={() => isPlaying && setShowControls(false)}
-            onClick={handleScreenClick}
-            onDoubleClick={handleScreenDoubleClick}
-            onClickCapture={handlePlayerClickCapture}
-            className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${isPlaying && !showControls ? "cursor-none" : ""
-                }`}
-        >
-            <style
-                dangerouslySetInnerHTML={{
-                    __html: `
+  return (
+    <div
+      ref={containerRef}
+      onMouseMove={triggerControlsVisibility}
+      onMouseLeave={() => isPlaying && setShowControls(false)}
+      onClick={handleScreenClick}
+      onDoubleClick={handleScreenDoubleClick}
+      onClickCapture={handlePlayerClickCapture}
+      className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
+        isPlaying && !showControls ? "cursor-none" : ""
+      }`}
+    >
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
                 video::cue {
                     font-size: ${subtitleSize} !important;
                     background: rgba(0, 0, 0, 0.75) !important;
@@ -1270,968 +1250,1049 @@ export default function VideoPlayer({
                 .animate-fade-in {
                     animation: fadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
                 }
+                .custom-scrollbar {
+                    scrollbar-width: none;
+                    -ms-overflow-style: none;
+                }
+                .custom-scrollbar::-webkit-scrollbar {
+                    display: none;
+                }
             `,
-                }}
+        }}
+      />
+
+      {/* Video Node */}
+      {activeDownload && !playerError && (
+        <video
+          ref={videoRef}
+          src={buildVideoSrc(activeDownload.url)}
+          onEnded={handleVideoEnded}
+          className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
+            aspectRatio === "contain"
+              ? "object-contain"
+              : aspectRatio === "fill"
+                ? "object-fill"
+                : "object-cover"
+          }`}
+          onPlay={() => {
+            setIsPlaying(true);
+            setAutoRetryLabel("");
+          }}
+          onPause={() => setIsPlaying(false)}
+          onLoadedMetadata={handleLoadedMetadata}
+          onDurationChange={() => {
+            if (
+              videoRef.current &&
+              videoRef.current.duration > 0 &&
+              isFinite(videoRef.current.duration)
+            ) {
+              setDuration(videoRef.current.duration);
+            }
+          }}
+          onTimeUpdate={handleTimeUpdate}
+          onProgress={() => {
+            if (
+              videoRef.current &&
+              videoRef.current.buffered.length > 0 &&
+              videoRef.current.duration > 0 &&
+              isFinite(videoRef.current.duration)
+            ) {
+              const buf = videoRef.current.buffered;
+              let maxEnd = 0;
+              for (let i = 0; i < buf.length; i++) {
+                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
+              }
+              setBufferedPercent((maxEnd / videoRef.current.duration) * 100);
+            }
+          }}
+          onWaiting={() => {
+            // Delay showing loader â€” avoids flash when seeking within buffer
+            if (waitingTimeoutRef.current)
+              clearTimeout(waitingTimeoutRef.current);
+            waitingTimeoutRef.current = setTimeout(() => {
+              setIsLoading(true);
+            }, 350);
+          }}
+          onPlaying={() => {
+            // Cancel pending loader and hide it
+            if (waitingTimeoutRef.current) {
+              clearTimeout(waitingTimeoutRef.current);
+              waitingTimeoutRef.current = null;
+            }
+            setIsLoading(false);
+            setAutoRetryLabel("");
+          }}
+          onError={handlePlayerError}
+          autoPlay
+          playsInline
+          preload="metadata"
+        >
+          {/* Subtitle track */}
+          {subtitleUrl && activeCaption && (
+            <track
+              key={activeCaption.id || activeCaption.url}
+              kind="subtitles"
+              src={subtitleUrl}
+              srcLang={activeCaption.lan}
+              label={activeCaption.lanName}
+              default
             />
+          )}
+        </video>
+      )}
 
-            {/* Video Node */}
-            {activeDownload && !playerError && (
-                <video
-                    ref={videoRef}
-                    src={buildVideoSrc(activeDownload.url)}
-                    onEnded={handleVideoEnded}
-                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${aspectRatio === "contain"
-                            ? "object-contain"
-                            : aspectRatio === "fill"
-                                ? "object-fill"
-                                : "object-cover"
-                        }`}
-                    onPlay={() => {
-                        setIsPlaying(true);
-                        setAutoRetryLabel("");
-                    }}
-                    onPause={() => setIsPlaying(false)}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onDurationChange={() => {
-                        if (
-                            videoRef.current &&
-                            videoRef.current.duration > 0 &&
-                            isFinite(videoRef.current.duration)
-                        ) {
-                            setDuration(videoRef.current.duration);
-                        }
-                    }}
-                    onTimeUpdate={handleTimeUpdate}
-                    onProgress={() => {
-                        if (
-                            videoRef.current &&
-                            videoRef.current.buffered.length > 0 &&
-                            videoRef.current.duration > 0 &&
-                            isFinite(videoRef.current.duration)
-                        ) {
-                            const buf = videoRef.current.buffered;
-                            let maxEnd = 0;
-                            for (let i = 0; i < buf.length; i++) {
-                                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
-                            }
-                            setBufferedPercent(
-                                (maxEnd / videoRef.current.duration) * 100,
-                            );
-                        }
-                    }}
-                    onWaiting={() => {
-                        // Delay showing loader â€” avoids flash when seeking within buffer
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        waitingTimeoutRef.current = setTimeout(() => {
-                            setIsLoading(true);
-                        }, 350);
-                    }}
-                    onPlaying={() => {
-                        // Cancel pending loader and hide it
-                        if (waitingTimeoutRef.current) {
-                            clearTimeout(waitingTimeoutRef.current);
-                            waitingTimeoutRef.current = null;
-                        }
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                    }}
-                    onError={handlePlayerError}
-                    autoPlay
-                    playsInline
-                    preload="metadata"
-                >
-                    {/* Subtitle track */}
-                    {subtitleUrl && activeCaption && (
-                        <track
-                            key={activeCaption.id || activeCaption.url}
-                            kind="subtitles"
-                            src={subtitleUrl}
-                            srcLang={activeCaption.lan}
-                            label={activeCaption.lanName}
-                            default
-                        />
-                    )}
-                </video>
-            )}
+      {/* Click Catcher Overlay */}
+      {!playerError && (
+        <div
+          className={`absolute inset-0 z-10 ${
+            isPlaying && !showControls ? "cursor-none" : "cursor-pointer"
+          }`}
+          onClick={handleScreenClick}
+          onDoubleClick={handleScreenDoubleClick}
+        />
+      )}
 
-            {/* Click Catcher Overlay */}
-            {!playerError && (
-                <div
-                    className={`absolute inset-0 z-10 ${isPlaying && !showControls
-                            ? "cursor-none"
-                            : "cursor-pointer"
-                        }`}
-                    onClick={handleScreenClick}
-                    onDoubleClick={handleScreenDoubleClick}
-                />
-            )}
-
-            {/* Double-Click Skip Animations */}
-            {showLeftSkipAnimation && (
-                <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-r-full animate-pulse-fast">
-                    <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
-                        <SkipBack className="w-5 h-5 fill-white animate-bounce-horizontal-left text-primary-light" />
-                        <span className="text-xs font-black">-10s</span>
-                    </div>
-                </div>
-            )}
-
-            {showRightSkipAnimation && (
-                <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-l-full animate-pulse-fast">
-                    <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
-                        <SkipForward className="w-5 h-5 fill-white animate-bounce-horizontal-right text-primary-light" />
-                        <span className="text-xs font-black">+10s</span>
-                    </div>
-                </div>
-            )}
-
-            {/* Skip Intro Floating Button */}
-            {introStart !== null && introEnd !== null && currentTime >= introStart && currentTime <= introEnd && (
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (videoRef.current) {
-                            videoRef.current.currentTime = introEnd;
-                            setCurrentTime(introEnd);
-                        }
-                        triggerControlsVisibility();
-                    }}
-                    className="absolute bottom-32 right-6 z-25 bg-zinc-950/80 border border-white/10 hover:bg-zinc-900 hover:border-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
-                >
-                    <span>Skip Intro</span>
-                    <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
-                </button>
-            )}
-
-            {/* Skip Outro / Next Episode Floating Button */}
-            {isSeries &&
-                onNextEpisode &&
-                duration > 0 &&
-                (outroStart !== null && outroEnd !== null
-                    ? currentTime >= outroStart && currentTime <= outroEnd
-                    : currentTime >= duration - 150 && currentTime < duration - 10) && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleNextEpisodeClick();
-                        }}
-                        className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
-                    >
-                        <span>Next Episode</span>
-                        <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
-                    </button>
-                )}
-
-            {/* Loading state spinner */}
-            {isLoading && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                </div>
-            )}
-
-            {/* Auto-retry label */}
-            {autoRetryLabel && !playerError && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 pointer-events-none">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                    <p className="text-white/80 text-xs font-bold uppercase tracking-widest">
-                        {autoRetryLabel}
-                    </p>
-                </div>
-            )}
-
-            {/* Error state overlay */}
-            {playerError && (
-                <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-30">
-                    <AlertTriangle className="w-14 h-14 text-yellow-500 mb-4 animate-pulse" />
-                    <h3 className="text-white font-extrabold text-lg mb-2">
-                        Video playback failed
-                    </h3>
-                    <p className="text-sm text-white/50 max-w-sm mb-6">
-                        All available mirrors have been tried. This stream may
-                        be temporarily unavailable â€” please try again later.
-                    </p>
-                    <button
-                        onClick={() => {
-                            // Full reset â€” clear failed URLs, reset refresh count, restart from highest quality
-                            failedUrlsRef.current = new Set();
-                            proxyFailedUrlsRef.current = new Set();
-                            refreshCountRef.current = 0;
-                            setUseDirectUrl(false);
-                            setPlayerError(false);
-                            setAutoRetryLabel("");
-                            setIsLoading(true);
-                            const best = sortedDownloads[0];
-                            if (best) {
-                                setActiveDownload(null);
-                                setTimeout(() => setActiveDownload(best), 50);
-                            } else {
-                                // No downloads in current data â€” try fresh fetch
-                                refreshStreamData();
-                            }
-                        }}
-                        className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all"
-                    >
-                        Retry All Mirrors
-                    </button>
-                </div>
-            )}
-
-            {/* Custom Overlay Controls HUD */}
-            <div
-                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${showControls
-                        ? "opacity-100"
-                        : "opacity-0 pointer-events-none"
-                    } ${isPlaying && !showControls ? "cursor-none" : ""}`}
-                onClick={handleScreenClick}
-                onDoubleClick={handleScreenDoubleClick}
-            >
-                {/* Top bar info */}
-                <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
-                    <div className="text-white drop-shadow-md">
-                        <h2 className="font-extrabold text-sm sm:text-base line-clamp-1">
-                            {title}
-                        </h2>
-                        {isSeries && season && episode && (
-                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                                Season {season} â€¢ Episode {episode}
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Play/Pause center overlay (shows only on pause) */}
-                {!isPlaying && !isLoading && (
-                    <button
-                        onClick={togglePlay}
-                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-30"
-                    >
-                        <Play className="w-7 h-7 fill-white translate-x-0.5" />
-                    </button>
-                )}
-
-
-                {/* Bottom controls panel wrapped in a premium floating glass panel */}
-                <div className="w-full max-w-6xl mx-auto px-2 pb-2 sm:px-6 sm:pb-6" data-controls-panel>
-                    <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-2xl space-y-2.5 sm:space-y-4 transition-all duration-300 hover:border-white/15">
-                        {/* Timeline Seek Scrubber Track */}
-                        <div className="flex items-center space-x-3">
-                            <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">
-                                {formatTime(currentTime)}
-                            </span>
-
-                            {/* Custom progress bar with buffer indicator */}
-                            <div
-                                className="grow relative h-5 sm:h-4 flex items-center cursor-pointer group/scrub select-none"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!videoRef.current || !duration) return;
-                                    const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                    const x = e.clientX - rect.left;
-                                    const percent = Math.max(
-                                        0,
-                                        Math.min(x / rect.width, 1),
-                                    );
-                                    const seekTime = percent * duration;
-                                    videoRef.current.currentTime = seekTime;
-                                    setCurrentTime(seekTime);
-                                    triggerControlsVisibility();
-                                    // Ensure video keeps playing after seek
-                                    if (!videoRef.current.paused) {
-                                        videoRef.current.play().catch(() => { });
-                                    }
-                                }}
-                                onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const track = e.currentTarget;
-                                    const seek = (ev: MouseEvent) => {
-                                        if (!videoRef.current || !duration)
-                                            return;
-                                        const rect =
-                                            track.getBoundingClientRect();
-                                        const x = Math.max(
-                                            0,
-                                            Math.min(
-                                                ev.clientX - rect.left,
-                                                rect.width,
-                                            ),
-                                        );
-                                        const percent = x / rect.width;
-                                        const seekTime = percent * duration;
-                                        videoRef.current.currentTime = seekTime;
-                                        setCurrentTime(seekTime);
-                                    };
-                                    const onUp = () => {
-                                        document.removeEventListener(
-                                            "mousemove",
-                                            seek,
-                                        );
-                                        document.removeEventListener(
-                                            "mouseup",
-                                            onUp,
-                                        );
-                                        // Resume playback after drag seek
-                                        if (
-                                            videoRef.current &&
-                                            !videoRef.current.paused
-                                        ) {
-                                            videoRef.current
-                                                .play()
-                                                .catch(() => { });
-                                        }
-                                    };
-                                    document.addEventListener(
-                                        "mousemove",
-                                        seek,
-                                    );
-                                    document.addEventListener("mouseup", onUp);
-                                }}
-                                onTouchStart={(e) => {
-                                    e.stopPropagation();
-                                    const track = e.currentTarget;
-                                    const seek = (ev: TouchEvent) => {
-                                        if (
-                                            !videoRef.current ||
-                                            !duration ||
-                                            !ev.touches[0]
-                                        )
-                                            return;
-                                        const rect =
-                                            track.getBoundingClientRect();
-                                        const x = Math.max(
-                                            0,
-                                            Math.min(
-                                                ev.touches[0].clientX -
-                                                rect.left,
-                                                rect.width,
-                                            ),
-                                        );
-                                        const percent = x / rect.width;
-                                        const seekTime = percent * duration;
-                                        videoRef.current.currentTime = seekTime;
-                                        setCurrentTime(seekTime);
-                                    };
-                                    const onEnd = () => {
-                                        document.removeEventListener(
-                                            "touchmove",
-                                            seek,
-                                        );
-                                        document.removeEventListener(
-                                            "touchend",
-                                            onEnd,
-                                        );
-                                        // Resume playback after touch seek
-                                        if (
-                                            videoRef.current &&
-                                            !videoRef.current.paused
-                                        ) {
-                                            videoRef.current
-                                                .play()
-                                                .catch(() => { });
-                                        }
-                                    };
-                                    document.addEventListener(
-                                        "touchmove",
-                                        seek,
-                                    );
-                                    document.addEventListener(
-                                        "touchend",
-                                        onEnd,
-                                    );
-                                }}
-                            >
-                                {/* Visual track */}
-                                <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
-                                    {/* Buffered range (light grey) */}
-                                    <div
-                                        className="absolute top-0 left-0 h-full bg-white/40 rounded-full"
-                                        style={{
-                                            width: `${bufferedPercent}%`,
-                                        }}
-                                    />
-                                    {/* Played range (primary red) */}
-                                    <div
-                                        className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]"
-                                        style={{
-                                            width:
-                                                duration > 0
-                                                    ? `${(currentTime / duration) * 100}%`
-                                                    : "0%",
-                                        }}
-                                    />
-                                </div>
-                                {/* Scrub thumb indicator */}
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-primary rounded-full shadow-lg opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
-                                    style={{
-                                        left:
-                                            duration > 0
-                                                ? `calc(${(currentTime / duration) * 100}% - 7px)`
-                                                : "0px",
-                                    }}
-                                />
-                            </div>
-
-                            <span
-                                onClick={() =>
-                                    setShowRemaining((prev) => !prev)
-                                }
-                                className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
-                                title={
-                                    showRemaining
-                                        ? "Click to show duration"
-                                        : "Click to show remaining time"
-                                }
-                            >
-                                {showRemaining
-                                    ? `-${formatTime(Math.max(0, duration - currentTime))}`
-                                    : formatTime(duration)}
-                            </span>
-                        </div>
-
-                        {/* Controls Bar Row */}
-                        <div className="flex items-center justify-between">
-                            {/* Left Controls: Prev, Play, Next, Volume */}
-                            <div className="flex items-center space-x-2.5 sm:space-x-3">
-                                {/* Prev Episode */}
-                                {isSeries && onPrevEpisode && (
-                                    <button
-                                        onClick={onPrevEpisode}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                        title="Previous Episode"
-                                    >
-                                        <SkipBack className="w-4 h-4 fill-white text-white" />
-                                    </button>
-                                )}
-
-                                {/* Play Pause */}
-                                <button
-                                    onClick={togglePlay}
-                                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                >
-                                    {isPlaying ? (
-                                        <Pause className="w-4.5 h-4.5 fill-white" />
-                                    ) : (
-                                        <Play className="w-4.5 h-4.5 fill-white" />
-                                    )}
-                                </button>
-
-                                {/* Next Episode */}
-                                {isSeries && onNextEpisode && (
-                                    <button
-                                        onClick={handleNextEpisodeClick}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                        title="Next Episode"
-                                    >
-                                        <SkipForward className="w-4 h-4 fill-white text-white" />
-                                    </button>
-                                )}
-
-                                {/* Volume Panel â€” hidden on mobile, shown sm+ */}
-                                <div className="hidden sm:flex items-center space-x-2">
-                                    <button
-                                        onClick={toggleMute}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                    >
-                                        {isMuted || volume === 0 ? (
-                                            <VolumeX className="w-4.5 h-4.5 text-primary" />
-                                        ) : volume < 0.5 ? (
-                                            <Volume1 className="w-4.5 h-4.5" />
-                                        ) : (
-                                            <Volume2 className="w-4.5 h-4.5" />
-                                        )}
-                                    </button>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={isMuted ? 0 : volume}
-                                        onChange={handleVolumeChange}
-                                        className="w-16 sm:w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all"
-                                    />
-                                </div>
-                                {/* Mobile-only mute button */}
-                                <button
-                                    onClick={toggleMute}
-                                    className="sm:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                >
-                                    {isMuted || volume === 0 ? (
-                                        <VolumeX className="w-4 h-4 text-primary" />
-                                    ) : (
-                                        <Volume2 className="w-4 h-4" />
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Screen Size, Fullscreen */}
-                            <div className="flex items-center space-x-1 sm:space-x-2 relative">
-
-                                {/* â”€â”€ SECONDARY CONTROLS (hidden on mobile, visible sm+) â”€â”€ */}
-                                <div className="hidden sm:flex items-center space-x-2 relative">
-
-                                    {/* Subtitle Selector */}
-                                    {captions.length > 0 && (
-                                        <div ref={subtitleMenuRef} className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(!showSubtitleMenu);
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu || showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/70 hover:text-white"
-                                                    }`}
-                                                title="Subtitles"
-                                            >
-                                                <Subtitles className="w-4.5 h-4.5" />
-                                            </button>
-
-                                            {showSubtitleMenu && (
-                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Subtitles
-                                                    </p>
-                                                    <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() => handleSubtitleChange(null)}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"
-                                                                }`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map((caption) => (
-                                                            <button
-                                                                key={caption.id || caption.url}
-                                                                onClick={() => handleSubtitleChange(caption)}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id
-                                                                        ? "text-primary bg-primary/10"
-                                                                        : "text-white/80"
-                                                                    }`}
-                                                            >
-                                                                {caption.lanName}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Size
-                                                    </p>
-                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {["16px", "22px", "28px", "36px"].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() => setSubtitleSize(size)}
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"
-                                                                    }`}
-                                                            >
-                                                                {["SM", "MD", "LG", "XL"][i]}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Audio/Dub selector */}
-                                    {dubs && dubs.length > 0 && (
-                                        <div ref={audioMenuRef} className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowAudioMenu(!showAudioMenu);
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowSubtitleMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
-                                                    }`}
-                                                title="Change Audio Track"
-                                            >
-                                                <Headphones className="w-4.5 h-4.5" />
-                                            </button>
-
-                                            {showAudioMenu && (
-                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Audio Track
-                                                    </p>
-                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        {dubs.map((dub, idx) => {
-                                                            const isCurrent = detailPath === dub.detailPath;
-                                                            return (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => {
-                                                                        setShowAudioMenu(false);
-                                                                        window.location.href = `/watch/${dub.detailPath}`;
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isCurrent ? "text-primary bg-primary/10" : "text-white/80"
-                                                                        }`}
-                                                                >
-                                                                    {dub.lanName}{" "}{dub.original ? "(Original)" : ""}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Quality (desktop full pill) */}
-                                    <div ref={qualityMenuRef} className="relative">
-                                        <button
-                                            onClick={() => {
-                                                setShowQualityMenu(!showQualityMenu);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${showQualityMenu
-                                                    ? "bg-primary/20 text-primary-light border-primary/30"
-                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
-                                                }`}
-                                        >
-                                            <span>
-                                                {activeDownload
-                                                    ? isAutoQuality
-                                                        ? `Auto (${activeDownload.resolution}p)`
-                                                        : `${activeDownload.resolution}p`
-                                                    : "Auto"}
-                                            </span>
-                                            <Settings className="w-3.5 h-3.5" />
-                                        </button>
-
-                                        {showQualityMenu && sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
-                                                <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsAutoQuality(true);
-                                                            setShowQualityMenu(false);
-                                                            const defaultQuality = sortedDownloads.find((d) => d.resolution === 720) || sortedDownloads.find((d) => d.resolution === 1080) || sortedDownloads[0];
-                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) {
-                                                                handleQualityChange(defaultQuality, true);
-                                                            }
-                                                        }}
-                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                    >
-                                                        Auto
-                                                    </button>
-                                                    {sortedDownloads.map((link) => (
-                                                        <button
-                                                            key={link.id}
-                                                            onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id === link.id ? "text-primary bg-primary/10" : "text-white/80"
-                                                                }`}
-                                                        >
-                                                            {link.resolution}p
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Speed */}
-                                    <div ref={speedMenuRef} className="relative">
-                                        <button
-                                            onClick={() => {
-                                                setShowSpeedMenu(!showSpeedMenu);
-                                                setShowQualityMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${showSpeedMenu ? "text-primary bg-primary/10" : "text-white/80 hover:text-white"
-                                                }`}
-                                        >
-                                            {playbackRate}x
-                                        </button>
-
-                                        {showSpeedMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Speed</p>
-                                                {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
-                                                    <button
-                                                        key={rate}
-                                                        onClick={() => handleSpeedChange(rate)}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${playbackRate === rate ? "text-primary bg-primary/10" : "text-white/80"
-                                                            }`}
-                                                    >
-                                                        {rate.toFixed(1)}x
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Aspect Ratio */}
-                                    <div ref={ratioMenuRef} className="relative">
-                                        <button
-                                            onClick={() => {
-                                                setShowRatioMenu(!showRatioMenu);
-                                                setShowQualityMenu(false);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                            }}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
-                                                }`}
-                                            title="Aspect Ratio"
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-                                                <rect x="3" y="5" width="18" height="14" rx="2" />
-                                                <path d="M 9 15 L 15 9" />
-                                                <path d="M 12 9 L 15 9 L 15 12" />
-                                                <path d="M 12 15 L 9 15 L 9 12" />
-                                            </svg>
-                                        </button>
-
-                                        {showRatioMenu && (
-                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen Size</p>
-                                                {[
-                                                    { value: "contain" as const, label: "Fit Screen" },
-                                                    { value: "fill" as const, label: "Stretch Screen" },
-                                                    { value: "cover" as const, label: "Zoom / Fill" },
-                                                ].map(({ value, label }) => (
-                                                    <button
-                                                        key={value}
-                                                        onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"
-                                                            }`}
-                                                    >
-                                                        {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* PiP (desktop only) */}
-                                    {isPiPSupported && (
-                                        <button
-                                            onClick={togglePiP}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${isPiPActive ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"
-                                                }`}
-                                            title="Picture-in-Picture"
-                                        >
-                                            <PictureInPicture2 className="w-4.5 h-4.5" />
-                                        </button>
-                                    )}
-                                </div>
-                                {/* ── MOBILE-ONLY: compact icon controls ── */}
-                                <div className="sm:hidden flex items-center space-x-0.5">
-
-                                    {/* Subtitle (mobile icon) */}
-                                    {captions.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(!showSubtitleMenu);
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showSubtitleMenu || showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/60 hover:text-white hover:bg-white/10"
-                                                    }`}
-                                                title="Subtitles"
-                                            >
-                                                <Subtitles className="w-4 h-4" />
-                                            </button>
-                                            {showSubtitleMenu && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Subtitles</p>
-                                                    <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() => handleSubtitleChange(null)}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map((caption) => (
-                                                            <button
-                                                                key={caption.id || caption.url}
-                                                                onClick={() => handleSubtitleChange(caption)}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id ? "text-primary bg-primary/10" : "text-white/80"
-                                                                    }`}
-                                                            >
-                                                                {caption.lanName}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">Size</p>
-                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {["16px", "22px", "28px", "36px"].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() => setSubtitleSize(size)}
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
-                                                            >
-                                                                {["SM", "MD", "LG", "XL"][i]}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Audio/Dub (mobile icon) */}
-                                    {dubs && dubs.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowAudioMenu(!showAudioMenu);
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowSubtitleMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"
-                                                    }`}
-                                                title="Audio Track"
-                                            >
-                                                <Headphones className="w-4 h-4" />
-                                            </button>
-                                            {showAudioMenu && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Audio Track</p>
-                                                    <div className="max-h-[160px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        {dubs.map((dub, idx) => (
-                                                            <button
-                                                                key={idx}
-                                                                onClick={() => { setShowAudioMenu(false); window.location.href = `/watch/${dub.detailPath}`; }}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${detailPath === dub.detailPath ? "text-primary bg-primary/10" : "text-white/80"
-                                                                    }`}
-                                                            >
-                                                                {dub.lanName}{dub.original ? " (Orig)" : ""}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Aspect Ratio (mobile icon) */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => {
-                                                setShowRatioMenu(!showRatioMenu);
-                                                setShowQualityMenu(false);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                            }}
-                                            className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/60 hover:text-white hover:bg-white/10"
-                                                }`}
-                                            title="Aspect Ratio"
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                                                <rect x="3" y="5" width="18" height="14" rx="2" />
-                                                <path d="M 9 15 L 15 9" /><path d="M 12 9 L 15 9 L 15 12" /><path d="M 12 15 L 9 15 L 9 12" />
-                                            </svg>
-                                        </button>
-                                        {showRatioMenu && (
-                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[120px] flex flex-col space-y-0.5 z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen Size</p>
-                                                {[
-                                                    { value: "contain" as const, label: "Fit Screen" },
-                                                    { value: "fill" as const, label: "Stretch" },
-                                                    { value: "cover" as const, label: "Zoom / Fill" },
-                                                ].map(({ value, label }) => (
-                                                    <button
-                                                        key={value}
-                                                        onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                    >
-                                                        {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Quality compact badge (mobile) */}
-                                    <div className="relative" ref={qualityMenuRef}>
-                                        <button
-                                            onClick={() => {
-                                                setShowQualityMenu(!showQualityMenu);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${showQualityMenu
-                                                    ? "bg-primary/20 text-primary-light border-primary/30"
-                                                    : "bg-white/5 border-white/10 text-white/80"
-                                                }`}
-                                        >
-                                            {activeDownload ? `${activeDownload.resolution}p` : "Auto"}
-                                        </button>
-                                        {showQualityMenu && sortedDownloads.length > 0 && (
-                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
-                                                <div className="max-h-[150px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsAutoQuality(true);
-                                                            setShowQualityMenu(false);
-                                                            const defaultQuality = sortedDownloads.find((d) => d.resolution === 720) || sortedDownloads[0];
-                                                            if (defaultQuality && activeDownload?.id !== defaultQuality.id) handleQualityChange(defaultQuality, true);
-                                                        }}
-                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                    >
-                                                        Auto
-                                                    </button>
-                                                    {sortedDownloads.map((link) => (
-                                                        <button
-                                                            key={link.id}
-                                                            onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id === link.id ? "text-primary bg-primary/10" : "text-white/80"
-                                                                }`}
-                                                        >
-                                                            {link.resolution}p
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Fullscreen (always visible) */}
-                                <button
-                                    onClick={toggleFullscreen}
-                                    className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                                >
-                                    {isFullscreen ? (
-                                        <Minimize className="w-4.5 h-4.5" />
-                                    ) : (
-                                        <Maximize className="w-4.5 h-4.5" />
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+      {/* Double-Click Skip Animations */}
+      {showLeftSkipAnimation && (
+        <div className="absolute left-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-r-full animate-pulse-fast">
+          <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
+            <SkipBack className="w-5 h-5 fill-white animate-bounce-horizontal-left text-primary-light" />
+            <span className="text-xs font-black">-10s</span>
+          </div>
         </div>
-    );
+      )}
+
+      {showRightSkipAnimation && (
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white/5 flex flex-col items-center justify-center z-15 pointer-events-none rounded-l-full animate-pulse-fast">
+          <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
+            <SkipForward className="w-5 h-5 fill-white animate-bounce-horizontal-right text-primary-light" />
+            <span className="text-xs font-black">+10s</span>
+          </div>
+        </div>
+      )}
+
+      {/* Skip Intro Floating Button */}
+      {introStart !== null &&
+        introEnd !== null &&
+        currentTime >= introStart &&
+        currentTime <= introEnd && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (videoRef.current) {
+                videoRef.current.currentTime = introEnd;
+                setCurrentTime(introEnd);
+              }
+              triggerControlsVisibility();
+            }}
+            className="absolute bottom-32 right-6 z-25 bg-zinc-950/80 border border-white/10 hover:bg-zinc-900 hover:border-white/20 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+          >
+            <span>Skip Intro</span>
+            <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
+          </button>
+        )}
+
+      {/* Skip Outro / Next Episode Floating Button */}
+      {isSeries &&
+        onNextEpisode &&
+        duration > 0 &&
+        (outroStart !== null && outroEnd !== null
+          ? currentTime >= outroStart && currentTime <= outroEnd
+          : currentTime >= duration - 150 && currentTime < duration - 10) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNextEpisodeClick();
+            }}
+            className="absolute bottom-32 right-6 z-25 bg-primary/95 border border-primary/20 hover:bg-primary text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-2xl backdrop-blur-md transition-all active:scale-95 animate-fade-in cursor-pointer"
+          >
+            <span>Next Episode</span>
+            <SkipForward className="w-3.5 h-3.5 fill-white text-white" />
+          </button>
+        )}
+
+      {/* Loading state spinner */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none">
+          <Loader2 className="w-12 h-12 text-primary animate-spin" />
+        </div>
+      )}
+
+      {/* Auto-retry label */}
+      {autoRetryLabel && !playerError && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 pointer-events-none">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
+          <p className="text-white/80 text-xs font-bold uppercase tracking-widest">
+            {autoRetryLabel}
+          </p>
+        </div>
+      )}
+
+      {/* Error state overlay */}
+      {playerError && (
+        <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-30">
+          <AlertTriangle className="w-14 h-14 text-yellow-500 mb-4 animate-pulse" />
+          <h3 className="text-white font-extrabold text-lg mb-2">
+            Video playback failed
+          </h3>
+          <p className="text-sm text-white/50 max-w-sm mb-6">
+            All available mirrors have been tried. This stream may be
+            temporarily unavailable â€” please try again later.
+          </p>
+          <button
+            onClick={() => {
+              // Full reset â€” clear failed URLs, reset refresh count, restart from highest quality
+              failedUrlsRef.current = new Set();
+              proxyFailedUrlsRef.current = new Set();
+              refreshCountRef.current = 0;
+              setUseDirectUrl(false);
+              setPlayerError(false);
+              setAutoRetryLabel("");
+              setIsLoading(true);
+              const best = sortedDownloads[0];
+              if (best) {
+                setActiveDownload(null);
+                setTimeout(() => setActiveDownload(best), 50);
+              } else {
+                // No downloads in current data â€” try fresh fetch
+                refreshStreamData();
+              }
+            }}
+            className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all"
+          >
+            Retry All Mirrors
+          </button>
+        </div>
+      )}
+
+      {/* Custom Overlay Controls HUD */}
+      <div
+        className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+          showControls ? "opacity-100" : "opacity-0 pointer-events-none"
+        } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+        onClick={handleScreenClick}
+        onDoubleClick={handleScreenDoubleClick}
+      >
+        {/* Top bar info */}
+        <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
+          <div className="text-white drop-shadow-md">
+            <h2 className="font-extrabold text-sm sm:text-base line-clamp-1">
+              {title}
+            </h2>
+            {isSeries && season && episode && (
+              <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
+                Season {season} â€¢ Episode {episode}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+        {!isPlaying &&
+          !isLoading &&
+          !showSubtitleMenu &&
+          !showAudioMenu &&
+          !showQualityMenu &&
+          !showSpeedMenu &&
+          !showRatioMenu && (
+            <button
+              onClick={togglePlay}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
+            >
+              <Play className="w-7 h-7 fill-white translate-x-0.5" />
+            </button>
+          )}
+
+        {/* Bottom controls panel wrapped in a premium floating glass panel */}
+        <div
+          className="w-full max-w-6xl mx-auto px-2 pb-2 sm:px-6 sm:pb-6"
+          data-controls-panel
+        >
+          <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-2xl space-y-2.5 sm:space-y-4 transition-all duration-300 hover:border-white/15">
+            {/* Timeline Seek Scrubber Track */}
+            <div className="flex items-center space-x-3">
+              <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">
+                {formatTime(currentTime)}
+              </span>
+
+              {/* Custom progress bar with buffer indicator */}
+              <div
+                className="grow relative h-5 sm:h-4 flex items-center cursor-pointer group/scrub select-none"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!videoRef.current || !duration) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const percent = Math.max(0, Math.min(x / rect.width, 1));
+                  const seekTime = percent * duration;
+                  videoRef.current.currentTime = seekTime;
+                  setCurrentTime(seekTime);
+                  triggerControlsVisibility();
+                  // Ensure video keeps playing after seek
+                  if (!videoRef.current.paused) {
+                    videoRef.current.play().catch(() => {});
+                  }
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const track = e.currentTarget;
+                  const seek = (ev: MouseEvent) => {
+                    if (!videoRef.current || !duration) return;
+                    const rect = track.getBoundingClientRect();
+                    const x = Math.max(
+                      0,
+                      Math.min(ev.clientX - rect.left, rect.width),
+                    );
+                    const percent = x / rect.width;
+                    const seekTime = percent * duration;
+                    videoRef.current.currentTime = seekTime;
+                    setCurrentTime(seekTime);
+                  };
+                  const onUp = () => {
+                    document.removeEventListener("mousemove", seek);
+                    document.removeEventListener("mouseup", onUp);
+                    // Resume playback after drag seek
+                    if (videoRef.current && !videoRef.current.paused) {
+                      videoRef.current.play().catch(() => {});
+                    }
+                  };
+                  document.addEventListener("mousemove", seek);
+                  document.addEventListener("mouseup", onUp);
+                }}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  const track = e.currentTarget;
+                  const seek = (ev: TouchEvent) => {
+                    if (!videoRef.current || !duration || !ev.touches[0])
+                      return;
+                    const rect = track.getBoundingClientRect();
+                    const x = Math.max(
+                      0,
+                      Math.min(ev.touches[0].clientX - rect.left, rect.width),
+                    );
+                    const percent = x / rect.width;
+                    const seekTime = percent * duration;
+                    videoRef.current.currentTime = seekTime;
+                    setCurrentTime(seekTime);
+                  };
+                  const onEnd = () => {
+                    document.removeEventListener("touchmove", seek);
+                    document.removeEventListener("touchend", onEnd);
+                    // Resume playback after touch seek
+                    if (videoRef.current && !videoRef.current.paused) {
+                      videoRef.current.play().catch(() => {});
+                    }
+                  };
+                  document.addEventListener("touchmove", seek);
+                  document.addEventListener("touchend", onEnd);
+                }}
+              >
+                {/* Visual track */}
+                <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
+                  {/* Buffered range (light grey) */}
+                  <div
+                    className="absolute top-0 left-0 h-full bg-white/40 rounded-full"
+                    style={{
+                      width: `${bufferedPercent}%`,
+                    }}
+                  />
+                  {/* Played range (primary red) */}
+                  <div
+                    className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]"
+                    style={{
+                      width:
+                        duration > 0
+                          ? `${(currentTime / duration) * 100}%`
+                          : "0%",
+                    }}
+                  />
+                </div>
+                {/* Scrub thumb indicator */}
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-primary rounded-full shadow-lg opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
+                  style={{
+                    left:
+                      duration > 0
+                        ? `calc(${(currentTime / duration) * 100}% - 7px)`
+                        : "0px",
+                  }}
+                />
+              </div>
+
+              <span
+                onClick={() => setShowRemaining((prev) => !prev)}
+                className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
+                title={
+                  showRemaining
+                    ? "Click to show duration"
+                    : "Click to show remaining time"
+                }
+              >
+                {showRemaining
+                  ? `-${formatTime(Math.max(0, duration - currentTime))}`
+                  : formatTime(duration)}
+              </span>
+            </div>
+
+            {/* Controls Bar Row */}
+            <div className="flex items-center justify-between">
+              {/* Left Controls: Prev, Play, Next, Volume */}
+              <div className="flex items-center space-x-2.5 sm:space-x-3">
+                {/* Prev Episode */}
+                {isSeries && onPrevEpisode && (
+                  <button
+                    onClick={onPrevEpisode}
+                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                    title="Previous Episode"
+                  >
+                    <SkipBack className="w-4 h-4 fill-white text-white" />
+                  </button>
+                )}
+
+                {/* Play Pause */}
+                <button
+                  onClick={togglePlay}
+                  className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-4.5 h-4.5 fill-white" />
+                  ) : (
+                    <Play className="w-4.5 h-4.5 fill-white" />
+                  )}
+                </button>
+
+                {/* Next Episode */}
+                {isSeries && onNextEpisode && (
+                  <button
+                    onClick={handleNextEpisodeClick}
+                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                    title="Next Episode"
+                  >
+                    <SkipForward className="w-4 h-4 fill-white text-white" />
+                  </button>
+                )}
+
+                {/* Volume Panel â€” hidden on mobile, shown sm+ */}
+                <div className="hidden sm:flex items-center space-x-2">
+                  <button
+                    onClick={toggleMute}
+                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-4.5 h-4.5 text-primary" />
+                    ) : volume < 0.5 ? (
+                      <Volume1 className="w-4.5 h-4.5" />
+                    ) : (
+                      <Volume2 className="w-4.5 h-4.5" />
+                    )}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={isMuted ? 0 : volume}
+                    onChange={handleVolumeChange}
+                    className="w-16 sm:w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all"
+                  />
+                </div>
+                {/* Mobile-only mute button */}
+                <button
+                  onClick={toggleMute}
+                  className="sm:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                >
+                  {isMuted || volume === 0 ? (
+                    <VolumeX className="w-4 h-4 text-primary" />
+                  ) : (
+                    <Volume2 className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Screen Size, Fullscreen */}
+              <div className="flex items-center space-x-1 sm:space-x-2 relative">
+                {/* â”€â”€ SECONDARY CONTROLS (hidden on mobile, visible sm+) â”€â”€ */}
+                <div className="hidden sm:flex items-center space-x-2 relative">
+                  {/* Subtitle Selector */}
+                  {captions.length > 0 && (
+                    <div ref={subtitleMenuRef} className="relative">
+                      <button
+                        onClick={() => {
+                          setShowSubtitleMenu(!showSubtitleMenu);
+                          setShowQualityMenu(false);
+                          setShowSpeedMenu(false);
+                          setShowAudioMenu(false);
+                          setShowRatioMenu(false);
+                        }}
+                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                          showSubtitleMenu || showSubtitles
+                            ? "text-primary bg-primary/10"
+                            : "text-white/70 hover:text-white"
+                        }`}
+                        title="Subtitles"
+                      >
+                        <Subtitles className="w-4.5 h-4.5" />
+                      </button>
+
+                      {showSubtitleMenu && (
+                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                          <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                            Subtitles
+                          </p>
+                          <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                            <button
+                              onClick={() => handleSubtitleChange(null)}
+                              className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                !activeCaption
+                                  ? "text-primary bg-primary/10"
+                                  : "text-white/80"
+                              }`}
+                            >
+                              Off
+                            </button>
+                            {captions.map((caption) => (
+                              <button
+                                key={caption.id || caption.url}
+                                onClick={() => handleSubtitleChange(caption)}
+                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                  activeCaption?.id === caption.id
+                                    ? "text-primary bg-primary/10"
+                                    : "text-white/80"
+                                }`}
+                              >
+                                {caption.lanName}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                          <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                            Size
+                          </p>
+                          <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                            {["16px", "22px", "28px", "36px"].map((size, i) => (
+                              <button
+                                key={size}
+                                onClick={() => setSubtitleSize(size)}
+                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
+                                  subtitleSize === size
+                                    ? "text-primary bg-primary/10"
+                                    : "text-white/60"
+                                }`}
+                              >
+                                {["SM", "MD", "LG", "XL"][i]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Audio/Dub selector */}
+                  {dubs && dubs.length > 0 && (
+                    <div ref={audioMenuRef} className="relative">
+                      <button
+                        onClick={() => {
+                          setShowAudioMenu(!showAudioMenu);
+                          setShowQualityMenu(false);
+                          setShowSpeedMenu(false);
+                          setShowSubtitleMenu(false);
+                          setShowRatioMenu(false);
+                        }}
+                        className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                          showAudioMenu
+                            ? "text-primary bg-primary/10"
+                            : "text-white/70 hover:text-white"
+                        }`}
+                        title="Change Audio Track"
+                      >
+                        <Headphones className="w-4.5 h-4.5" />
+                      </button>
+
+                      {showAudioMenu && (
+                        <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                          <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                            Audio Track
+                          </p>
+                          <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                            {dubs.map((dub, idx) => {
+                              const isCurrent = detailPath === dub.detailPath;
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    setShowAudioMenu(false);
+                                    window.location.href = `/watch/${dub.detailPath}`;
+                                  }}
+                                  className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                    isCurrent
+                                      ? "text-primary bg-primary/10"
+                                      : "text-white/80"
+                                  }`}
+                                >
+                                  {dub.lanName}{" "}
+                                  {dub.original ? "(Original)" : ""}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Quality (desktop full pill) */}
+                  <div ref={qualityMenuRef} className="relative">
+                    <button
+                      onClick={() => {
+                        setShowQualityMenu(!showQualityMenu);
+                        setShowSpeedMenu(false);
+                        setShowAudioMenu(false);
+                        setShowSubtitleMenu(false);
+                        setShowRatioMenu(false);
+                      }}
+                      className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                        showQualityMenu
+                          ? "bg-primary/20 text-primary-light border-primary/30"
+                          : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      <span>
+                        {activeDownload
+                          ? isAutoQuality
+                            ? `Auto (${activeDownload.resolution}p)`
+                            : `${activeDownload.resolution}p`
+                          : "Auto"}
+                      </span>
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+
+                    {showQualityMenu && sortedDownloads.length > 0 && (
+                      <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                          Quality
+                        </p>
+                        <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                          <button
+                            onClick={() => {
+                              setIsAutoQuality(true);
+                              setShowQualityMenu(false);
+                              const defaultQuality =
+                                sortedDownloads.find(
+                                  (d) => d.resolution === 720,
+                                ) ||
+                                sortedDownloads.find(
+                                  (d) => d.resolution === 1080,
+                                ) ||
+                                sortedDownloads[0];
+                              if (
+                                defaultQuality &&
+                                activeDownload?.id !== defaultQuality.id
+                              ) {
+                                handleQualityChange(defaultQuality, true);
+                              }
+                            }}
+                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                          >
+                            Auto
+                          </button>
+                          {sortedDownloads.map((link) => (
+                            <button
+                              key={link.id}
+                              onClick={() => {
+                                handleQualityChange(link);
+                                setShowQualityMenu(false);
+                              }}
+                              className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                !isAutoQuality && activeDownload?.id === link.id
+                                  ? "text-primary bg-primary/10"
+                                  : "text-white/80"
+                              }`}
+                            >
+                              {link.resolution}p
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Speed */}
+                  <div ref={speedMenuRef} className="relative">
+                    <button
+                      onClick={() => {
+                        setShowSpeedMenu(!showSpeedMenu);
+                        setShowQualityMenu(false);
+                        setShowAudioMenu(false);
+                        setShowSubtitleMenu(false);
+                        setShowRatioMenu(false);
+                      }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
+                        showSpeedMenu
+                          ? "text-primary bg-primary/10"
+                          : "text-white/80 hover:text-white"
+                      }`}
+                    >
+                      {playbackRate}x
+                    </button>
+
+                    {showSpeedMenu && (
+                      <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                          Speed
+                        </p>
+                        {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => handleSpeedChange(rate)}
+                            className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                              playbackRate === rate
+                                ? "text-primary bg-primary/10"
+                                : "text-white/80"
+                            }`}
+                          >
+                            {rate.toFixed(1)}x
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Aspect Ratio */}
+                  <div ref={ratioMenuRef} className="relative">
+                    <button
+                      onClick={() => {
+                        setShowRatioMenu(!showRatioMenu);
+                        setShowQualityMenu(false);
+                        setShowSpeedMenu(false);
+                        setShowAudioMenu(false);
+                        setShowSubtitleMenu(false);
+                      }}
+                      className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                        showRatioMenu
+                          ? "text-primary bg-primary/10"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                      title="Aspect Ratio"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="w-4.5 h-4.5"
+                      >
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <path d="M 9 15 L 15 9" />
+                        <path d="M 12 9 L 15 9 L 15 12" />
+                        <path d="M 12 15 L 9 15 L 9 12" />
+                      </svg>
+                    </button>
+
+                    {showRatioMenu && (
+                      <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                          Screen Size
+                        </p>
+                        {[
+                          { value: "contain" as const, label: "Fit Screen" },
+                          { value: "fill" as const, label: "Stretch Screen" },
+                          { value: "cover" as const, label: "Zoom / Fill" },
+                        ].map(({ value, label }) => (
+                          <button
+                            key={value}
+                            onClick={() => {
+                              setAspectRatio(value);
+                              setShowRatioMenu(false);
+                            }}
+                            className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                              aspectRatio === value
+                                ? "text-primary bg-primary/10"
+                                : "text-white/80"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PiP (desktop only) */}
+                  {isPiPSupported && (
+                    <button
+                      onClick={togglePiP}
+                      className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
+                        isPiPActive
+                          ? "text-primary bg-primary/10"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                      title="Picture-in-Picture"
+                    >
+                      <PictureInPicture2 className="w-4.5 h-4.5" />
+                    </button>
+                  )}
+                </div>
+                {/* ── MOBILE-ONLY: compact icon controls ── */}
+                <div className="sm:hidden flex items-center space-x-0.5">
+                  {/* Subtitle (mobile icon) */}
+                  {captions.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setShowSubtitleMenu(!showSubtitleMenu);
+                          setShowQualityMenu(false);
+                          setShowSpeedMenu(false);
+                          setShowAudioMenu(false);
+                          setShowRatioMenu(false);
+                        }}
+                        className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                          showSubtitleMenu || showSubtitles
+                            ? "text-primary bg-primary/10"
+                            : "text-white/60 hover:text-white hover:bg-white/10"
+                        }`}
+                        title="Subtitles"
+                      >
+                        <Subtitles className="w-4 h-4" />
+                      </button>
+                      {showSubtitleMenu && (
+                        <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                          <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                            Subtitles
+                          </p>
+                          <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                            <button
+                              onClick={() => handleSubtitleChange(null)}
+                              className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
+                            >
+                              Off
+                            </button>
+                            {captions.map((caption) => (
+                              <button
+                                key={caption.id || caption.url}
+                                onClick={() => handleSubtitleChange(caption)}
+                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                  activeCaption?.id === caption.id
+                                    ? "text-primary bg-primary/10"
+                                    : "text-white/80"
+                                }`}
+                              >
+                                {caption.lanName}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                          <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">
+                            Size
+                          </p>
+                          <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                            {["16px", "22px", "28px", "36px"].map((size, i) => (
+                              <button
+                                key={size}
+                                onClick={() => setSubtitleSize(size)}
+                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
+                              >
+                                {["SM", "MD", "LG", "XL"][i]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Audio/Dub (mobile icon) */}
+                  {dubs && dubs.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setShowAudioMenu(!showAudioMenu);
+                          setShowQualityMenu(false);
+                          setShowSpeedMenu(false);
+                          setShowSubtitleMenu(false);
+                          setShowRatioMenu(false);
+                        }}
+                        className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                          showAudioMenu
+                            ? "text-primary bg-primary/10"
+                            : "text-white/60 hover:text-white hover:bg-white/10"
+                        }`}
+                        title="Audio Track"
+                      >
+                        <Headphones className="w-4 h-4" />
+                      </button>
+                      {showAudioMenu && (
+                        <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                          <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                            Audio Track
+                          </p>
+                          <div className="max-h-[160px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                            {dubs.map((dub, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setShowAudioMenu(false);
+                                  window.location.href = `/watch/${dub.detailPath}`;
+                                }}
+                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                  detailPath === dub.detailPath
+                                    ? "text-primary bg-primary/10"
+                                    : "text-white/80"
+                                }`}
+                              >
+                                {dub.lanName}
+                                {dub.original ? " (Orig)" : ""}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Aspect Ratio (mobile icon) */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setShowRatioMenu(!showRatioMenu);
+                        setShowQualityMenu(false);
+                        setShowSpeedMenu(false);
+                        setShowAudioMenu(false);
+                        setShowSubtitleMenu(false);
+                      }}
+                      className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                        showRatioMenu
+                          ? "text-primary bg-primary/10"
+                          : "text-white/60 hover:text-white hover:bg-white/10"
+                      }`}
+                      title="Aspect Ratio"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="w-4 h-4"
+                      >
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <path d="M 9 15 L 15 9" />
+                        <path d="M 12 9 L 15 9 L 15 12" />
+                        <path d="M 12 15 L 9 15 L 9 12" />
+                      </svg>
+                    </button>
+                    {showRatioMenu && (
+                      <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[120px] flex flex-col space-y-0.5 z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
+                          Screen Size
+                        </p>
+                        {[
+                          { value: "contain" as const, label: "Fit Screen" },
+                          { value: "fill" as const, label: "Stretch" },
+                          { value: "cover" as const, label: "Zoom / Fill" },
+                        ].map(({ value, label }) => (
+                          <button
+                            key={value}
+                            onClick={() => {
+                              setAspectRatio(value);
+                              setShowRatioMenu(false);
+                            }}
+                            className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quality compact badge (mobile) */}
+                  <div className="relative" ref={qualityMenuRef}>
+                    <button
+                      onClick={() => {
+                        setShowQualityMenu(!showQualityMenu);
+                        setShowSpeedMenu(false);
+                        setShowAudioMenu(false);
+                        setShowSubtitleMenu(false);
+                        setShowRatioMenu(false);
+                      }}
+                      className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                        showQualityMenu
+                          ? "bg-primary/20 text-primary-light border-primary/30"
+                          : "bg-white/5 border-white/10 text-white/80"
+                      }`}
+                    >
+                      {activeDownload
+                        ? `${activeDownload.resolution}p`
+                        : "Auto"}
+                    </button>
+                    {showQualityMenu && sortedDownloads.length > 0 && (
+                      <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                          Quality
+                        </p>
+                        <div className="max-h-[150px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                          <button
+                            onClick={() => {
+                              setIsAutoQuality(true);
+                              setShowQualityMenu(false);
+                              const defaultQuality =
+                                sortedDownloads.find(
+                                  (d) => d.resolution === 720,
+                                ) || sortedDownloads[0];
+                              if (
+                                defaultQuality &&
+                                activeDownload?.id !== defaultQuality.id
+                              )
+                                handleQualityChange(defaultQuality, true);
+                            }}
+                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                          >
+                            Auto
+                          </button>
+                          {sortedDownloads.map((link) => (
+                            <button
+                              key={link.id}
+                              onClick={() => {
+                                handleQualityChange(link);
+                                setShowQualityMenu(false);
+                              }}
+                              className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                !isAutoQuality && activeDownload?.id === link.id
+                                  ? "text-primary bg-primary/10"
+                                  : "text-white/80"
+                              }`}
+                            >
+                              {link.resolution}p
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fullscreen (always visible) */}
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                  title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                >
+                  {isFullscreen ? (
+                    <Minimize className="w-4.5 h-4.5" />
+                  ) : (
+                    <Maximize className="w-4.5 h-4.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
