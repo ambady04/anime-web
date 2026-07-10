@@ -38,6 +38,22 @@ const cleanTitle = (title: string): string => {
         .trim();
 };
 
+const cleanFilename = (title: string): string => {
+    return title
+        .replace(/[^a-zA-Z0-9.\-\s_]/g, "")
+        .replace(/\s+/g, "_")
+        .trim();
+};
+
+function formatBytes(bytes: number): string {
+    if (!bytes || bytes === 0) return "Unknown Size";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+
 interface WatchClientProps {
     path: string;
     details: ItemDetails;
@@ -60,6 +76,21 @@ export default function WatchClient({
     const [loadingAudio, setLoadingAudio] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
     const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+    const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
+    useEffect(() => {
+        if (!showDownloadMenu) return;
+        const handleOutsideClick = (event: MouseEvent) => {
+            const container = document.getElementById("download-menu-container");
+            if (container && !container.contains(event.target as Node)) {
+                setShowDownloadMenu(false);
+            }
+        };
+        document.addEventListener("click", handleOutsideClick);
+        return () => {
+            document.removeEventListener("click", handleOutsideClick);
+        };
+    }, [showDownloadMenu]);
 
     const { subject, stars, resource, related, metadata } = details;
 
@@ -607,14 +638,60 @@ export default function WatchClient({
                                     </span>
                                 </button>
                             )}
-                            <button
-                                onClick={() => setIsDownloadOpen(true)}
-                                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel hover:text-white hover:border-glass-border-hover text-foreground/70 transition-all cursor-pointer text-xs font-bold uppercase tracking-wider"
-                                title="Download Content"
-                            >
-                                <Download className="w-3 h-3 text-primary" />
-                                <span>Download</span>
-                            </button>
+                            <div className="relative inline-block text-left" id="download-menu-container">
+                                <button
+                                    onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel hover:text-white hover:border-glass-border-hover text-foreground/70 transition-all cursor-pointer text-xs font-bold uppercase tracking-wider"
+                                    title="Download Options"
+                                >
+                                    <Download className="w-3 h-3 text-primary" />
+                                    <span>Download</span>
+                                    <ChevronDown className="w-3.5 h-3.5 ml-0.5 text-foreground/45" />
+                                </button>
+                                
+                                {showDownloadMenu && (
+                                    <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-glass-border bg-zinc-950/95 backdrop-blur-md shadow-2xl z-50 py-1.5 overflow-hidden">
+                                        <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-foreground/45 border-b border-glass-border/50 mb-1">
+                                            Select Resolution (S{activeSeason} E{activeEpisode})
+                                        </div>
+                                        {stream.downloads && stream.downloads.length > 0 ? (
+                                            [...stream.downloads]
+                                                .sort((a, b) => b.resolution - a.resolution)
+                                                .map((link) => {
+                                                    const filename = `${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
+                                                    const dlUrl = `/api/video?url=${encodeURIComponent(link.url)}&referer=${encodeURIComponent(stream.stream_domain || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
+                                                    return (
+                                                        <a
+                                                            key={link.id}
+                                                            href={dlUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={() => setShowDownloadMenu(false)}
+                                                            className="flex items-center justify-between px-3 py-2 text-xs text-foreground/80 hover:text-white hover:bg-white/5 transition-colors"
+                                                        >
+                                                            <span className="font-bold">{link.resolution}p</span>
+                                                            <span className="text-[10px] text-foreground/45">{formatBytes(link.size)}</span>
+                                                        </a>
+                                                    );
+                                                })
+                                        ) : (
+                                            <div className="px-3 py-2 text-xs text-foreground/40 italic">
+                                                No direct links found
+                                            </div>
+                                        )}
+                                        <div className="border-t border-glass-border/50 my-1"></div>
+                                        <button
+                                            onClick={() => {
+                                                setIsDownloadOpen(true);
+                                                setShowDownloadMenu(false);
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-xs text-primary font-bold hover:bg-white/5 transition-colors cursor-pointer flex items-center space-x-1.5"
+                                        >
+                                            <span>Open Download Hub</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Genres */}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     X,
@@ -51,6 +52,7 @@ interface ResolvedEpisode {
     resolution: number;
     size: number;
     success: boolean;
+    referer?: string;
     error?: string;
 }
 
@@ -64,6 +66,12 @@ export default function DownloadModal({
     activeEpisode,
     currentEpisodeStream,
 }: DownloadModalProps) {
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
     const seasonsList = resource?.seasons || [];
 
@@ -191,6 +199,7 @@ export default function DownloadModal({
                                 resolution: selectedLink.resolution,
                                 size: selectedLink.size,
                                 success: true,
+                                referer: streamData.stream_domain || "https://videodownloader.site/",
                             };
                         } catch (err: any) {
                             return {
@@ -236,10 +245,11 @@ export default function DownloadModal({
         successful.forEach((ep, index) => {
             setTimeout(() => {
                 const a = document.createElement("a");
-                a.href = ep.url;
+                const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                const referer = ep.referer || "https://videodownloader.site/";
+                a.href = `/api/video?url=${encodeURIComponent(ep.url)}&referer=${encodeURIComponent(referer)}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
                 a.target = "_blank";
                 a.rel = "noopener noreferrer";
-                a.download = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}.mp4`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -302,7 +312,9 @@ export default function DownloadModal({
     const currentSeasonData = seasonsList.find((s) => s.se === selectedSeasonSingle);
     const maxEpisodesForSelectedSeason = currentSeasonData?.maxEp || 0;
 
-    return (
+    if (!mounted) return null;
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -471,7 +483,7 @@ export default function DownloadModal({
                                                                 )}
                                                             </button>
                                                             <a
-                                                                href={link.url}
+                                                                href={`/api/video?url=${encodeURIComponent(link.url)}&referer=${encodeURIComponent(singleStream?.stream_domain || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(`${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`)}`}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all"
@@ -676,7 +688,7 @@ export default function DownloadModal({
                                                                     )}
                                                                 </button>
                                                                 <a
-                                                                    href={ep.url}
+                                                                    href={`/api/video?url=${encodeURIComponent(ep.url)}&referer=${encodeURIComponent(ep.referer || "https://videodownloader.site/")}&mode=stream&download=true&filename=${encodeURIComponent(`${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`)}`}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all"
@@ -710,6 +722,7 @@ export default function DownloadModal({
                     </motion.div>
                 </div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     );
 }

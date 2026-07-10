@@ -173,6 +173,18 @@ export async function GET(req: NextRequest) {
                 resHeaders.set("accept-ranges", "bytes");
             }
 
+            const download = searchParams.get("download");
+            const filename = searchParams.get("filename");
+            if (download === "true" || filename) {
+                const safeFilename = (filename || "video.mp4")
+                    .replace(/["\\]/g, "")
+                    .replace(/[^\x20-\x7E]/g, "_");
+                resHeaders.set(
+                    "Content-Disposition",
+                    `attachment; filename="${safeFilename}"`
+                );
+            }
+
             resHeaders.set("Access-Control-Allow-Origin", "*");
             // Aggressive caching for streamed video segments
             resHeaders.set(
