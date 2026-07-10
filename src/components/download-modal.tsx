@@ -17,7 +17,14 @@ import {
     Sparkles,
     ChevronDown,
 } from "lucide-react";
-import { movieApi, DownloadLink, Subject, ResourceModel, StreamData, Caption } from "@/lib/api";
+import {
+    movieApi,
+    DownloadLink,
+    Subject,
+    ResourceModel,
+    StreamData,
+    Caption,
+} from "@/lib/api";
 import { downloadStore } from "@/lib/download-store";
 
 // Helper to format bytes to human readable format
@@ -29,9 +36,26 @@ function formatBytes(bytes: number): string {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-// Clean titles for filenames
+// Clean titles for filenames — uses first word only for compact names
 function cleanFilename(title: string): string {
-    return title.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/__+/g, "_");
+    // Remove bracketed content like [Tamil], [Hindi]
+    const cleaned = title.replace(/\[[^\]]*\]/g, "").trim();
+    // Get first word (or first two if first is very short)
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return "Video";
+    const name =
+        words[0].length <= 3 && words.length > 1
+            ? `${words[0]}_${words[1]}`
+            : words[0];
+    return name.replace(/[^a-zA-Z0-9_\-]/g, "");
+}
+
+// Full title for folder names
+function cleanFolderName(title: string): string {
+    return title
+        .replace(/[^a-zA-Z0-9_\-\s]/g, "")
+        .replace(/\s+/g, "_")
+        .substring(0, 40);
 }
 
 interface CustomDropdownProps<T> {
@@ -55,7 +79,10 @@ function CustomDropdown<T extends string | number>({
     useEffect(() => {
         if (!isOpen) return;
         const handleOutsideClick = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            if (
+                containerRef.current &&
+                !containerRef.current.contains(event.target as Node)
+            ) {
                 setIsOpen(false);
             }
         };
@@ -79,10 +106,12 @@ function CustomDropdown<T extends string | number>({
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-xs text-foreground font-semibold focus:outline-none cursor-pointer transition-all text-left"
             >
-                <span className="truncate">{activeOption ? activeOption.label : String(value)}</span>
+                <span className="truncate">
+                    {activeOption ? activeOption.label : String(value)}
+                </span>
                 <ChevronDown className="w-3.5 h-3.5 ml-1.5 text-foreground/45 shrink-0" />
             </button>
-            
+
             {isOpen && (
                 <div className="absolute left-0 right-0 mt-2 rounded-xl border border-glass-border bg-zinc-950/95 backdrop-blur-md shadow-2xl z-50 py-1 max-h-48 overflow-y-auto scrollbar-thin">
                     {options.map((opt) => (
@@ -159,8 +188,12 @@ export default function DownloadModal({
     const [copiedId, setCopiedId] = useState<string | null>(null);
 
     // --- State for Single Episode / Movie Download ---
-    const [selectedEpisode, setSelectedEpisode] = useState<number>(activeEpisode || 1);
-    const [selectedSeasonSingle, setSelectedSeasonSingle] = useState<number>(activeSeason || 1);
+    const [selectedEpisode, setSelectedEpisode] = useState<number>(
+        activeEpisode || 1,
+    );
+    const [selectedSeasonSingle, setSelectedSeasonSingle] = useState<number>(
+        activeSeason || 1,
+    );
     const [singleStream, setSingleStream] = useState<StreamData | null>(null);
     const [isSingleLoading, setIsSingleLoading] = useState<boolean>(false);
     const [singleError, setSingleError] = useState<string | null>(null);
@@ -171,8 +204,12 @@ export default function DownloadModal({
     const [isBatchResolving, setIsBatchResolving] = useState<boolean>(false);
     const [resolvingProgress, setResolvingProgress] = useState<number>(0);
     const [resolvingTotal, setResolvingTotal] = useState<number>(0);
-    const [resolvedEpisodes, setResolvedEpisodes] = useState<ResolvedEpisode[]>([]);
-    const [batchCancelRef, setBatchCancelRef] = useState<{ cancelled: boolean }>({ cancelled: false });
+    const [resolvedEpisodes, setResolvedEpisodes] = useState<ResolvedEpisode[]>(
+        [],
+    );
+    const [batchCancelRef, setBatchCancelRef] = useState<{
+        cancelled: boolean;
+    }>({ cancelled: false });
 
     // Handle copying feedback
     const handleCopy = (text: string, id: string) => {
@@ -192,7 +229,11 @@ export default function DownloadModal({
         }
 
         // If it is the current active season & episode, we can reuse parent's streamData
-        if (selectedSeasonSingle === activeSeason && selectedEpisode === activeEpisode && currentEpisodeStream) {
+        if (
+            selectedSeasonSingle === activeSeason &&
+            selectedEpisode === activeEpisode &&
+            currentEpisodeStream
+        ) {
             setSingleStream(currentEpisodeStream);
             setSingleError(null);
             return;
@@ -202,16 +243,31 @@ export default function DownloadModal({
         setIsSingleLoading(true);
         setSingleError(null);
         try {
-            const data = await movieApi.getStream(path, selectedSeasonSingle, selectedEpisode);
+            const data = await movieApi.getStream(
+                path,
+                selectedSeasonSingle,
+                selectedEpisode,
+            );
             setSingleStream(data);
         } catch (err: any) {
             console.error("Error fetching single stream:", err);
-            setSingleError(err.message || "Failed to retrieve streaming/download links.");
+            setSingleError(
+                err.message || "Failed to retrieve streaming/download links.",
+            );
             setSingleStream(null);
         } finally {
             setIsSingleLoading(false);
         }
-    }, [isOpen, isSeries, selectedSeasonSingle, selectedEpisode, activeSeason, activeEpisode, currentEpisodeStream, path]);
+    }, [
+        isOpen,
+        isSeries,
+        selectedSeasonSingle,
+        selectedEpisode,
+        activeSeason,
+        activeEpisode,
+        currentEpisodeStream,
+        path,
+    ]);
 
     // Trigger loading single stream when episode/season choice changes
     useEffect(() => {
@@ -228,7 +284,7 @@ export default function DownloadModal({
         setResolvingProgress(0);
         setResolvingTotal(maxEp);
         setResolvedEpisodes([]);
-        
+
         const cancelObj = { cancelled: false };
         setBatchCancelRef(cancelObj);
 
@@ -239,12 +295,16 @@ export default function DownloadModal({
             if (cancelObj.cancelled) break;
 
             const promises = [];
-            for (let j = 0; j < batchSize && (i + j) <= maxEp; j++) {
+            for (let j = 0; j < batchSize && i + j <= maxEp; j++) {
                 const epNum = i + j;
                 promises.push(
                     (async () => {
                         try {
-                            const streamData = await movieApi.getStream(path, batchSeason, epNum);
+                            const streamData = await movieApi.getStream(
+                                path,
+                                batchSeason,
+                                epNum,
+                            );
                             if (cancelObj.cancelled) return;
 
                             const downloads = streamData.downloads || [];
@@ -261,13 +321,18 @@ export default function DownloadModal({
 
                             // Filter downloads by target resolution
                             let selectedLink: DownloadLink | null = null;
-                            const sorted = [...downloads].sort((a, b) => b.resolution - a.resolution);
+                            const sorted = [...downloads].sort(
+                                (a, b) => b.resolution - a.resolution,
+                            );
 
                             if (targetResolution === "best") {
                                 selectedLink = sorted[0];
                             } else {
                                 const targetResNum = parseInt(targetResolution);
-                                selectedLink = sorted.find((d) => d.resolution === targetResNum) || sorted[0];
+                                selectedLink =
+                                    sorted.find(
+                                        (d) => d.resolution === targetResNum,
+                                    ) || sorted[0];
                             }
 
                             return {
@@ -276,7 +341,9 @@ export default function DownloadModal({
                                 resolution: selectedLink.resolution,
                                 size: selectedLink.size,
                                 success: true,
-                                referer: streamData.stream_domain || "https://videodownloader.site/",
+                                referer:
+                                    streamData.stream_domain ||
+                                    "https://videodownloader.site/",
                                 captions: streamData.captions,
                             };
                         } catch (err: any) {
@@ -289,7 +356,7 @@ export default function DownloadModal({
                                 error: err.message || "Failed to resolve link.",
                             };
                         }
-                    })()
+                    })(),
                 );
             }
 
@@ -297,9 +364,11 @@ export default function DownloadModal({
             if (cancelObj.cancelled) break;
 
             // Filter out any undefined due to early cancellation checks
-            const validResults = batchResults.filter((r) => r !== undefined) as ResolvedEpisode[];
+            const validResults = batchResults.filter(
+                (r) => r !== undefined,
+            ) as ResolvedEpisode[];
             results.push(...validResults);
-            
+
             setResolvedEpisodes([...results]);
             setResolvingProgress(Math.min(i + batchSize - 1, maxEp));
         }
@@ -317,30 +386,42 @@ export default function DownloadModal({
 
     // Download Helpers
     const downloadAllInBrowser = () => {
-        const successful = resolvedEpisodes.filter((ep) => ep.success && ep.url);
+        const successful = resolvedEpisodes.filter(
+            (ep) => ep.success && ep.url,
+        );
         if (successful.length === 0) return;
+
+        const shortName = cleanFilename(subject.title);
 
         successful.forEach((ep, index) => {
             setTimeout(() => {
-                const folder = `${cleanFilename(subject.title)}_Season_${batchSeason}`;
-                const filename = `${folder}/${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                const filename = `${shortName}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
                 const referer = ep.referer || "https://videodownloader.site/";
-                downloadStore.startDownload(ep.url, referer, filename, ep.size, ep.captions);
-            }, index * 1200); // 1.2s delay to prevent request overlapping/throttling
+                downloadStore.startDownload(
+                    ep.url,
+                    referer,
+                    filename,
+                    ep.size,
+                    ep.captions,
+                );
+            }, index * 1200);
         });
     };
 
     const downloadTxtPlaylist = () => {
-        const successful = resolvedEpisodes.filter((ep) => ep.success && ep.url);
+        const successful = resolvedEpisodes.filter(
+            (ep) => ep.success && ep.url,
+        );
         if (successful.length === 0) return;
 
         const content = successful.map((ep) => ep.url).join("\n");
         const blob = new Blob([content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
-        
+
+        const shortName = cleanFilename(subject.title);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${cleanFilename(subject.title)}_S${batchSeason}_links.txt`;
+        a.download = `${shortName}_S${batchSeason}_links.txt`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -348,10 +429,12 @@ export default function DownloadModal({
     };
 
     const downloadShScript = () => {
-        const successful = resolvedEpisodes.filter((ep) => ep.success && ep.url);
+        const successful = resolvedEpisodes.filter(
+            (ep) => ep.success && ep.url,
+        );
         if (successful.length === 0) return;
 
-        const baseName = cleanFilename(subject.title);
+        const shortName = cleanFilename(subject.title);
         const scriptLines = [
             "#!/bin/bash",
             `# Batch download script for ${subject.title} Season ${batchSeason}`,
@@ -361,20 +444,24 @@ export default function DownloadModal({
         ];
 
         successful.forEach((ep) => {
-            const outName = `downloads/${baseName}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
-            scriptLines.push(`echo "Downloading Episode ${ep.epNum} (${ep.resolution}p)..."`);
+            const outName = `downloads/${shortName}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+            scriptLines.push(
+                `echo "Downloading Episode ${ep.epNum} (${ep.resolution}p)..."`,
+            );
             scriptLines.push(`curl -L -o "${outName}" "${ep.url}"`);
             scriptLines.push("");
         });
 
         scriptLines.push('echo "Batch download finished!"');
 
-        const blob = new Blob([scriptLines.join("\n")], { type: "text/x-shellscript" });
+        const blob = new Blob([scriptLines.join("\n")], {
+            type: "text/x-shellscript",
+        });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement("a");
         a.href = url;
-        a.download = `download_${baseName}_S${batchSeason}.sh`;
+        a.download = `dl_${shortName}_S${batchSeason}.sh`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -382,7 +469,9 @@ export default function DownloadModal({
     };
 
     // Calculate details for active season selector
-    const currentSeasonData = seasonsList.find((s) => s.se === selectedSeasonSingle);
+    const currentSeasonData = seasonsList.find(
+        (s) => s.se === selectedSeasonSingle,
+    );
     const maxEpisodesForSelectedSeason = currentSeasonData?.maxEp || 0;
 
     if (!mounted) return null;
@@ -425,7 +514,9 @@ export default function DownloadModal({
                                 {subject.title}
                             </h2>
                             <p className="text-xs text-foreground/50">
-                                {isSeries ? "Download episodes or grab full seasons for offline viewing" : "Get direct links for high-speed offline downloads"}
+                                {isSeries
+                                    ? "Download episodes or grab full seasons for offline viewing"
+                                    : "Get direct links for high-speed offline downloads"}
                             </p>
                         </div>
 
@@ -478,8 +569,12 @@ export default function DownloadModal({
                                         <CustomDropdown
                                             label="Episode"
                                             value={selectedEpisode}
-                                            onChange={(val) => setSelectedEpisode(val)}
-                                            options={Array.from({ length: maxEpisodesForSelectedSeason }).map((_, i) => ({
+                                            onChange={(val) =>
+                                                setSelectedEpisode(val)
+                                            }
+                                            options={Array.from({
+                                                length: maxEpisodesForSelectedSeason,
+                                            }).map((_, i) => ({
                                                 value: i + 1,
                                                 label: `Episode ${i + 1}`,
                                             }))}
@@ -492,21 +587,32 @@ export default function DownloadModal({
                                     {isSingleLoading ? (
                                         <div className="flex flex-col items-center justify-center py-12 space-y-3">
                                             <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                                            <p className="text-xs text-foreground/50">Resolving download links...</p>
+                                            <p className="text-xs text-foreground/50">
+                                                Resolving download links...
+                                            </p>
                                         </div>
                                     ) : singleError ? (
                                         <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400">
                                             <AlertCircle className="w-5 h-5 shrink-0" />
-                                            <span className="text-xs leading-relaxed">{singleError}</span>
+                                            <span className="text-xs leading-relaxed">
+                                                {singleError}
+                                            </span>
                                         </div>
-                                    ) : !singleStream || !singleStream.downloads || singleStream.downloads.length === 0 ? (
+                                    ) : !singleStream ||
+                                      !singleStream.downloads ||
+                                      singleStream.downloads.length === 0 ? (
                                         <div className="text-center py-12 space-y-2 border border-dashed border-white/10 rounded-2xl">
                                             <AlertCircle className="w-8 h-8 text-foreground/35 mx-auto" />
-                                            <p className="text-xs text-foreground/50">No download resources found.</p>
+                                            <p className="text-xs text-foreground/50">
+                                                No download resources found.
+                                            </p>
                                         </div>
                                     ) : (
                                         [...singleStream.downloads]
-                                            .sort((a, b) => b.resolution - a.resolution)
+                                            .sort(
+                                                (a, b) =>
+                                                    b.resolution - a.resolution,
+                                            )
                                             .map((link) => {
                                                 const copyId = `single-${link.id}`;
                                                 return (
@@ -516,47 +622,71 @@ export default function DownloadModal({
                                                     >
                                                         <div className="flex items-center space-x-3.5">
                                                             <div className="bg-primary/10 border border-primary/20 text-primary w-11 h-11 rounded-xl flex items-center justify-center text-xs font-black">
-                                                                {link.resolution}p
+                                                                {
+                                                                    link.resolution
+                                                                }
+                                                                p
                                                             </div>
                                                             <div className="space-y-0.5">
                                                                 <p className="text-xs font-bold text-white group-hover:text-primary transition-colors">
-                                                                    {link.resolution}p High Definition MP4
+                                                                    {
+                                                                        link.resolution
+                                                                    }
+                                                                    p High
+                                                                    Definition
+                                                                    MP4
                                                                 </p>
                                                                 <p className="text-[10px] text-foreground/45 font-medium">
-                                                                    Size: {formatBytes(link.size)}
+                                                                    Size:{" "}
+                                                                    {formatBytes(
+                                                                        link.size,
+                                                                    )}
                                                                 </p>
                                                             </div>
                                                         </div>
 
                                                         <div className="flex items-center gap-2">
                                                             <button
-                                                                onClick={() => handleCopy(link.url, copyId)}
+                                                                onClick={() =>
+                                                                    handleCopy(
+                                                                        link.url,
+                                                                        copyId,
+                                                                    )
+                                                                }
                                                                 className="p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-white/5 text-foreground/75 hover:text-white transition-all cursor-pointer"
                                                                 title="Copy Direct Link"
                                                             >
-                                                                {copiedId === copyId ? (
+                                                                {copiedId ===
+                                                                copyId ? (
                                                                     <Check className="w-3.5 h-3.5 text-emerald-500 animate-fade-in" />
                                                                 ) : (
                                                                     <Copy className="w-3.5 h-3.5" />
                                                                 )}
                                                             </button>
-                                                             <button
+                                                            <button
                                                                 onClick={() => {
-                                                                     const folder = `${cleanFilename(subject.title)}_Season_${selectedSeasonSingle}`;
-                                                                     const filename = `${folder}/${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
-                                                                     downloadStore.startDownload(
-                                                                         link.url,
-                                                                         singleStream?.stream_domain || "https://videodownloader.site/",
-                                                                         filename,
-                                                                         link.size,
-                                                                         singleStream?.captions || undefined
+                                                                    const shortName =
+                                                                        cleanFilename(
+                                                                            subject.title,
+                                                                        );
+                                                                    const filename = `${shortName}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
+                                                                    downloadStore.startDownload(
+                                                                        link.url,
+                                                                        singleStream?.stream_domain ||
+                                                                            "https://videodownloader.site/",
+                                                                        filename,
+                                                                        link.size,
+                                                                        singleStream?.captions ||
+                                                                            undefined,
                                                                     );
                                                                 }}
                                                                 className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all cursor-pointer"
                                                                 title="Download Now"
                                                             >
                                                                 <Download className="w-3.5 h-3.5" />
-                                                                <span>Download</span>
+                                                                <span>
+                                                                    Download
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -571,66 +701,99 @@ export default function DownloadModal({
                         {isSeries && activeTab === "season" && (
                             <div className="flex-1 flex flex-col min-h-0">
                                 {/* Configuration */}
-                                {!isBatchResolving && resolvedEpisodes.length === 0 && (
-                                    <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {/* Season Select */}
-                                            <CustomDropdown
-                                                label="Select Season"
-                                                value={batchSeason}
-                                                onChange={(val) => setBatchSeason(val)}
-                                                options={seasonsList.map((se) => ({
-                                                    value: se.se,
-                                                    label: `Season ${se.se} (${se.maxEp} Episodes)`,
-                                                }))}
-                                            />
+                                {!isBatchResolving &&
+                                    resolvedEpisodes.length === 0 && (
+                                        <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {/* Season Select */}
+                                                <CustomDropdown
+                                                    label="Select Season"
+                                                    value={batchSeason}
+                                                    onChange={(val) =>
+                                                        setBatchSeason(val)
+                                                    }
+                                                    options={seasonsList.map(
+                                                        (se) => ({
+                                                            value: se.se,
+                                                            label: `Season ${se.se} (${se.maxEp} Episodes)`,
+                                                        }),
+                                                    )}
+                                                />
 
-                                            {/* Quality Select */}
-                                            <CustomDropdown
-                                                label="Preferred Quality"
-                                                value={targetResolution}
-                                                onChange={(val) => setTargetResolution(val)}
-                                                options={[
-                                                    { value: "best", label: "Best Available Quality" },
-                                                    { value: "1080", label: "1080p Only" },
-                                                    { value: "720", label: "720p Only" },
-                                                    { value: "480", label: "480p Only" },
-                                                    { value: "360", label: "360p Only" },
-                                                ]}
-                                            />
+                                                {/* Quality Select */}
+                                                <CustomDropdown
+                                                    label="Preferred Quality"
+                                                    value={targetResolution}
+                                                    onChange={(val) =>
+                                                        setTargetResolution(val)
+                                                    }
+                                                    options={[
+                                                        {
+                                                            value: "best",
+                                                            label: "Best Available Quality",
+                                                        },
+                                                        {
+                                                            value: "1080",
+                                                            label: "1080p Only",
+                                                        },
+                                                        {
+                                                            value: "720",
+                                                            label: "720p Only",
+                                                        },
+                                                        {
+                                                            value: "480",
+                                                            label: "480p Only",
+                                                        },
+                                                        {
+                                                            value: "360",
+                                                            label: "360p Only",
+                                                        },
+                                                    ]}
+                                                />
+                                            </div>
+
+                                            <button
+                                                onClick={startBatchResolving}
+                                                className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-primary hover:bg-primary/95 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-primary-glow/10 hover:shadow-primary-glow/20 cursor-pointer transition-all"
+                                            >
+                                                <Sparkles className="w-4 h-4 fill-white animate-pulse" />
+                                                <span>
+                                                    Generate Download Links
+                                                </span>
+                                            </button>
                                         </div>
-
-                                        <button
-                                            onClick={startBatchResolving}
-                                            className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-primary hover:bg-primary/95 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-primary-glow/10 hover:shadow-primary-glow/20 cursor-pointer transition-all"
-                                        >
-                                            <Sparkles className="w-4 h-4 fill-white animate-pulse" />
-                                            <span>Generate Download Links</span>
-                                        </button>
-                                    </div>
-                                )}
+                                    )}
 
                                 {/* Progress State */}
                                 {isBatchResolving && (
                                     <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 text-center space-y-4">
                                         <div className="flex justify-between text-xs font-bold text-foreground/50">
-                                            <span>Resolving Season {batchSeason} Links...</span>
+                                            <span>
+                                                Resolving Season {batchSeason}{" "}
+                                                Links...
+                                            </span>
                                             <span className="text-primary font-black">
-                                                {resolvingProgress} / {resolvingTotal} Resolved
+                                                {resolvingProgress} /{" "}
+                                                {resolvingTotal} Resolved
                                             </span>
                                         </div>
-                                        
+
                                         {/* Progress Bar */}
                                         <div className="w-full h-2 bg-zinc-950 border border-white/5 rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-linear-to-r from-primary to-primary-glow rounded-full transition-all duration-300"
-                                                style={{ width: `${(resolvingProgress / resolvingTotal) * 100}%` }}
+                                                style={{
+                                                    width: `${(resolvingProgress / resolvingTotal) * 100}%`,
+                                                }}
                                             />
                                         </div>
 
                                         <div className="flex items-center justify-center gap-2 text-xs text-foreground/60">
                                             <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-                                            <span>Fetching episode URLs. Do not close this modal.</span>
+                                            <span>
+                                                Fetching episode URLs. Do not
+                                                close this modal.
+                                            </span>
                                         </div>
 
                                         <button
@@ -649,51 +812,86 @@ export default function DownloadModal({
                                         {!isBatchResolving && (
                                             <div className="bg-zinc-900/50 border border-white/5 p-3 rounded-2xl space-y-2">
                                                 <div className="flex justify-between items-center text-[10px] font-black text-foreground/45 uppercase tracking-widest px-1">
-                                                    <span>Batch download options (Season {batchSeason})</span>
-                                                    <span className="text-emerald-400">Done</span>
+                                                    <span>
+                                                        Batch download options
+                                                        (Season {batchSeason})
+                                                    </span>
+                                                    <span className="text-emerald-400">
+                                                        Done
+                                                    </span>
                                                 </div>
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                     <button
                                                         onClick={() => {
-                                                            const urls = resolvedEpisodes
-                                                                .filter((e) => e.success && e.url)
-                                                                .map((e) => e.url)
-                                                                .join("\n");
-                                                            handleCopy(urls, "batch-copy");
+                                                            const urls =
+                                                                resolvedEpisodes
+                                                                    .filter(
+                                                                        (e) =>
+                                                                            e.success &&
+                                                                            e.url,
+                                                                    )
+                                                                    .map(
+                                                                        (e) =>
+                                                                            e.url,
+                                                                    )
+                                                                    .join("\n");
+                                                            handleCopy(
+                                                                urls,
+                                                                "batch-copy",
+                                                            );
                                                         }}
                                                         className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-white/5 text-foreground hover:text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all"
                                                     >
-                                                        {copiedId === "batch-copy" ? (
+                                                        {copiedId ===
+                                                        "batch-copy" ? (
                                                             <Check className="w-3 h-3 text-emerald-500" />
                                                         ) : (
                                                             <Copy className="w-3 h-3 text-primary" />
                                                         )}
-                                                        <span>{copiedId === "batch-copy" ? "Copied" : "Copy Links"}</span>
+                                                        <span>
+                                                            {copiedId ===
+                                                            "batch-copy"
+                                                                ? "Copied"
+                                                                : "Copy Links"}
+                                                        </span>
                                                     </button>
                                                     <button
-                                                        onClick={downloadTxtPlaylist}
+                                                        onClick={
+                                                            downloadTxtPlaylist
+                                                        }
                                                         className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-white/5 text-foreground hover:text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all"
                                                     >
                                                         <FileText className="w-3 h-3 text-primary" />
-                                                        <span>Download TXT</span>
+                                                        <span>
+                                                            Download TXT
+                                                        </span>
                                                     </button>
                                                     <button
-                                                        onClick={downloadShScript}
+                                                        onClick={
+                                                            downloadShScript
+                                                        }
                                                         className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 border border-white/5 text-foreground hover:text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all"
                                                     >
                                                         <Terminal className="w-3 h-3 text-primary" />
                                                         <span>Download SH</span>
                                                     </button>
                                                     <button
-                                                        onClick={downloadAllInBrowser}
+                                                        onClick={
+                                                            downloadAllInBrowser
+                                                        }
                                                         className="flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-all col-span-2 sm:col-span-1"
                                                     >
                                                         <Download className="w-3 h-3" />
-                                                        <span>Download All</span>
+                                                        <span>
+                                                            Download All
+                                                        </span>
                                                     </button>
                                                 </div>
                                                 <p className="text-[8px] text-foreground/30 font-medium text-center pt-1 border-t border-white/5">
-                                                    Tip: Copy all URLs to clipboard, then import them directly into IDM or JDownloader.
+                                                    Tip: Copy all URLs to
+                                                    clipboard, then import them
+                                                    directly into IDM or
+                                                    JDownloader.
                                                 </p>
                                             </div>
                                         )}
@@ -712,19 +910,24 @@ export default function DownloadModal({
                                                         }`}
                                                     >
                                                         <div className="flex items-center space-x-3">
-                                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
-                                                                ep.success
-                                                                    ? "bg-emerald-500/10 text-emerald-500"
-                                                                    : "bg-red-500/10 text-red-400"
-                                                            }`}>
+                                                            <div
+                                                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
+                                                                    ep.success
+                                                                        ? "bg-emerald-500/10 text-emerald-500"
+                                                                        : "bg-red-500/10 text-red-400"
+                                                                }`}
+                                                            >
                                                                 E{ep.epNum}
                                                             </div>
                                                             <div className="space-y-0.5">
                                                                 <p className="text-xs font-bold text-white leading-none">
-                                                                    Episode {ep.epNum}
+                                                                    Episode{" "}
+                                                                    {ep.epNum}
                                                                 </p>
                                                                 <p className="text-[9px] text-foreground/45 font-medium leading-none">
-                                                                    {ep.success ? `${ep.resolution}p • ${formatBytes(ep.size)}` : ep.error}
+                                                                    {ep.success
+                                                                        ? `${ep.resolution}p • ${formatBytes(ep.size)}`
+                                                                        : ep.error}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -732,11 +935,17 @@ export default function DownloadModal({
                                                         {ep.success && (
                                                             <div className="flex items-center gap-1.5">
                                                                 <button
-                                                                    onClick={() => handleCopy(ep.url, copyId)}
+                                                                    onClick={() =>
+                                                                        handleCopy(
+                                                                            ep.url,
+                                                                            copyId,
+                                                                        )
+                                                                    }
                                                                     className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 border border-white/5 text-foreground/75 hover:text-white transition-all cursor-pointer"
                                                                     title="Copy Link"
                                                                 >
-                                                                    {copiedId === copyId ? (
+                                                                    {copiedId ===
+                                                                    copyId ? (
                                                                         <Check className="w-3 h-3 text-emerald-500 animate-fade-in" />
                                                                     ) : (
                                                                         <Copy className="w-3 h-3" />
@@ -744,14 +953,18 @@ export default function DownloadModal({
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
-                                                                        const folder = `${cleanFilename(subject.title)}_Season_${batchSeason}`;
-                                                                        const filename = `${folder}/${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                                                                        const shortName =
+                                                                            cleanFilename(
+                                                                                subject.title,
+                                                                            );
+                                                                        const filename = `${shortName}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
                                                                         downloadStore.startDownload(
                                                                             ep.url,
-                                                                            ep.referer || "https://videodownloader.site/",
+                                                                            ep.referer ||
+                                                                                "https://videodownloader.site/",
                                                                             filename,
                                                                             ep.size,
-                                                                            ep.captions
+                                                                            ep.captions,
                                                                         );
                                                                     }}
                                                                     className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all cursor-pointer"
@@ -786,6 +999,6 @@ export default function DownloadModal({
                 </div>
             )}
         </AnimatePresence>,
-        document.body
+        document.body,
     );
 }
