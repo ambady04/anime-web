@@ -3,7 +3,8 @@ import { cache } from "react";
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
-    : process.env.NEXT_PUBLIC_API_URL || "https://anime-api-six-psi.vercel.app";
+    : process.env.NEXT_PUBLIC_API_URL ||
+      "https://anime-api-iota-virid.vercel.app";
 
 export interface ImageModel {
     url: string;
