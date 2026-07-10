@@ -211,6 +211,28 @@ export default function DownloadModal({
         cancelled: boolean;
     }>({ cancelled: false });
 
+    // --- Subtitle Language Selection ---
+    // "none" = no subtitles, "all" = all languages, or specific code like "en", "es"
+    const [selectedSubLang, setSelectedSubLang] = useState<string>("en");
+
+    // Get available subtitle languages from current stream
+    const availableCaptions =
+        singleStream?.captions || currentEpisodeStream?.captions || [];
+
+    // Filter captions based on user selection
+    const getFilteredCaptions = (
+        captions: Caption[] | undefined,
+    ): Caption[] | undefined => {
+        if (!captions || captions.length === 0) return undefined;
+        if (selectedSubLang === "none") return undefined;
+        if (selectedSubLang === "all") return captions;
+        return captions.filter(
+            (c) =>
+                c.lan === selectedSubLang ||
+                c.lanName?.toLowerCase().includes(selectedSubLang),
+        );
+    };
+
     // Handle copying feedback
     const handleCopy = (text: string, id: string) => {
         navigator.clipboard.writeText(text);
@@ -402,7 +424,7 @@ export default function DownloadModal({
                     referer,
                     filename,
                     ep.size,
-                    ep.captions,
+                    getFilteredCaptions(ep.captions),
                 );
             }, index * 1200);
         });
@@ -582,6 +604,36 @@ export default function DownloadModal({
                                     </div>
                                 )}
 
+                                {/* Subtitle Language Selector */}
+                                {availableCaptions.length > 0 && (
+                                    <div className="mb-3">
+                                        <CustomDropdown
+                                            label="Subtitle"
+                                            value={selectedSubLang}
+                                            onChange={(val) =>
+                                                setSelectedSubLang(val)
+                                            }
+                                            options={[
+                                                {
+                                                    value: "none",
+                                                    label: "No Subtitles",
+                                                },
+                                                {
+                                                    value: "all",
+                                                    label: "All Languages (ZIP)",
+                                                },
+                                                ...availableCaptions.map(
+                                                    (c) => ({
+                                                        value: c.lan,
+                                                        label:
+                                                            c.lanName || c.lan,
+                                                    }),
+                                                ),
+                                            ]}
+                                        />
+                                    </div>
+                                )}
+
                                 {/* Links List */}
                                 <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-2.5">
                                     {isSingleLoading ? (
@@ -676,8 +728,9 @@ export default function DownloadModal({
                                                                             "https://videodownloader.site/",
                                                                         filename,
                                                                         link.size,
-                                                                        singleStream?.captions ||
-                                                                            undefined,
+                                                                        getFilteredCaptions(
+                                                                            singleStream?.captions,
+                                                                        ),
                                                                     );
                                                                 }}
                                                                 className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all cursor-pointer"
@@ -751,6 +804,65 @@ export default function DownloadModal({
                                                     ]}
                                                 />
                                             </div>
+
+                                            {/* Subtitle Selection for Batch */}
+                                            <CustomDropdown
+                                                label="Subtitle Language"
+                                                value={selectedSubLang}
+                                                onChange={(val) =>
+                                                    setSelectedSubLang(val)
+                                                }
+                                                options={[
+                                                    {
+                                                        value: "none",
+                                                        label: "No Subtitles",
+                                                    },
+                                                    {
+                                                        value: "all",
+                                                        label: "All Languages (ZIP)",
+                                                    },
+                                                    {
+                                                        value: "en",
+                                                        label: "English",
+                                                    },
+                                                    {
+                                                        value: "es",
+                                                        label: "Spanish",
+                                                    },
+                                                    {
+                                                        value: "fr",
+                                                        label: "French",
+                                                    },
+                                                    {
+                                                        value: "de",
+                                                        label: "German",
+                                                    },
+                                                    {
+                                                        value: "pt",
+                                                        label: "Portuguese",
+                                                    },
+                                                    {
+                                                        value: "ar",
+                                                        label: "Arabic",
+                                                    },
+                                                    {
+                                                        value: "hi",
+                                                        label: "Hindi",
+                                                    },
+                                                    {
+                                                        value: "ja",
+                                                        label: "Japanese",
+                                                    },
+                                                    {
+                                                        value: "ko",
+                                                        label: "Korean",
+                                                    },
+                                                    {
+                                                        value: "zh",
+                                                        label: "Chinese",
+                                                    },
+                                                ]}
+                                            />
 
                                             <button
                                                 onClick={startBatchResolving}
@@ -964,7 +1076,9 @@ export default function DownloadModal({
                                                                                 "https://videodownloader.site/",
                                                                             filename,
                                                                             ep.size,
-                                                                            ep.captions,
+                                                                            getFilteredCaptions(
+                                                                                ep.captions,
+                                                                            ),
                                                                         );
                                                                     }}
                                                                     className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-primary border border-white/5 hover:border-primary/10 text-foreground/75 hover:text-white transition-all cursor-pointer"
