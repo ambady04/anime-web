@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -15,6 +15,7 @@ import {
     AlertCircle,
     ChevronRight,
     Sparkles,
+    ChevronDown,
 } from "lucide-react";
 import { movieApi, DownloadLink, Subject, ResourceModel, StreamData, Caption } from "@/lib/api";
 import { downloadStore } from "@/lib/download-store";
@@ -31,6 +32,83 @@ function formatBytes(bytes: number): string {
 // Clean titles for filenames
 function cleanFilename(title: string): string {
     return title.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/__+/g, "_");
+}
+
+interface CustomDropdownProps<T> {
+    value: T;
+    onChange: (val: T) => void;
+    options: { value: T; label: string }[];
+    label?: string;
+    className?: string;
+}
+
+function CustomDropdown<T extends string | number>({
+    value,
+    onChange,
+    options,
+    label,
+    className = "",
+}: CustomDropdownProps<T>) {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("click", handleOutsideClick);
+        return () => {
+            document.removeEventListener("click", handleOutsideClick);
+        };
+    }, [isOpen]);
+
+    const activeOption = options.find((opt) => opt.value === value);
+
+    return (
+        <div className={`relative ${className}`} ref={containerRef}>
+            {label && (
+                <label className="text-[10px] uppercase font-black tracking-wider text-foreground/45 mb-1 block">
+                    {label}
+                </label>
+            )}
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-xs text-foreground font-semibold focus:outline-none cursor-pointer transition-all text-left"
+            >
+                <span className="truncate">{activeOption ? activeOption.label : String(value)}</span>
+                <ChevronDown className="w-3.5 h-3.5 ml-1.5 text-foreground/45 shrink-0" />
+            </button>
+            
+            {isOpen && (
+                <div className="absolute left-0 right-0 mt-2 rounded-xl border border-glass-border bg-zinc-950/95 backdrop-blur-md shadow-2xl z-50 py-1 max-h-48 overflow-y-auto scrollbar-thin">
+                    {options.map((opt) => (
+                        <button
+                            key={String(opt.value)}
+                            type="button"
+                            onClick={() => {
+                                onChange(opt.value);
+                                setIsOpen(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                                value === opt.value
+                                    ? "bg-primary text-white"
+                                    : "text-foreground/80 hover:text-white hover:bg-white/5"
+                            }`}
+                        >
+                            <span className="truncate">{opt.label}</span>
+                            {value === opt.value && (
+                                <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1.5" />
+                            )}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 }
 
 interface DownloadModalProps {
@@ -244,9 +322,10 @@ export default function DownloadModal({
 
         successful.forEach((ep, index) => {
             setTimeout(() => {
-                const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                const folder = `${cleanFilename(subject.title)}_Season_${batchSeason}`;
+                const filename = `${folder}/${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
                 const referer = ep.referer || "https://videodownloader.site/";
-                downloadStore.startBrowserDownload(ep.url, referer, filename, ep.captions);
+                downloadStore.startDownload(ep.url, referer, filename, ep.size, ep.captions);
             }, index * 1200); // 1.2s delay to prevent request overlapping/throttling
         });
     };
@@ -382,44 +461,29 @@ export default function DownloadModal({
                                 {isSeries && (
                                     <div className="grid grid-cols-2 gap-3 mb-4">
                                         {/* Season Selector */}
-                                        <div className="flex flex-col space-y-1">
-                                            <label className="text-[10px] uppercase font-black tracking-wider text-foreground/45">
-                                                Season
-                                            </label>
-                                            <select
-                                                value={selectedSeasonSingle}
-                                                onChange={(e) => {
-                                                    const s = Number(e.target.value);
-                                                    setSelectedSeasonSingle(s);
-                                                    setSelectedEpisode(1);
-                                                }}
-                                                className="text-xs bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-foreground focus:outline-none cursor-pointer focus:border-primary transition-all"
-                                            >
-                                                {seasonsList.map((se) => (
-                                                    <option key={se.se} value={se.se}>
-                                                        Season {se.se}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                        <CustomDropdown
+                                            label="Season"
+                                            value={selectedSeasonSingle}
+                                            onChange={(val) => {
+                                                setSelectedSeasonSingle(val);
+                                                setSelectedEpisode(1);
+                                            }}
+                                            options={seasonsList.map((se) => ({
+                                                value: se.se,
+                                                label: `Season ${se.se}`,
+                                            }))}
+                                        />
 
                                         {/* Episode Selector */}
-                                        <div className="flex flex-col space-y-1">
-                                            <label className="text-[10px] uppercase font-black tracking-wider text-foreground/45">
-                                                Episode
-                                            </label>
-                                            <select
-                                                value={selectedEpisode}
-                                                onChange={(e) => setSelectedEpisode(Number(e.target.value))}
-                                                className="text-xs bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-foreground focus:outline-none cursor-pointer focus:border-primary transition-all"
-                                            >
-                                                {Array.from({ length: maxEpisodesForSelectedSeason }).map((_, i) => (
-                                                    <option key={i + 1} value={i + 1}>
-                                                        Episode {i + 1}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                        <CustomDropdown
+                                            label="Episode"
+                                            value={selectedEpisode}
+                                            onChange={(val) => setSelectedEpisode(val)}
+                                            options={Array.from({ length: maxEpisodesForSelectedSeason }).map((_, i) => ({
+                                                value: i + 1,
+                                                label: `Episode ${i + 1}`,
+                                            }))}
+                                        />
                                     </div>
                                 )}
 
@@ -478,12 +542,14 @@ export default function DownloadModal({
                                                             </button>
                                                              <button
                                                                 onClick={() => {
-                                                                    const filename = `${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
-                                                                    downloadStore.startBrowserDownload(
-                                                                        link.url,
-                                                                        singleStream?.stream_domain || "https://videodownloader.site/",
-                                                                        filename,
-                                                                        singleStream?.captions || undefined
+                                                                     const folder = `${cleanFilename(subject.title)}_Season_${selectedSeasonSingle}`;
+                                                                     const filename = `${folder}/${cleanFilename(subject.title)}_S${selectedSeasonSingle}E${selectedEpisode}_${link.resolution}p.mp4`;
+                                                                     downloadStore.startDownload(
+                                                                         link.url,
+                                                                         singleStream?.stream_domain || "https://videodownloader.site/",
+                                                                         filename,
+                                                                         link.size,
+                                                                         singleStream?.captions || undefined
                                                                     );
                                                                 }}
                                                                 className="flex items-center space-x-1.5 py-2 px-3.5 rounded-xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary-glow/10 hover:shadow-primary-glow/20 transition-all cursor-pointer"
@@ -509,40 +575,29 @@ export default function DownloadModal({
                                     <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             {/* Season Select */}
-                                            <div className="flex flex-col space-y-1.5">
-                                                <label className="text-[10px] uppercase font-black tracking-wider text-foreground/45">
-                                                    Select Season
-                                                </label>
-                                                <select
-                                                    value={batchSeason}
-                                                    onChange={(e) => setBatchSeason(Number(e.target.value))}
-                                                    className="text-xs bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-foreground focus:outline-none cursor-pointer focus:border-primary transition-all"
-                                                >
-                                                    {seasonsList.map((se) => (
-                                                        <option key={se.se} value={se.se}>
-                                                            Season {se.se} ({se.maxEp} Episodes)
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                            <CustomDropdown
+                                                label="Select Season"
+                                                value={batchSeason}
+                                                onChange={(val) => setBatchSeason(val)}
+                                                options={seasonsList.map((se) => ({
+                                                    value: se.se,
+                                                    label: `Season ${se.se} (${se.maxEp} Episodes)`,
+                                                }))}
+                                            />
 
                                             {/* Quality Select */}
-                                            <div className="flex flex-col space-y-1.5">
-                                                <label className="text-[10px] uppercase font-black tracking-wider text-foreground/45">
-                                                    Preferred Quality
-                                                </label>
-                                                <select
-                                                    value={targetResolution}
-                                                    onChange={(e) => setTargetResolution(e.target.value)}
-                                                    className="text-xs bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-foreground focus:outline-none cursor-pointer focus:border-primary transition-all"
-                                                >
-                                                    <option value="best">Best Available Quality</option>
-                                                    <option value="1080">1080p Only</option>
-                                                    <option value="720">720p Only</option>
-                                                    <option value="480">480p Only</option>
-                                                    <option value="360">360p Only</option>
-                                                </select>
-                                            </div>
+                                            <CustomDropdown
+                                                label="Preferred Quality"
+                                                value={targetResolution}
+                                                onChange={(val) => setTargetResolution(val)}
+                                                options={[
+                                                    { value: "best", label: "Best Available Quality" },
+                                                    { value: "1080", label: "1080p Only" },
+                                                    { value: "720", label: "720p Only" },
+                                                    { value: "480", label: "480p Only" },
+                                                    { value: "360", label: "360p Only" },
+                                                ]}
+                                            />
                                         </div>
 
                                         <button
@@ -689,11 +744,13 @@ export default function DownloadModal({
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
-                                                                        const filename = `${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
-                                                                        downloadStore.startBrowserDownload(
+                                                                        const folder = `${cleanFilename(subject.title)}_Season_${batchSeason}`;
+                                                                        const filename = `${folder}/${cleanFilename(subject.title)}_S${batchSeason}E${ep.epNum}_${ep.resolution}p.mp4`;
+                                                                        downloadStore.startDownload(
                                                                             ep.url,
                                                                             ep.referer || "https://videodownloader.site/",
                                                                             filename,
+                                                                            ep.size,
                                                                             ep.captions
                                                                         );
                                                                     }}

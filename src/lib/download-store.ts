@@ -17,6 +17,111 @@ type Listener = (tasks: DownloadTask[]) => void;
 let listeners: Set<Listener> = new Set();
 let tasks: DownloadTask[] = [];
 
+// Vanilla TS helper to compute CRC32 checksum for ZIP headers
+function crc32(data: Uint8Array): number {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; i++) {
+        const byte = data[i];
+        let lookup = (crc ^ byte) & 0xff;
+        for (let j = 0; j < 8; j++) {
+            if (lookup & 1) {
+                lookup = (lookup >>> 1) ^ 0xedb88320;
+            } else {
+                lookup = lookup >>> 1;
+            }
+        }
+        crc = (crc >>> 8) ^ lookup;
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+// Vanilla TS helper to construct a standard uncompressed ZIP archive (Store mode) in the browser
+function createSimpleZip(files: { name: string; content: string }[]): Blob {
+    const textEncoder = new TextEncoder();
+    const parts: Uint8Array[] = [];
+    const directoryHeaders: Uint8Array[] = [];
+    let offset = 0;
+
+    for (const file of files) {
+        const fileData = textEncoder.encode(file.content);
+        const filenameData = textEncoder.encode(file.name);
+        
+        // 1. Local File Header
+        const localHeader = new Uint8Array(30 + filenameData.length);
+        const view = new DataView(localHeader.buffer);
+        
+        view.setUint32(0, 0x04034b50, true); // Local file header signature
+        view.setUint16(4, 10, true);         // Version needed to extract (1.0)
+        view.setUint16(6, 0, true);          // General purpose bit flag
+        view.setUint16(8, 0, true);          // Compression method (0 = store/uncompressed)
+        view.setUint16(10, 0, true);         // Last mod file time
+        view.setUint16(12, 0, true);         // Last mod file date
+        
+        const crc = crc32(fileData);
+        view.setUint32(14, crc, true);       // CRC-32
+        view.setUint32(18, fileData.length, true); // Compressed size
+        view.setUint32(22, fileData.length, true); // Uncompressed size
+        view.setUint16(26, filenameData.length, true); // Filename length
+        view.setUint16(28, 0, true);         // Extra field length
+        
+        localHeader.set(filenameData, 30);
+        
+        parts.push(localHeader);
+        parts.push(fileData);
+
+        // 2. Central Directory File Header
+        const dirHeader = new Uint8Array(46 + filenameData.length);
+        const dirView = new DataView(dirHeader.buffer);
+        
+        dirView.setUint32(0, 0x02014b50, true); // Central file header signature
+        dirView.setUint16(4, 20, true);         // Version made by
+        dirView.setUint16(6, 10, true);         // Version needed to extract
+        dirView.setUint16(8, 0, true);          // General purpose bit flag
+        dirView.setUint16(10, 0, true);         // Compression method
+        dirView.setUint16(12, 0, true);         // Last mod file time
+        dirView.setUint16(14, 0, true);         // Last mod file date
+        dirView.setUint32(16, crc, true);       // CRC-32
+        dirView.setUint32(20, fileData.length, true); // Compressed size
+        dirView.setUint32(24, fileData.length, true); // Uncompressed size
+        dirView.setUint16(28, filenameData.length, true); // Filename length
+        dirView.setUint16(30, 0, true);         // Extra field length
+        dirView.setUint16(32, 0, true);         // File comment length
+        dirView.setUint16(34, 0, true);         // Disk number start
+        dirView.setUint16(36, 0, true);         // Internal file attributes
+        dirView.setUint32(38, 0, true);         // External file attributes
+        dirView.setUint32(42, offset, true);    // Relative offset of local header
+        
+        dirHeader.set(filenameData, 46);
+        directoryHeaders.push(dirHeader);
+
+        offset += localHeader.length + fileData.length;
+    }
+
+    const dirOffset = offset;
+    let dirSize = 0;
+    for (const h of directoryHeaders) {
+        parts.push(h);
+        dirSize += h.length;
+    }
+
+    // 3. End of Central Directory Record (EOCD)
+    const eocd = new Uint8Array(22);
+    const eocdView = new DataView(eocd.buffer);
+    
+    eocdView.setUint32(0, 0x06054b50, true); // End of central dir signature
+    eocdView.setUint16(4, 0, true);          // Number of this disk
+    eocdView.setUint16(6, 0, true);          // Disk where central directory starts
+    eocdView.setUint16(8, directoryHeaders.length, true); // Number of central directory records on this disk
+    eocdView.setUint16(10, directoryHeaders.length, true); // Total number of central directory records
+    eocdView.setUint32(12, dirSize, true);   // Size of central directory
+    eocdView.setUint32(16, dirOffset, true); // Offset of start of central directory, relative to start of archive
+    eocdView.setUint16(20, 0, true);         // Comment length
+
+    parts.push(eocd);
+
+    return new Blob(parts as any[], { type: "application/zip" });
+}
+
 // Load initial tasks from LocalStorage if available
 if (typeof window !== "undefined") {
     try {
@@ -40,7 +145,7 @@ if (typeof window !== "undefined") {
 // Global beforeunload listener to prevent accidental page refresh during downloads
 if (typeof window !== "undefined") {
     window.addEventListener("beforeunload", (event) => {
-        const hasActiveDownloads = tasks.some((t) => t.status === "downloading");
+        const hasActiveDownloads = tasks.some((t) => t.status === "downloading" && !t.isNative);
         if (hasActiveDownloads) {
             event.preventDefault();
             event.returnValue = "A download is currently in progress. Refreshing or closing this page will cancel the download.";
@@ -137,39 +242,64 @@ export const downloadStore = {
         }
     },
 
+    // Bundles all language subtitles into a single ZIP file and triggers a single download save dialog
     async downloadSubtitles(captions: Caption[], videoFilename: string) {
         if (!captions || captions.length === 0) return;
         const baseName = videoFilename.endsWith(".mp4") ? videoFilename.slice(0, -4) : videoFilename;
         
-        for (const caption of captions) {
-            try {
-                // Fetch subtitles via local video proxy to bypass CDN access block
-                const proxyUrl = `/api/video?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
-                const res = await fetch(proxyUrl);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
-                const blob = await res.blob();
-                const ext = caption.url.endsWith(".vtt") ? ".vtt" : ".srt";
-                const subFilename = `${baseName}.${caption.lan}${ext}`;
-                
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = blobUrl;
-                a.download = subFilename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(blobUrl);
-            } catch (e) {
-                console.error("Failed to download subtitle:", caption.lanName, e);
-            }
+        try {
+            const resolvedFiles: { name: string; content: string }[] = [];
+            
+            // Fetch subtitles content parallelly
+            const fetchPromises = captions.map(async (caption) => {
+                try {
+                    const proxyUrl = `/api/video?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                    const res = await fetch(proxyUrl);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    
+                    const text = await res.text();
+                    const ext = caption.url.endsWith(".vtt") ? ".vtt" : ".srt";
+                    resolvedFiles.push({
+                        name: `${baseName}.${caption.lan}${ext}`,
+                        content: text,
+                    });
+                } catch (e) {
+                    console.error("Failed to fetch subtitle track:", caption.lanName, e);
+                }
+            });
+            
+            await Promise.all(fetchPromises);
+            
+            if (resolvedFiles.length === 0) return;
+            
+            // Construct zip file and save natively in browser
+            const zipBlob = createSimpleZip(resolvedFiles);
+            const zipFilename = `${baseName}_subtitles.zip`;
+            
+            const blobUrl = URL.createObjectURL(zipBlob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = zipFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        } catch (e) {
+            console.error("Failed to bundle subtitles into zip archive:", e);
         }
     },
 
     // 2. In-App Tracked Download (Streams chunks in JS to show progress, cancels if tab closed/reloaded)
-    async startDownload(url: string, referer: string, filename: string, captions?: Caption[]) {
+    async startDownload(url: string, referer: string, filename: string, size?: number, captions?: Caption[]) {
         const id = `${url}-${Date.now()}`;
         const controller = new AbortController();
+
+        // Trigger subtitles zip download immediately at the start of the download action
+        // to separate it in time from the video blob save, avoiding browser popup/multiple-file blocks.
+        if (captions && captions.length > 0) {
+            this.downloadSubtitles(captions, filename);
+        }
 
         const cancel = () => {
             try {
@@ -193,7 +323,9 @@ export const downloadStore = {
             }
 
             const contentLength = response.headers.get("content-length");
-            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+            const responseSize = contentLength ? parseInt(contentLength, 10) : 0;
+            // Use size passed from watch client (accurate resolution size) if Content-Length is chunked/missing
+            const totalBytes = size && size > 0 ? size : responseSize;
             this.updateTask(id, { size: totalBytes });
 
             const reader = response.body?.getReader();

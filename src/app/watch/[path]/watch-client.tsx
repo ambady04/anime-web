@@ -674,16 +674,18 @@ export default function WatchClient({
                                             [...stream.downloads]
                                                 .sort((a, b) => b.resolution - a.resolution)
                                                 .map((link) => {
-                                                    const filename = `${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
+                                                    const folder = `${cleanFilename(subject.title)}_Season_${activeSeason}`;
+                                                    const filename = `${folder}/${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
                                                     return (
                                                         <button
                                                             key={link.id}
                                                             onClick={() => {
                                                                 setShowDownloadMenu(false);
-                                                                downloadStore.startBrowserDownload(
+                                                                downloadStore.startDownload(
                                                                     link.url,
                                                                     stream.stream_domain || "https://videodownloader.site/",
                                                                     filename,
+                                                                    link.size,
                                                                     stream.captions
                                                                 );
                                                             }}
