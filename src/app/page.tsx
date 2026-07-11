@@ -1,4 +1,4 @@
-import { movieApi } from "@/lib/api";
+import { movieApi, Subject } from "@/lib/api";
 import HeroSlider from "@/components/hero-slider";
 import MovieShelf from "@/components/movie-shelf";
 import ContinueWatching from "@/components/continue-watching";
@@ -6,6 +6,36 @@ import Link from "next/link";
 import { Film, RefreshCw } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+// Custom curated collections to show on homepage
+const CUSTOM_COLLECTIONS = [
+    { title: "English Latest", fetchType: "category", query: "english" },
+    { title: "Malayalam Latest", fetchType: "category", query: "malayalam" },
+    { title: "DC Universe", fetchType: "search", query: "dc" },
+    { title: "Marvel", fetchType: "search", query: "marvel" },
+] as const;
+
+async function fetchCollection(
+    config: (typeof CUSTOM_COLLECTIONS)[number],
+): Promise<{ title: string; subjects: Subject[] }> {
+    try {
+        if (config.fetchType === "category") {
+            const data = await movieApi.getCategory(config.query, 1);
+            // Category API may return data in different shapes
+            const items =
+                (data as any)?.data?.items || (data as any)?.items || [];
+            return { title: config.title, subjects: items.slice(0, 20) };
+        } else {
+            const data = await movieApi.search(config.query, 1);
+            return {
+                title: config.title,
+                subjects: (data.items || []).slice(0, 20),
+            };
+        }
+    } catch {
+        return { title: config.title, subjects: [] };
+    }
+}
 
 export default async function HomePage() {
     let homeData = null;
@@ -17,6 +47,11 @@ export default async function HomePage() {
         console.error("HomePage API Error:", e);
         errorMsg = e.message || "Error loading live media catalog.";
     }
+
+    // Fetch custom collections in parallel
+    const customCollections = await Promise.all(
+        CUSTOM_COLLECTIONS.map(fetchCollection),
+    );
 
     // Extract sections
     const bannerModule = homeData?.operatingList?.find(
@@ -45,6 +80,21 @@ export default async function HomePage() {
             {/* 2. Client-side Continue Watching History */}
             <ContinueWatching />
 
+            {/* 3. Custom Curated Collections */}
+            {customCollections.some((c) => c.subjects.length > 0) && (
+                <div className="space-y-4">
+                    {customCollections.map(
+                        (collection) =>
+                            collection.subjects.length > 0 && (
+                                <MovieShelf
+                                    key={collection.title}
+                                    title={collection.title}
+                                    subjects={collection.subjects}
+                                />
+                            ),
+                    )}
+                </div>
+            )}
 
             {/* 4. Display Content Shelves (Trending, Cinema, etc.) */}
             {shelves.length > 0 ? (
