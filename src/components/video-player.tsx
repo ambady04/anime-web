@@ -159,11 +159,10 @@ export default function VideoPlayer({
                 const searchRes = await fetch(
                     `/api/fillers?title=${encodeURIComponent(title)}`,
                 );
-                if (!searchRes.ok)
-                    throw new Error("API fillers request failed");
+                if (!searchRes.ok) return; // Silently skip if API unavailable
                 const searchData = await searchRes.json();
                 const malId = searchData.malId;
-                if (!malId) throw new Error("No MAL ID found for title");
+                if (!malId) return; // No MAL ID found — skip times unavailable for this title
 
                 // 2. Get Skip times from AniSkip API
                 const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
@@ -205,9 +204,8 @@ export default function VideoPlayer({
                         }),
                     );
                 }
-            } catch (e) {
-                console.error("Failed to load skip times dynamically:", e);
-                // Fallback to sensible default intro skip (from 2s to 95s)
+            } catch {
+                // Skip times unavailable — not critical, use default intro estimate
                 if (active) {
                     setIntroStart(2);
                     setIntroEnd(95);
