@@ -80,23 +80,7 @@ export default async function HomePage() {
             {/* 2. Client-side Continue Watching History */}
             <ContinueWatching />
 
-            {/* 3. Custom Curated Collections */}
-            {customCollections.some((c) => c.subjects.length > 0) && (
-                <div className="space-y-4">
-                    {customCollections.map(
-                        (collection) =>
-                            collection.subjects.length > 0 && (
-                                <MovieShelf
-                                    key={collection.title}
-                                    title={collection.title}
-                                    subjects={collection.subjects}
-                                />
-                            ),
-                    )}
-                </div>
-            )}
-
-            {/* 4. Display Content Shelves (Trending, Cinema, etc.) */}
+            {/* 3. Display Content Shelves (Trending, Cinema, etc.) */}
             {shelves.length > 0 ? (
                 <div className="space-y-4">
                     {shelves.map((shelf, idx) => (
@@ -133,6 +117,22 @@ export default async function HomePage() {
                 /* Loading skeleton fallback */
                 <div className="max-w-380 mx-auto px-4 py-20 text-center text-foreground/50 font-bold uppercase tracking-wider text-xs animate-pulse select-none">
                     <p>Scanning Vercel media nodes...</p>
+                </div>
+            )}
+
+            {/* 4. Custom Curated Collections (at the end) */}
+            {customCollections.some((c) => c.subjects.length > 0) && (
+                <div className="space-y-4">
+                    {customCollections.map(
+                        (collection) =>
+                            collection.subjects.length > 0 && (
+                                <MovieShelf
+                                    key={collection.title}
+                                    title={collection.title}
+                                    subjects={collection.subjects}
+                                />
+                            ),
+                    )}
                 </div>
             )}
         </div>
