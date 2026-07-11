@@ -1595,12 +1595,28 @@ export default function VideoPlayer({
                         }
                     }}
                     onWaiting={() => {
-                        // Delay showing loader â€” avoids flash when seeking within buffer
+                        // YouTube-like: longer delay before showing spinner.
+                        // Keeps last video frame visible during short buffering.
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
                             setIsLoading(true);
-                        }, 350);
+                        }, 1500);
+                    }}
+                    onSeeking={() => {
+                        // Don't show spinner immediately on seek
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                    }}
+                    onSeeked={() => {
+                        // After seek completes, cancel pending spinner
+                        if (waitingTimeoutRef.current) {
+                            clearTimeout(waitingTimeoutRef.current);
+                            waitingTimeoutRef.current = null;
+                        }
+                        if (videoRef.current && videoRef.current.readyState >= 3) {
+                            setIsLoading(false);
+                        }
                     }}
                     onPlaying={() => {
                         // Cancel pending loader and hide it
@@ -1614,7 +1630,7 @@ export default function VideoPlayer({
                     onError={handlePlayerError}
                     autoPlay
                     playsInline
-                    preload="metadata"
+                    preload="auto"
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
