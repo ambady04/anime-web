@@ -5,7 +5,7 @@ import ContinueWatching from "@/components/continue-watching";
 import Link from "next/link";
 import { Film, RefreshCw } from "lucide-react";
 
-export const revalidate = 3600; // Revalidate cache hourly
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
     let homeData = null;

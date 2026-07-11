@@ -1,7 +1,5 @@
 import { NextRequest } from "next/server";
 
-// Edge runtime for low-latency responses
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 // Multiple referers to try — CDNs may accept different ones

@@ -1,0 +1,15 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/fillers/route": "/api/fillers",
+  "/api/video/route": "/api/video",
+  "/apple-icon/route": "/apple-icon",
+  "/favicon.ico/route": "/favicon.ico",
+  "/favorites/page": "/favorites",
+  "/history/page": "/history",
+  "/icon/route": "/icon",
+  "/opengraph-image/route": "/opengraph-image",
+  "/page": "/",
+  "/search/page": "/search",
+  "/watch/[path]/page": "/watch/[path]"
+}

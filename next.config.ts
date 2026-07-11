@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
+
 const nextConfig: NextConfig = {
     // Optimize images
     images: {
         formats: ["image/avif", "image/webp"],
         minimumCacheTTL: 86400,
+        unoptimized: true,
     },
 
     async rewrites() {
@@ -13,27 +16,23 @@ const nextConfig: NextConfig = {
             // NOTE: /api/video is intentionally excluded — it's our local streaming proxy
             {
                 source: "/api/home",
-                destination: "https://api.abisolutions.online/api/home",
+                destination: `${API_BASE_URL}/api/home`,
             },
             {
                 source: "/api/details",
-                destination:
-                    "https://api.abisolutions.online/api/details",
+                destination: `${API_BASE_URL}/api/details`,
             },
             {
                 source: "/api/stream",
-                destination:
-                    "https://api.abisolutions.online/api/stream",
+                destination: `${API_BASE_URL}/api/stream`,
             },
             {
                 source: "/api/search",
-                destination:
-                    "https://api.abisolutions.online/api/search",
+                destination: `${API_BASE_URL}/api/search`,
             },
             {
                 source: "/api/category",
-                destination:
-                    "https://api.abisolutions.online/api/category",
+                destination: `${API_BASE_URL}/api/category`,
             },
         ];
     },

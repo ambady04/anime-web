@@ -1,5 +1,47 @@
 import { cache } from "react";
 
+// Workaround for local DNS resolution failures of api.abisolutions.online on macOS/Node.js
+if (typeof window === "undefined") {
+    try {
+        const dns = eval('require("dns")');
+        const originalLookup = dns.lookup;
+        dns.lookup = function (
+            hostname: string,
+            options: any,
+            callback: (err: Error | null, address: any, family?: number) => void,
+        ) {
+            let actualCallback = callback;
+            let actualOptions = options;
+            if (typeof options === "function") {
+                actualCallback = options;
+                actualOptions = {};
+            }
+
+            if (hostname === "api.abisolutions.online") {
+                dns.resolve4(hostname, (err: Error | null, addresses: string[]) => {
+                    if (err || !addresses || !addresses.length) {
+                        originalLookup(hostname, actualOptions, actualCallback);
+                    } else {
+                        if (actualOptions && actualOptions.all) {
+                            const results = addresses.map((addr) => ({
+                                address: addr,
+                                family: 4,
+                            }));
+                            actualCallback(null, results);
+                        } else {
+                            actualCallback(null, addresses[0], 4);
+                        }
+                    }
+                });
+            } else {
+                originalLookup(hostname, actualOptions, actualCallback);
+            }
+        };
+    } catch (e) {
+        // Fallback for environment constraints where dns/require is not available
+    }
+}
+
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
