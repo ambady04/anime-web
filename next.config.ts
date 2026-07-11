@@ -13,27 +13,27 @@ const nextConfig: NextConfig = {
             // NOTE: /api/video is intentionally excluded — it's our local streaming proxy
             {
                 source: "/api/home",
-                destination: "api.abisolutions.online/api/home",
+                destination: "https://api.abisolutions.online/api/home",
             },
             {
                 source: "/api/details",
                 destination:
-                    "api.abisolutions.online/api/details",
+                    "https://api.abisolutions.online/api/details",
             },
             {
                 source: "/api/stream",
                 destination:
-                    "api.abisolutions.online/api/stream",
+                    "https://api.abisolutions.online/api/stream",
             },
             {
                 source: "/api/search",
                 destination:
-                    "api.abisolutions.online/api/search",
+                    "https://api.abisolutions.online/api/search",
             },
             {
                 source: "/api/category",
                 destination:
-                    "api.abisolutions.online/api/category",
+                    "https://api.abisolutions.online/api/category",
             },
         ];
     },

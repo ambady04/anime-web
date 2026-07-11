@@ -4,7 +4,7 @@ const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
     : process.env.NEXT_PUBLIC_API_URL ||
-      "api.abisolutions.online";
+      "https://api.abisolutions.online";
 
 export interface ImageModel {
     url: string;
