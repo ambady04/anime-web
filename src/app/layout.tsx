@@ -9,78 +9,78 @@ import InspectGuard from "@/components/inspect-guard";
 import { AuthProvider } from "@/lib/auth-context";
 
 const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
+    variable: "--font-inter",
+    subsets: ["latin"],
+    display: "swap",
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kixo.to"),
-  title: {
-    default: "KIXO — Stream Anime, Movies & Series",
-    template: "%s | KIXO",
-  },
-  description:
-    "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition. Free streaming, no sign-up required.",
-  keywords: [
-    "anime",
-    "movies",
-    "series",
-    "streaming",
-    "watch online",
-    "dubbed",
-    "subbed",
-    "HD",
-  ],
-  authors: [{ name: "KIXO" }],
-  creator: "KIXO",
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://kixo.to",
-    siteName: "KIXO",
-    title: "KIXO — Stream Anime, Movies & Series",
+    metadataBase: new URL("https://kixo.to"),
+    title: {
+        default: "KIXO — Stream Anime, Movies & Series",
+        template: "%s | KIXO",
+    },
     description:
-      "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition.",
-    images: [
-      {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "KIXO — Stream Anime, Movies & Series",
-      },
+        "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition. Free streaming, no sign-up required.",
+    keywords: [
+        "anime",
+        "movies",
+        "series",
+        "streaming",
+        "watch online",
+        "dubbed",
+        "subbed",
+        "HD",
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "KIXO — Stream Anime, Movies & Series",
-    description:
-      "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition.",
-    images: ["/opengraph-image"],
-    creator: "@kixo",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
+    authors: [{ name: "KIXO" }],
+    creator: "KIXO",
+    openGraph: {
+        type: "website",
+        locale: "en_US",
+        url: "https://kixo.to",
+        siteName: "KIXO",
+        title: "KIXO — Stream Anime, Movies & Series",
+        description:
+            "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition.",
+        images: [
+            {
+                url: "/opengraph-image",
+                width: 1200,
+                height: 630,
+                alt: "KIXO — Stream Anime, Movies & Series",
+            },
+        ],
+    },
+    twitter: {
+        card: "summary_large_image",
+        title: "KIXO — Stream Anime, Movies & Series",
+        description:
+            "Watch and discover trending movies, TV shows, and subbed/dubbed anime in high definition.",
+        images: ["/opengraph-image"],
+        creator: "@kixo",
+    },
+    robots: {
+        index: true,
+        follow: true,
+    },
 };
 
 export default function RootLayout({
-  children,
+    children,
 }: Readonly<{
-  children: React.ReactNode;
+    children: React.ReactNode;
 }>) {
-  return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      data-scroll-behavior="smooth"
-      className={`${inter.variable} h-full antialiased`}
-    >
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+    return (
+        <html
+            lang="en"
+            suppressHydrationWarning
+            data-scroll-behavior="smooth"
+            className={`${inter.variable} h-full antialiased`}
+        >
+            <head>
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `
               (function() {
                 try {
                   var theme = localStorage.getItem('kixo_theme') || 'dark';
@@ -92,33 +92,33 @@ export default function RootLayout({
                 } catch (e) {}
               })();
             `,
-          }}
-        />
-      </head>
-      <body className="min-h-full bg-background text-foreground flex flex-col relative transition-colors duration-300">
-        <AuthProvider>
-          {/* Global protection guard */}
-          {/* <InspectGuard /> */}
+                    }}
+                />
+            </head>
+            <body className="min-h-full bg-background text-foreground flex flex-col relative transition-colors duration-300">
+                <AuthProvider>
+                    {/* Global protection guard */}
+                    <InspectGuard />
 
-          {/* Scroll handler updating global styles dynamically */}
-          <ScrollHandler />
+                    {/* Scroll handler updating global styles dynamically */}
+                    <ScrollHandler />
 
-          {/* Glow backgrounds */}
-          <div className="radial-glow" />
-          <div className="radial-glow-secondary" />
+                    {/* Glow backgrounds */}
+                    <div className="radial-glow" />
+                    <div className="radial-glow-secondary" />
 
-          {/* Global Navigation */}
-          <Navbar />
+                    {/* Global Navigation */}
+                    <Navbar />
 
-          {/* Main Content Area with transition */}
-          <main className="grow z-10 pt-16 md:pt-20 pb-20 md:pb-0">
-            <PageTransition>{children}</PageTransition>
-          </main>
+                    {/* Main Content Area with transition */}
+                    <main className="grow z-10 pt-16 md:pt-20 pb-20 md:pb-0">
+                        <PageTransition>{children}</PageTransition>
+                    </main>
 
-          {/* Fixed Bottom Navigation for Mobile */}
-          <BottomNav />
-        </AuthProvider>
-      </body>
-    </html>
-  );
+                    {/* Fixed Bottom Navigation for Mobile */}
+                    <BottomNav />
+                </AuthProvider>
+            </body>
+        </html>
+    );
 }
