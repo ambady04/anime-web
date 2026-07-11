@@ -371,3 +371,39 @@ html.light select option {
 .backdrop-blur-xl {
     -webkit-backdrop-filter: blur(24px);
 }
+
+/* Mobile touch optimization */
+@media (pointer: coarse) {
+    .glass-card:hover {
+        transform: none;
+    }
+    .glass-card:active {
+        transform: scale(0.97);
+        transition-duration: 0.1s;
+    }
+}
+
+/* TV / large screen enhancements (4K, Smart TVs) */
+@media (min-width: 2560px) {
+    html {
+        font-size: 18px;
+    }
+}
+
+@media (min-width: 3840px) {
+    html {
+        font-size: 22px;
+    }
+}
+
+/* Smooth scroll momentum on iOS */
+.no-scrollbar {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area padding for notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}

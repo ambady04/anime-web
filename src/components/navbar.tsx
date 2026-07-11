@@ -3,7 +3,16 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, History, Heart, Home, User, Sun, Moon, Download } from "lucide-react";
+import {
+    Search,
+    History,
+    Heart,
+    Home,
+    User,
+    Sun,
+    Moon,
+    Download,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import dynamic from "next/dynamic";
 import { downloadStore } from "@/lib/download-store";
@@ -28,7 +37,9 @@ export default function Navbar() {
     // Subscribe to download store updates to show active count badge
     useEffect(() => {
         const unsubscribe = downloadStore.subscribe((tasks) => {
-            const active = tasks.filter((t) => t.status === "downloading").length;
+            const active = tasks.filter(
+                (t) => t.status === "downloading",
+            ).length;
             setActiveDownloadsCount(active);
         });
         return unsubscribe;
@@ -38,7 +49,9 @@ export default function Navbar() {
     useEffect(() => {
         if (!showDownloadManager) return;
         const handleOutsideClick = (event: MouseEvent) => {
-            const container = document.getElementById("navbar-download-container");
+            const container = document.getElementById(
+                "navbar-download-container",
+            );
             if (container && !container.contains(event.target as Node)) {
                 setShowDownloadManager(false);
             }
@@ -87,8 +100,8 @@ export default function Navbar() {
     ];
 
     return (
-        <header className="sticky-nav py-3.5 transition-all duration-300">
-            <div className="max-w-380 mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+        <header className="sticky-nav py-2.5 sm:py-3.5 transition-all duration-300">
+            <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 2xl:px-12 flex items-center justify-between gap-3 sm:gap-4">
                 {/* Logo Section */}
                 <Link
                     href="/"
@@ -196,9 +209,14 @@ export default function Navbar() {
                     </button>
 
                     {/* Downloads Button & Manager */}
-                    <div className="relative flex" id="navbar-download-container">
+                    <div
+                        className="relative flex"
+                        id="navbar-download-container"
+                    >
                         <button
-                            onClick={() => setShowDownloadManager(!showDownloadManager)}
+                            onClick={() =>
+                                setShowDownloadManager(!showDownloadManager)
+                            }
                             className="p-2 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-foreground/70 hover:text-primary transition-all duration-300 select-none cursor-pointer relative"
                             aria-label="Downloads Manager"
                         >

@@ -62,7 +62,7 @@ function MovieCard({
     return (
         <Link
             href={watchLink}
-            className="group relative block w-full aspect-2/3 rounded-2xl overflow-hidden glass-card transition-all duration-300"
+            className="group relative block w-full aspect-2/3 rounded-xl sm:rounded-2xl overflow-hidden glass-card transition-all duration-300"
         >
             {/* Background Poster Image */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -115,7 +115,7 @@ function MovieCard({
                 </div>
 
                 {/* Movie Title */}
-                <h3 className="font-extrabold text-xs sm:text-sm text-white group-hover:text-primary-light transition-colors line-clamp-2">
+                <h3 className="font-extrabold text-[11px] sm:text-xs md:text-sm 2xl:text-base text-white group-hover:text-primary-light transition-colors line-clamp-2">
                     {subject.title}
                 </h3>
 

@@ -58,7 +58,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
     if (!subjects || subjects.length === 0) return null;
 
     return (
-        <div className="relative group/shelf my-10 max-w-380 mx-auto px-4 sm:px-6 lg:px-8 z-20">
+        <div className="relative group/shelf my-8 sm:my-10 max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 2xl:px-12 z-20">
             {/* Title */}
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg sm:text-xl font-black tracking-wider uppercase text-foreground relative inline-block transition-colors select-none">
@@ -82,12 +82,12 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                 {/* Scrollable list */}
                 <div
                     ref={rowRef}
-                    className="flex overflow-x-auto space-x-4 py-4 px-2 no-scrollbar scroll-smooth w-full select-none"
+                    className="flex overflow-x-auto space-x-3 sm:space-x-4 py-4 px-2 no-scrollbar scroll-smooth w-full select-none"
                 >
                     {subjects.map((subject) => (
                         <div
                             key={subject.subjectId}
-                            className="shrink-0 w-[140px] sm:w-[170px] md:w-[190px] lg:w-[210px]"
+                            className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px] xl:w-[210px] 2xl:w-[240px]"
                         >
                             <MovieCard subject={subject} />
                         </div>

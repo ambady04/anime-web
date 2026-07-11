@@ -111,7 +111,7 @@ export default function RootLayout({
                     <Navbar />
 
                     {/* Main Content Area with transition */}
-                    <main className="grow z-10 pt-16 md:pt-20 pb-20 md:pb-0">
+                    <main className="grow z-10 pt-14 md:pt-20 pb-16 md:pb-0">
                         <PageTransition>{children}</PageTransition>
                     </main>
 
