@@ -125,6 +125,26 @@ export default function VideoPlayer({
         return "22px";
     });
 
+    // Mobile gesture states
+    const [gestureIndicator, setGestureIndicator] = useState<{
+        type: "volume" | "brightness" | "seek" | null;
+        value: number;
+    }>({ type: null, value: 0 });
+    const [brightnessLevel, setBrightnessLevel] = useState(1);
+    const touchStartRef = useRef<{
+        x: number;
+        y: number;
+        time: number;
+        side: "left" | "right" | "center";
+        startVolume: number;
+        startBrightness: number;
+        startTime: number;
+        isVerticalGesture: boolean;
+        isHorizontalGesture: boolean;
+        moved: boolean;
+    } | null>(null);
+    const gestureTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
     }, [subtitleSize]);
@@ -833,44 +853,91 @@ export default function VideoPlayer({
         setShowSpeedMenu(false);
     };
 
-    // Fullscreen implementation with landscape lock on mobile
+    // Fullscreen implementation with landscape lock on mobile.
+    // iOS Safari doesn't support Fullscreen API on container elements,
+    // so we use webkitEnterFullscreen() on the video element directly.
     const toggleFullscreen = () => {
-        if (!containerRef.current) return;
-        if (!document.fullscreenElement) {
-            containerRef.current
-                .requestFullscreen()
-                .then(() => {
-                    setIsFullscreen(true);
-                    // Lock to landscape on mobile devices
-                    const isMobileDevice =
-                        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-                        window.matchMedia(
-                            "(max-width: 768px) and (pointer: coarse)",
-                        ).matches;
-                    if (
-                        isMobileDevice &&
-                        screen.orientation &&
-                        (screen.orientation as any).lock
-                    ) {
-                        (screen.orientation as any)
-                            .lock("landscape")
-                            .catch(() => {
-                                // Orientation lock not supported â€” silently ignore
-                            });
-                    }
-                })
-                .catch((err) => {
-                    console.error("Fullscreen request failed:", err);
-                });
-        } else {
-            document.exitFullscreen();
-            setIsFullscreen(false);
-            // Unlock orientation when leaving fullscreen
-            if (screen.orientation && (screen.orientation as any).unlock) {
-                try {
-                    (screen.orientation as any).unlock();
-                } catch (_) {}
+        const video = videoRef.current;
+        const container = containerRef.current;
+
+        // Check if we're currently in fullscreen (standard or webkit)
+        const isCurrentlyFullscreen =
+            !!document.fullscreenElement ||
+            !!(document as any).webkitFullscreenElement ||
+            !!(video as any)?.webkitDisplayingFullscreen;
+
+        if (!isCurrentlyFullscreen) {
+            // Try standard Fullscreen API first (works on Android, desktop)
+            if (container?.requestFullscreen) {
+                container
+                    .requestFullscreen()
+                    .then(() => {
+                        setIsFullscreen(true);
+                        lockLandscape();
+                    })
+                    .catch(() => {
+                        // Standard API failed - try webkit on container
+                        tryWebkitFullscreen();
+                    });
+            } else if ((container as any)?.webkitRequestFullscreen) {
+                // Safari desktop
+                (container as any).webkitRequestFullscreen();
+                setIsFullscreen(true);
+                lockLandscape();
+            } else if (video && (video as any).webkitEnterFullscreen) {
+                // iOS Safari - only video element supports fullscreen
+                (video as any).webkitEnterFullscreen();
+                setIsFullscreen(true);
+            } else if (video && (video as any).webkitRequestFullScreen) {
+                (video as any).webkitRequestFullScreen();
+                setIsFullscreen(true);
             }
+        } else {
+            // Exit fullscreen
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if ((document as any).webkitExitFullscreen) {
+                (document as any).webkitExitFullscreen();
+            } else if (video && (video as any).webkitExitFullscreen) {
+                (video as any).webkitExitFullscreen();
+            }
+            setIsFullscreen(false);
+            unlockOrientation();
+        }
+    };
+
+    const tryWebkitFullscreen = () => {
+        const video = videoRef.current;
+        const container = containerRef.current;
+        if ((container as any)?.webkitRequestFullscreen) {
+            (container as any).webkitRequestFullscreen();
+            setIsFullscreen(true);
+            lockLandscape();
+        } else if (video && (video as any).webkitEnterFullscreen) {
+            (video as any).webkitEnterFullscreen();
+            setIsFullscreen(true);
+        }
+    };
+
+    const lockLandscape = () => {
+        const isMobileDevice =
+            /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+            window.matchMedia("(max-width: 768px) and (pointer: coarse)")
+                .matches;
+        if (
+            isMobileDevice &&
+            screen.orientation &&
+            (screen.orientation as any).lock
+        ) {
+            (screen.orientation as any).lock("landscape").catch(() => {});
+        }
+    };
+
+    const unlockOrientation = () => {
+        if (screen.orientation && (screen.orientation as any).unlock) {
+            try {
+                (screen.orientation as any).unlock();
+            } catch (_) {}
         }
     };
 
@@ -888,6 +955,137 @@ export default function VideoPlayer({
         } catch (err) {
             console.error("PiP toggle failed:", err);
         }
+    };
+
+    // === MOBILE GESTURE CONTROLS ===
+    // Double-tap left/right to seek, vertical swipe right side for volume,
+    // vertical swipe left side for brightness (filter overlay)
+    const handleGestureTouchStart = (e: React.TouchEvent) => {
+        // Ignore if touching controls panel, buttons, or progress bar
+        const target = e.target as HTMLElement;
+        if (
+            target.closest("button") ||
+            target.closest("input") ||
+            target.closest("[data-controls-panel]") ||
+            target.closest("[data-progress-bar]")
+        ) {
+            return;
+        }
+
+        const touch = e.touches[0];
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const relativeX = x / rect.width;
+
+        let side: "left" | "right" | "center" = "center";
+        if (relativeX < 0.35) side = "left";
+        else if (relativeX > 0.65) side = "right";
+
+        touchStartRef.current = {
+            x: touch.clientX,
+            y: touch.clientY,
+            time: Date.now(),
+            side,
+            startVolume: volume,
+            startBrightness: brightnessLevel,
+            startTime: currentTime,
+            isVerticalGesture: false,
+            isHorizontalGesture: false,
+            moved: false,
+        };
+    };
+
+    const handleGestureTouchMove = (e: React.TouchEvent) => {
+        if (!touchStartRef.current) return;
+
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - touchStartRef.current.x;
+        const deltaY = touch.clientY - touchStartRef.current.y;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+
+        // Determine gesture direction after a threshold
+        if (
+            !touchStartRef.current.isVerticalGesture &&
+            !touchStartRef.current.isHorizontalGesture
+        ) {
+            if (absDeltaX < 10 && absDeltaY < 10) return; // Below threshold
+            if (absDeltaY > absDeltaX && absDeltaY > 15) {
+                touchStartRef.current.isVerticalGesture = true;
+            } else if (absDeltaX > absDeltaY && absDeltaX > 20) {
+                touchStartRef.current.isHorizontalGesture = true;
+            }
+        }
+
+        touchStartRef.current.moved = true;
+
+        // === VERTICAL GESTURE (volume / brightness) ===
+        if (touchStartRef.current.isVerticalGesture) {
+            e.preventDefault();
+            const sensitivity = 150; // pixels for full range
+            const change = -deltaY / sensitivity; // Swipe up = positive
+
+            if (touchStartRef.current.side === "right") {
+                // Right side: Volume control
+                const newVolume = Math.max(
+                    0,
+                    Math.min(1, touchStartRef.current.startVolume + change),
+                );
+                if (videoRef.current) {
+                    videoRef.current.volume = newVolume;
+                    videoRef.current.muted = newVolume === 0;
+                }
+                setVolume(newVolume);
+                setIsMuted(newVolume === 0);
+                setGestureIndicator({
+                    type: "volume",
+                    value: Math.round(newVolume * 100),
+                });
+            } else if (touchStartRef.current.side === "left") {
+                // Left side: Brightness control (CSS filter)
+                const newBrightness = Math.max(
+                    0.2,
+                    Math.min(
+                        1.5,
+                        touchStartRef.current.startBrightness + change,
+                    ),
+                );
+                setBrightnessLevel(newBrightness);
+                setGestureIndicator({
+                    type: "brightness",
+                    value: Math.round(newBrightness * 100),
+                });
+            }
+        }
+
+        // === HORIZONTAL GESTURE (seek) ===
+        if (touchStartRef.current.isHorizontalGesture) {
+            e.preventDefault();
+            const seekSensitivity = 0.5; // seconds per pixel
+            const seekDelta = deltaX * seekSensitivity;
+            const newTime = Math.max(
+                0,
+                Math.min(duration, touchStartRef.current.startTime + seekDelta),
+            );
+
+            if (videoRef.current) {
+                videoRef.current.currentTime = newTime;
+            }
+            setCurrentTime(newTime);
+            setGestureIndicator({ type: "seek", value: Math.round(seekDelta) });
+        }
+    };
+
+    const handleGestureTouchEnd = () => {
+        if (!touchStartRef.current) return;
+
+        // Clear gesture indicator after a short delay
+        if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
+        gestureTimeoutRef.current = setTimeout(() => {
+            setGestureIndicator({ type: null, value: 0 });
+        }, 600);
+
+        touchStartRef.current = null;
     };
 
     // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
@@ -1029,26 +1227,60 @@ export default function VideoPlayer({
     // Track fullscreen changes directly on document level (e.g. Escape key presses)
     useEffect(() => {
         const handleFullscreenChange = () => {
-            const isNowFullscreen = !!document.fullscreenElement;
+            const isNowFullscreen =
+                !!document.fullscreenElement ||
+                !!(document as any).webkitFullscreenElement;
             setIsFullscreen(isNowFullscreen);
-            // Unlock orientation if exiting fullscreen (e.g. via Escape key)
-            if (
-                !isNowFullscreen &&
-                screen.orientation &&
-                (screen.orientation as any).unlock
-            ) {
-                try {
-                    (screen.orientation as any).unlock();
-                } catch (_) {}
-            }
+            if (!isNowFullscreen) unlockOrientation();
         };
+
+        // iOS video element fires these events for its native fullscreen
+        const handleWebkitBeginFullscreen = () => setIsFullscreen(true);
+        const handleWebkitEndFullscreen = () => {
+            setIsFullscreen(false);
+            unlockOrientation();
+        };
+
         document.addEventListener("fullscreenchange", handleFullscreenChange);
-        return () =>
+        document.addEventListener(
+            "webkitfullscreenchange",
+            handleFullscreenChange,
+        );
+
+        const video = videoRef.current;
+        if (video) {
+            video.addEventListener(
+                "webkitbeginfullscreen",
+                handleWebkitBeginFullscreen,
+            );
+            video.addEventListener(
+                "webkitendfullscreen",
+                handleWebkitEndFullscreen,
+            );
+        }
+
+        return () => {
             document.removeEventListener(
                 "fullscreenchange",
                 handleFullscreenChange,
             );
-    }, []);
+            document.removeEventListener(
+                "webkitfullscreenchange",
+                handleFullscreenChange,
+            );
+            if (video) {
+                video.removeEventListener(
+                    "webkitbeginfullscreen",
+                    handleWebkitBeginFullscreen,
+                );
+                video.removeEventListener(
+                    "webkitendfullscreen",
+                    handleWebkitEndFullscreen,
+                );
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeDownload]);
 
     // Controls Visibility Timers
     const triggerControlsVisibility = () => {
@@ -1317,6 +1549,9 @@ export default function VideoPlayer({
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
             onClickCapture={handlePlayerClickCapture}
+            onTouchStart={handleGestureTouchStart}
+            onTouchMove={handleGestureTouchMove}
+            onTouchEnd={handleGestureTouchEnd}
             className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
                 isPlaying && !showControls ? "cursor-none" : ""
             }`}
@@ -1384,6 +1619,7 @@ export default function VideoPlayer({
                     ref={videoRef}
                     src={resolvedVideoSrc}
                     onEnded={handleVideoEnded}
+                    style={{ filter: `brightness(${brightnessLevel})` }}
                     className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
                         aspectRatio === "contain"
                             ? "object-contain"
@@ -1488,6 +1724,59 @@ export default function VideoPlayer({
                     <div className="flex flex-col items-center space-y-1.5 text-white bg-black/40 px-4 py-2.5 rounded-2xl backdrop-blur-sm">
                         <SkipForward className="w-5 h-5 fill-white animate-bounce-horizontal-right text-primary-light" />
                         <span className="text-xs font-black">+10s</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile Gesture Indicator */}
+            {gestureIndicator.type && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+                    <div className="flex flex-col items-center space-y-2 bg-black/70 px-5 py-3 rounded-2xl backdrop-blur-md">
+                        {gestureIndicator.type === "volume" && (
+                            <>
+                                <Volume2 className="w-6 h-6 text-white" />
+                                <div className="w-24 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-white rounded-full transition-all duration-100"
+                                        style={{
+                                            width: `${gestureIndicator.value}%`,
+                                        }}
+                                    />
+                                </div>
+                                <span className="text-xs font-bold text-white">
+                                    {gestureIndicator.value}%
+                                </span>
+                            </>
+                        )}
+                        {gestureIndicator.type === "brightness" && (
+                            <>
+                                <Maximize2 className="w-6 h-6 text-yellow-300" />
+                                <div className="w-24 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-yellow-300 rounded-full transition-all duration-100"
+                                        style={{
+                                            width: `${Math.min(100, Math.round((gestureIndicator.value / 150) * 100))}%`,
+                                        }}
+                                    />
+                                </div>
+                                <span className="text-xs font-bold text-white">
+                                    {gestureIndicator.value}%
+                                </span>
+                            </>
+                        )}
+                        {gestureIndicator.type === "seek" && (
+                            <>
+                                {gestureIndicator.value >= 0 ? (
+                                    <SkipForward className="w-6 h-6 text-white" />
+                                ) : (
+                                    <SkipBack className="w-6 h-6 text-white" />
+                                )}
+                                <span className="text-xs font-bold text-white">
+                                    {gestureIndicator.value >= 0 ? "+" : ""}
+                                    {gestureIndicator.value}s
+                                </span>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
