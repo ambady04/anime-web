@@ -19,26 +19,50 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
     let errorMsg = "";
 
     try {
-        const detailsPromise = movieApi.getDetails(path);
+        // Parse season/episode from URL params early (before waiting for details)
+        const parsedSeason = season ? Number(season) : 0;
+        const parsedEpisode = episode ? Number(episode) : 0;
 
-        details = await detailsPromise;
+        // Fetch details and stream in PARALLEL to eliminate waterfall.
+        // For series: if season/episode provided in URL, use them directly.
+        // If not provided, default to S1E1 (will be corrected after details load).
+        const streamSeason = parsedSeason || (season !== undefined ? 1 : 0);
+        const streamEpisode = parsedEpisode || (episode !== undefined ? 1 : 0);
 
-        // Parse season/episode inputs if it is a series
+        const [detailsResult, streamResult] = await Promise.allSettled([
+            movieApi.getDetails(path),
+            movieApi.getStream(path, streamSeason || 1, streamEpisode || 1),
+        ]);
+
+        if (detailsResult.status === "fulfilled") {
+            details = detailsResult.value;
+        } else {
+            throw detailsResult.reason;
+        }
+
+        // Determine actual season/episode from details
         const isSeries =
             details.subject.subjectType === 2 ||
             details.subject.subjectType === 7;
         if (isSeries) {
-            activeSeason = season ? Number(season) : 1;
-            activeEpisode = episode ? Number(episode) : 1;
+            activeSeason = parsedSeason || 1;
+            activeEpisode = parsedEpisode || 1;
         } else {
             activeSeason = 0;
             activeEpisode = 0;
         }
 
-        // Fetch playable streams
-        stream = await movieApi.getStream(path, activeSeason, activeEpisode);
+        if (streamResult.status === "fulfilled") {
+            stream = streamResult.value;
+        } else {
+            // Stream failed but details succeeded — try once more with correct params
+            stream = await movieApi.getStream(
+                path,
+                activeSeason,
+                activeEpisode,
+            );
+        }
     } catch (e: any) {
-        console.error("Error fetching stream:", e);
         errorMsg =
             e.message || "The streaming link was rejected by media hosts.";
     }

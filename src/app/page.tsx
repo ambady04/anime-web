@@ -41,16 +41,23 @@ export default async function HomePage() {
     let homeData = null;
     let errorMsg = "";
 
-    try {
-        homeData = await movieApi.getHome(false);
-    } catch (e: any) {
-        console.error("HomePage API Error:", e);
-        errorMsg = e.message || "Error loading live media catalog.";
+    // Fetch homepage data AND custom collections in parallel (no waterfall)
+    const [homeResult, ...collectionResults] = await Promise.allSettled([
+        movieApi.getHome(false),
+        ...CUSTOM_COLLECTIONS.map(fetchCollection),
+    ]);
+
+    if (homeResult.status === "fulfilled") {
+        homeData = homeResult.value;
+    } else {
+        errorMsg =
+            homeResult.reason?.message || "Error loading live media catalog.";
     }
 
-    // Fetch custom collections in parallel
-    const customCollections = await Promise.all(
-        CUSTOM_COLLECTIONS.map(fetchCollection),
+    const customCollections = collectionResults.map((r) =>
+        r.status === "fulfilled"
+            ? r.value
+            : { title: "", subjects: [] as Subject[] },
     );
 
     // Extract sections

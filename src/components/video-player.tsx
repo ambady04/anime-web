@@ -260,93 +260,27 @@ export default function VideoPlayer({
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
-    const probeAbortRef = useRef<AbortController | null>(null);
 
     // Video proxy base URL — uses the Vercel-hosted API directly because
     // Cloudflare Workers cannot set custom Referer headers on outbound fetch requests.
     const VIDEO_PROXY_BASE = "https://api.abisolutions.online/api/video";
 
-    // Probe the CDN via our Vercel API proxy to verify the URL works.
-    // If CDN allows direct access, use URL directly. Otherwise stream through Vercel proxy.
-    const probeAndSetVideoSrc = async (url: string) => {
-        // Cancel any previous probe
-        if (probeAbortRef.current) probeAbortRef.current.abort();
-        const controller = new AbortController();
-        probeAbortRef.current = controller;
-
+    // Build the stream URL immediately — no probe needed since CDN requires referer.
+    // This eliminates an extra round-trip that was adding 500ms+ latency.
+    const buildStreamUrl = (url: string): string => {
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-
-        try {
-            // Probe mode (default) — lightweight HEAD check via Vercel, returns JSON
-            const probeUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}`;
-            const probeRes = await fetch(probeUrl, {
-                signal: controller.signal,
-            });
-
-            if (controller.signal.aborted) return;
-
-            if (!probeRes.ok) {
-                // Probe endpoint itself failed — go straight to stream mode via Vercel
-                setResolvedVideoSrc(
-                    `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
-                );
-                return;
-            }
-
-            const probeData = await probeRes.json();
-
-            if (controller.signal.aborted) return;
-
-            if (probeData.mode === "direct") {
-                // CDN accepts requests — use the URL directly from browser.
-                // The video element has referrerpolicy="no-referrer" which strips referer,
-                // and CDNs typically only block wrong referers, not missing ones.
-                setResolvedVideoSrc(url);
-            } else if (probeData.mode === "stream") {
-                // CDN requires referer validation — proxy through Vercel API
-                setResolvedVideoSrc(
-                    `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
-                );
-            } else {
-                // Unknown response — try stream mode to be safe
-                setResolvedVideoSrc(
-                    `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
-                );
-            }
-        } catch (err: unknown) {
-            if ((err as Error)?.name === "AbortError") return;
-            // Probe failed (network error, timeout) — try stream mode via Vercel
-            const refFallback =
-                streamData.stream_domain || "https://videodownloader.site/";
-            setResolvedVideoSrc(
-                `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(refFallback)}&mode=stream`,
-            );
-        }
+        return `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
     };
 
-    // Trigger probe whenever activeDownload or useDirectUrl changes
+    // Set resolved video source whenever activeDownload changes
     useEffect(() => {
         if (!activeDownload) {
             setResolvedVideoSrc("");
             return;
         }
+ setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
 
-        if (useDirectUrl) {
-            // Stream proxy mode — CDN rejected direct access, proxy through Vercel
-            const referer =
-                streamData.stream_domain || "https://videodownloader.site/";
-            setResolvedVideoSrc(
-                `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
-            );
-            return;
-        }
-
-        probeAndSetVideoSrc(activeDownload.url);
-
-        return () => {
-            if (probeAbortRef.current) probeAbortRef.current.abort();
-        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload, useDirectUrl]);
 
