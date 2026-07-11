@@ -1,29 +1,34 @@
-import { Loader2, Film } from "lucide-react";
-
 export default function Loading() {
     return (
-        <div className="min-h-[70vh] w-full flex flex-col items-center justify-center p-8 relative z-20 animate-fade-in select-none">
-            <div className="glass-panel border border-glass-border p-10 rounded-3xl flex flex-col items-center shadow-card space-y-4 max-w-sm">
-                <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                <div className="text-center">
-                    <h3 className="font-black text-foreground text-sm uppercase tracking-wider">
-                        Retrieving Catalogs
-                    </h3>
-                    <p className="text-[10px] text-foreground/45 mt-1 font-bold uppercase tracking-wider">
-                        Resolving mirrors from KIXO network...
-                    </p>
+        <div className="min-h-screen w-full relative z-20 animate-fade-in select-none overflow-hidden">
+            {/* Hero skeleton */}
+            <div className="w-full h-[50vh] sm:h-[65vh] relative">
+                <div className="absolute inset-0 shimmer-bg" />
+                <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-linear-to-t from-background to-transparent" />
+                {/* Title skeleton on hero */}
+                <div className="absolute bottom-12 left-6 sm:left-12 space-y-3">
+                    <div className="h-6 w-48 sm:w-72 bg-white/10 rounded-lg" />
+                    <div className="h-4 w-32 sm:w-56 bg-white/5 rounded-md" />
                 </div>
             </div>
 
-            {/* Skeletons block preview in background */}
-            <div className="w-full max-w-380 mt-12 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-6 opacity-25 pointer-events-none select-none">
-                {Array.from({ length: 6 }).map((_, idx) => (
-                    <div
-                        key={idx}
-                        className="aspect-2/3 rounded-2xl bg-glass-card border border-glass-border flex flex-col justify-end p-4"
-                    >
-                        <div className="h-4 bg-foreground/10 rounded w-3/4 mb-2 animate-pulse" />
-                        <div className="h-3 bg-foreground/10 rounded w-1/2 animate-pulse" />
+            {/* Shelf skeletons */}
+            <div className="max-w-[1920px] mx-auto px-3 sm:px-6 lg:px-8 2xl:px-12 space-y-10 -mt-8">
+                {[1, 2, 3].map((shelf) => (
+                    <div key={shelf}>
+                        {/* Shelf title */}
+                        <div className="h-5 w-36 bg-white/8 rounded-md mb-5" />
+                        {/* Cards row */}
+                        <div className="flex space-x-3 sm:space-x-4 overflow-hidden">
+                            {Array.from({ length: 8 }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px]"
+                                >
+                                    <div className="aspect-2/3 rounded-xl sm:rounded-2xl shimmer-bg" />
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 ))}
             </div>

@@ -279,7 +279,7 @@ export default function VideoPlayer({
             setResolvedVideoSrc("");
             return;
         }
- setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
+        setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload, useDirectUrl]);
@@ -1600,7 +1600,13 @@ export default function VideoPlayer({
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
-                            setIsLoading(true);
+                            // Only show spinner if video is still actually stalled
+                            if (
+                                videoRef.current &&
+                                videoRef.current.readyState < 3
+                            ) {
+                                setIsLoading(true);
+                            }
                         }, 1500);
                     }}
                     onSeeking={() => {
@@ -1614,7 +1620,10 @@ export default function VideoPlayer({
                             clearTimeout(waitingTimeoutRef.current);
                             waitingTimeoutRef.current = null;
                         }
-                        if (videoRef.current && videoRef.current.readyState >= 3) {
+                        if (
+                            videoRef.current &&
+                            videoRef.current.readyState >= 3
+                        ) {
                             setIsLoading(false);
                         }
                     }}
@@ -1772,20 +1781,17 @@ export default function VideoPlayer({
                     </button>
                 )}
 
-            {/* Loading state spinner */}
-            {isLoading && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-30 pointer-events-none">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            {/* Loading spinner - hidden when video is actively playing */}
+            {isLoading && !isPlaying && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-30 pointer-events-none">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 </div>
             )}
 
-            {/* Auto-retry label */}
-            {autoRetryLabel && !playerError && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-30 pointer-events-none">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-3" />
-                    <p className="text-white/80 text-xs font-bold uppercase tracking-widest">
-                        {autoRetryLabel}
-                    </p>
+            {/* Auto-retry loading */}
+            {autoRetryLabel && !playerError && !isPlaying && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-30 pointer-events-none">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 </div>
             )}
 
