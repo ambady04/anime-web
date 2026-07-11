@@ -1781,9 +1781,9 @@ export default function VideoPlayer({
                     </button>
                 )}
 
-            {/* Loading spinner - hidden when video is actively playing */}
-            {isLoading && !isPlaying && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-30 pointer-events-none">
+            {/* Loading spinner - shows when video is buffering */}
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
                     <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 </div>
             )}
