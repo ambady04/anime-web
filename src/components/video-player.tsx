@@ -155,13 +155,13 @@ export default function VideoPlayer({
           return;
         }
 
-        // 1. Get MAL ID by searching title on Jikan API
+        // 1. Get MAL ID from our server-side API (which acts as a cached Jikan proxy)
         const searchRes = await fetch(
-          `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(title)}&limit=1`,
+          `/api/fillers?title=${encodeURIComponent(title)}`,
         );
-        if (!searchRes.ok) throw new Error("Jikan search failed");
+        if (!searchRes.ok) throw new Error("API fillers request failed");
         const searchData = await searchRes.json();
-        const malId = searchData.data?.[0]?.mal_id;
+        const malId = searchData.malId;
         if (!malId) throw new Error("No MAL ID found for title");
 
         // 2. Get Skip times from AniSkip API

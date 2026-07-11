@@ -2,10 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const revalidate = 86400; // cache route for 24h
 
-async function jikanGet(url: string): Promise<any> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  return res.json();
+// In-memory cache to persist MAL ID & filler lookups across requests in warm worker instances
+interface CacheEntry {
+  fillers: number[];
+  malId: number;
+  total: number;
+  timestamp: number;
+}
+const fillersCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+async function jikanGet(url: string, retries = 3, baseDelay = 1000): Promise<any> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000), // Prevent requests hanging indefinitely
+      });
+      if (res.status === 429) {
+        // Rate limit hit: backoff with jitter and retry
+        const delay = baseDelay * (i + 1) * 2 + Math.random() * 200;
+        console.warn(`[Jikan Rate Limit 429] Retrying ${url} in ${Math.round(delay)}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      if (!res.ok) {
+        throw new Error(`${res.status} ${url}`);
+      }
+      return await res.json();
+    } catch (err: any) {
+      if (i === retries - 1) throw err;
+      const delay = baseDelay * Math.pow(1.5, i) + Math.random() * 100;
+      console.warn(`[Jikan Fetch Error] Retrying ${url} (Attempt ${i + 2}/${retries}) in ${Math.round(delay)}ms: ${err.message}`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -16,6 +47,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing title" }, { status: 400 });
   }
 
+  const cacheKey = title.toLowerCase().trim();
+  const cached = fillersCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return NextResponse.json(
+      { fillers: cached.fillers, malId: cached.malId, total: cached.total },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
+        },
+      },
+    );
+  }
+
   try {
     // ── 1. Resolve MAL ID ────────────────────────────────────────────────
     const searchJson = await jikanGet(
@@ -24,7 +68,10 @@ export async function GET(req: NextRequest) {
 
     const results: any[] = searchJson.data || [];
     if (results.length === 0) {
-      return NextResponse.json({ fillers: [] });
+      const emptyPayload = { fillers: [], malId: 0, total: 0 };
+      // Cache empty results too to prevent repetitive failing requests
+      fillersCache.set(cacheKey, { ...emptyPayload, timestamp: Date.now() });
+      return NextResponse.json(emptyPayload);
     }
 
     const q = title.toLowerCase().trim();
@@ -80,18 +127,20 @@ export async function GET(req: NextRequest) {
     }
 
     const fillers = Array.from(fillerSet).sort((a, b) => a - b);
+    const resultPayload = { fillers, malId, total: fillers.length };
+    fillersCache.set(cacheKey, { ...resultPayload, timestamp: Date.now() });
 
     return NextResponse.json(
-      { fillers, malId, total: fillers.length },
+      resultPayload,
       {
         headers: {
-          "Cache-Control":
-            "public, s-maxage=86400, stale-while-revalidate=3600",
+          "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
         },
       },
     );
   } catch (err: any) {
-    console.error("[/api/fillers]", err.message);
-    return NextResponse.json({ fillers: [] });
+    console.error("[/api/fillers] Jikan API Error:", err.message);
+    // Return graceful fallback, do not crash
+    return NextResponse.json({ fillers: [], malId: 0, total: 0 });
   }
 }
