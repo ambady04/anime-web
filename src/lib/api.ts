@@ -4,7 +4,7 @@ const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
     : process.env.NEXT_PUBLIC_API_URL ||
-      "https://anime-api-iota-virid.vercel.app";
+      "api.abisolutions.online";
 
 export interface ImageModel {
     url: string;

@@ -13,27 +13,27 @@ const nextConfig: NextConfig = {
             // NOTE: /api/video is intentionally excluded — it's our local streaming proxy
             {
                 source: "/api/home",
-                destination: "https://anime-api-iota-virid.vercel.app/api/home",
+                destination: "api.abisolutions.online/api/home",
             },
             {
                 source: "/api/details",
                 destination:
-                    "https://anime-api-iota-virid.vercel.app/api/details",
+                    "api.abisolutions.online/api/details",
             },
             {
                 source: "/api/stream",
                 destination:
-                    "https://anime-api-iota-virid.vercel.app/api/stream",
+                    "api.abisolutions.online/api/stream",
             },
             {
                 source: "/api/search",
                 destination:
-                    "https://anime-api-iota-virid.vercel.app/api/search",
+                    "api.abisolutions.online/api/search",
             },
             {
                 source: "/api/category",
                 destination:
-                    "https://anime-api-iota-virid.vercel.app/api/category",
+                    "api.abisolutions.online/api/category",
             },
         ];
     },
