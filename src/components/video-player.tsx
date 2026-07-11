@@ -1804,7 +1804,7 @@ export default function VideoPlayer({
                     </h3>
                     <p className="text-sm text-white/50 max-w-sm mb-6">
                         All available mirrors have been tried. This stream may
-                        be temporarily unavailable â€” please try again later.
+                        be temporarily unavailable - please try again later.
                     </p>
                     <button
                         onClick={() => {
@@ -1850,7 +1850,7 @@ export default function VideoPlayer({
                         </h2>
                         {isSeries && season && episode && (
                             <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                                Season {season} â€¢ Episode {episode}
+                                Season {season} • Episode {episode}
                             </p>
                         )}
                     </div>
