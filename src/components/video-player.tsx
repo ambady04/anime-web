@@ -1637,31 +1637,12 @@ export default function VideoPlayer({
                         }
                     }}
                     onWaiting={() => {
-                        // YouTube-like: longer delay before showing spinner.
-                        // Keeps last video frame visible during short buffering.
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        waitingTimeoutRef.current = setTimeout(() => {
-                            // Only show spinner if video is still actually stalled
-                            if (
-                                videoRef.current &&
-                                videoRef.current.readyState < 3
-                            ) {
-                                setIsLoading(true);
-                            }
-                        }, 1500);
+                        setIsLoading(true);
                     }}
                     onSeeking={() => {
-                        // Don't show spinner immediately on seek
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
+                        setIsLoading(true);
                     }}
                     onSeeked={() => {
-                        // After seek completes, cancel pending spinner
-                        if (waitingTimeoutRef.current) {
-                            clearTimeout(waitingTimeoutRef.current);
-                            waitingTimeoutRef.current = null;
-                        }
                         if (
                             videoRef.current &&
                             videoRef.current.readyState >= 3
@@ -1670,11 +1651,6 @@ export default function VideoPlayer({
                         }
                     }}
                     onPlaying={() => {
-                        // Cancel pending loader and hide it
-                        if (waitingTimeoutRef.current) {
-                            clearTimeout(waitingTimeoutRef.current);
-                            waitingTimeoutRef.current = null;
-                        }
                         setIsLoading(false);
                         setAutoRetryLabel("");
                     }}
