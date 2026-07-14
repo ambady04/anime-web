@@ -69,6 +69,8 @@ export default function VideoPlayer({
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const subtitleMenuRef = useRef<HTMLDivElement>(null);
     const ratioMenuRef = useRef<HTMLDivElement>(null);
+    const scrubbingTimeRef = useRef<number>(0);
+    const transientRetryCountRef = useRef<number>(0);
 
     // Stream options
     const downloads = streamData.downloads || [];
@@ -87,6 +89,7 @@ export default function VideoPlayer({
     const [activeCaption, setActiveCaption] = useState<Caption | null>(null);
 
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isScrubbing, setIsScrubbing] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [bufferedPercent, setBufferedPercent] = useState(0);
@@ -279,7 +282,11 @@ export default function VideoPlayer({
             setResolvedVideoSrc("");
             return;
         }
-        setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
+        if (useDirectUrl) {
+            setResolvedVideoSrc(activeDownload.url);
+        } else {
+            setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
+        }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload, useDirectUrl]);
@@ -290,7 +297,8 @@ export default function VideoPlayer({
         failedUrlsRef.current = new Set();
         proxyFailedUrlsRef.current = new Set();
         refreshCountRef.current = 0;
-        setUseDirectUrl(false);
+        transientRetryCountRef.current = 0;
+        setUseDirectUrl(true);
         setIsAutoQuality(true);
 
         if (sortedDownloads.length > 0) {
@@ -476,6 +484,35 @@ export default function VideoPlayer({
             return;
         }
 
+        // Recovery path: if the video has already successfully loaded and played a bit,
+        // any subsequent error during skip/seek is transient (e.g., network timeout during range request).
+        // Try reloading the current URL and restoring time rather than swapping to a new URL/quality/mode.
+        if (videoRef.current && videoRef.current.currentTime > 2 && transientRetryCountRef.current < 2) {
+            transientRetryCountRef.current += 1;
+            const restoreTime = videoRef.current.currentTime;
+            const wasPlaying = isPlaying;
+            
+            console.warn("Transient seek/network error detected. Attempting recovery...");
+            setAutoRetryLabel("Recovering playback...");
+            setIsLoading(true);
+            
+            videoRef.current.load();
+            
+            const onCanPlay = () => {
+                if (videoRef.current) {
+                    videoRef.current.currentTime = restoreTime;
+                    if (wasPlaying) {
+                        videoRef.current.play().catch(() => {});
+                    }
+                    setIsLoading(false);
+                    setAutoRetryLabel("");
+                    videoRef.current.removeEventListener("canplay", onCanPlay);
+                }
+            };
+            videoRef.current.addEventListener("canplay", onCanPlay);
+            return;
+        }
+
         // Mark this URL as failed
         failedUrlsRef.current.add(activeDownload.url);
         // Also track proxy failures specifically
@@ -493,7 +530,7 @@ export default function VideoPlayer({
             );
             setIsLoading(true);
             setActiveDownload(nextQuality);
-        } else if (!useDirectUrl && sortedDownloads.length > 0) {
+        } else if (useDirectUrl && sortedDownloads.length > 0) {
             // All direct CDN attempts failed - force stream proxy mode as fallback.
             // Routes video bytes through /api/video proxy which adds the required Referer.
             setAutoRetryLabel("Trying proxy stream mode...");
@@ -510,13 +547,13 @@ export default function VideoPlayer({
             );
             setActiveDownload(best);
             // Mark that we are now in stream-proxy fallback mode so next error triggers refresh
-            setUseDirectUrl(true);
+            setUseDirectUrl(false);
         } else if (refreshCountRef.current < 2) {
             // All local qualities exhausted (both direct and proxied) - try fresh stream URLs
             refreshCountRef.current += 1;
             setAutoRetryLabel("Fetching fresh stream links...");
             setIsLoading(true);
-            setUseDirectUrl(false);
+            setUseDirectUrl(true);
             refreshStreamData();
         } else {
             // Everything exhausted - show error screen
@@ -599,7 +636,7 @@ export default function VideoPlayer({
 
     // Listen to time updates and sync progress with storage
     const handleTimeUpdate = () => {
-        if (!videoRef.current) return;
+        if (!videoRef.current || isScrubbing) return;
         const current = videoRef.current.currentTime;
         const videoDuration = videoRef.current.duration;
         setCurrentTime(current);
@@ -1564,6 +1601,7 @@ export default function VideoPlayer({
                     onPlay={() => {
                         setIsPlaying(true);
                         setAutoRetryLabel("");
+                        transientRetryCountRef.current = 0;
                     }}
                     onPause={() => setIsPlaying(false)}
                     onLoadedMetadata={handleLoadedMetadata}
@@ -1909,7 +1947,11 @@ export default function VideoPlayer({
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    setIsScrubbing(true);
                                     const track = e.currentTarget;
+                                    if (videoRef.current) {
+                                        scrubbingTimeRef.current = videoRef.current.currentTime;
+                                    }
                                     const seek = (ev: MouseEvent) => {
                                         if (!videoRef.current || !duration)
                                             return;
@@ -1924,7 +1966,7 @@ export default function VideoPlayer({
                                         );
                                         const percent = x / rect.width;
                                         const seekTime = percent * duration;
-                                        videoRef.current.currentTime = seekTime;
+                                        scrubbingTimeRef.current = seekTime;
                                         setCurrentTime(seekTime);
                                     };
                                     const onUp = () => {
@@ -1936,14 +1978,15 @@ export default function VideoPlayer({
                                             "mouseup",
                                             onUp,
                                         );
-                                        // Resume playback after drag seek
-                                        if (
-                                            videoRef.current &&
-                                            !videoRef.current.paused
-                                        ) {
-                                            videoRef.current
-                                                .play()
-                                                .catch(() => {});
+                                        setIsScrubbing(false);
+                                        if (videoRef.current) {
+                                            videoRef.current.currentTime = scrubbingTimeRef.current;
+                                            // Resume playback after drag seek
+                                            if (!videoRef.current.paused) {
+                                                videoRef.current
+                                                    .play()
+                                                    .catch(() => {});
+                                            }
                                         }
                                     };
                                     document.addEventListener(
@@ -1954,7 +1997,11 @@ export default function VideoPlayer({
                                 }}
                                 onTouchStart={(e) => {
                                     e.stopPropagation();
+                                    setIsScrubbing(true);
                                     const track = e.currentTarget;
+                                    if (videoRef.current) {
+                                        scrubbingTimeRef.current = videoRef.current.currentTime;
+                                    }
                                     const seek = (ev: TouchEvent) => {
                                         if (
                                             !videoRef.current ||
@@ -1974,7 +2021,7 @@ export default function VideoPlayer({
                                         );
                                         const percent = x / rect.width;
                                         const seekTime = percent * duration;
-                                        videoRef.current.currentTime = seekTime;
+                                        scrubbingTimeRef.current = seekTime;
                                         setCurrentTime(seekTime);
                                     };
                                     const onEnd = () => {
@@ -1986,14 +2033,15 @@ export default function VideoPlayer({
                                             "touchend",
                                             onEnd,
                                         );
-                                        // Resume playback after touch seek
-                                        if (
-                                            videoRef.current &&
-                                            !videoRef.current.paused
-                                        ) {
-                                            videoRef.current
-                                                .play()
-                                                .catch(() => {});
+                                        setIsScrubbing(false);
+                                        if (videoRef.current) {
+                                            videoRef.current.currentTime = scrubbingTimeRef.current;
+                                            // Resume playback after touch seek
+                                            if (!videoRef.current.paused) {
+                                                videoRef.current
+                                                    .play()
+                                                    .catch(() => {});
+                                            }
                                         }
                                     };
                                     document.addEventListener(
