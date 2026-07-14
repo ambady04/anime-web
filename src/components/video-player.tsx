@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import {
     Play,
     Pause,
@@ -47,6 +47,17 @@ interface VideoPlayerProps {
     shouldPause?: boolean;
 }
 
+// Format second timestamps to HH:MM:SS text
+const formatTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+        return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    }
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+};
+
 export default function VideoPlayer({
     streamData,
     title,
@@ -77,9 +88,11 @@ export default function VideoPlayer({
     const captions = streamData.captions || [];
 
     // Sort qualities from highest to lowest
-    const sortedDownloads = [...downloads].sort(
-        (a, b) => b.resolution - a.resolution,
-    );
+    const sortedDownloads = useMemo(() => {
+        return [...downloads].sort(
+            (a, b) => b.resolution - a.resolution,
+        );
+    }, [downloads]);
 
     // States
     const [activeDownload, setActiveDownload] = useState<DownloadLink | null>(
@@ -270,11 +283,11 @@ export default function VideoPlayer({
 
     // Build the stream URL immediately — no probe needed since CDN requires referer.
     // This eliminates an extra round-trip that was adding 500ms+ latency.
-    const buildStreamUrl = (url: string): string => {
+    const buildStreamUrl = useCallback((url: string): string => {
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
         return `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
-    };
+    }, [streamData.stream_domain]);
 
     // Set resolved video source whenever activeDownload changes
     useEffect(() => {
@@ -408,7 +421,7 @@ export default function VideoPlayer({
     }, [activeDownload]);
 
     // Convert SRT to WebVTT Blob URL
-    const loadSubtitleTrack = async (srtUrl: string) => {
+    const loadSubtitleTrack = useCallback(async (srtUrl: string) => {
         try {
             const res = await fetch(srtUrl);
             if (!res.ok) throw new Error("Subtitles failed to load.");
@@ -426,7 +439,7 @@ export default function VideoPlayer({
             console.error("Subtitle parse error:", e);
             setSubtitleUrl("");
         }
-    };
+    }, []);
 
     // Setup continue watching resume timestamp on load
     const handleLoadedMetadata = () => {
@@ -782,7 +795,7 @@ export default function VideoPlayer({
     };
 
     // Basic Playback Action
-    const togglePlay = () => {
+    const togglePlay = useCallback(() => {
         if (!videoRef.current) return;
         if (isPlaying) {
             videoRef.current.pause();
@@ -791,18 +804,18 @@ export default function VideoPlayer({
             videoRef.current.play().catch(() => {});
             setIsPlaying(true);
         }
-    };
+    }, [isPlaying]);
 
     // Mute volume toggle
-    const toggleMute = () => {
+    const toggleMute = useCallback(() => {
         if (!videoRef.current) return;
         const newMutedState = !isMuted;
         videoRef.current.muted = newMutedState;
         setIsMuted(newMutedState);
-    };
+    }, [isMuted]);
 
     // Volume slider adjustment
-    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         if (!videoRef.current) return;
         const newVolume = Number(e.target.value);
         videoRef.current.volume = newVolume;
@@ -814,15 +827,15 @@ export default function VideoPlayer({
             videoRef.current.muted = false;
             setIsMuted(false);
         }
-    };
+    }, []);
 
     // Playback speeds multiplier
-    const handleSpeedChange = (rate: number) => {
+    const handleSpeedChange = useCallback((rate: number) => {
         if (!videoRef.current) return;
         videoRef.current.playbackRate = rate;
         setPlaybackRate(rate);
         setShowSpeedMenu(false);
-    };
+    }, []);
 
     // Fullscreen implementation with landscape lock on mobile.
     // iOS Safari doesn't support Fullscreen API on container elements,
@@ -1305,16 +1318,7 @@ export default function VideoPlayer({
         };
     }, [isPlaying]);
 
-    // Format second timestamps to HH:MM:SS text
-    const formatTime = (seconds: number) => {
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        if (hrs > 0) {
-            return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
-        }
-        return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-    };
+    // formatTime helper is moved to global file scope
 
     // Toggle Subtitle track display mode and disable other tracks to prevent duplicates
     useEffect(() => {
