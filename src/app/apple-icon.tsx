@@ -41,9 +41,10 @@ export default function AppleIcon() {
           justifyContent: "center",
         }}
       >
-        {/* Play triangle */}
-        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-          <polygon points="14,8 46,26 14,44" fill="#E31C25" />
+        {/* Overlapping diamonds SVG logo */}
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L5 9L12 16L19 9L12 2Z" fill="#E31C25" fillOpacity="0.9" />
+          <path d="M12 8L5 15L12 22L19 15L12 8Z" fill="#222222" />
         </svg>
       </div>
     </div>,

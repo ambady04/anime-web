@@ -7,6 +7,7 @@ import ScrollHandler from "@/components/scroll-handler";
 import PageTransition from "@/components/page-transition";
 import InspectGuard from "@/components/inspect-guard";
 import { AuthProvider } from "@/lib/auth-context";
+import PWARegister from "@/components/pwa-register";
 
 const inter = Inter({
     variable: "--font-inter",
@@ -34,6 +35,11 @@ export const metadata: Metadata = {
     ],
     authors: [{ name: "KIXO" }],
     creator: "KIXO",
+    appleWebApp: {
+        capable: true,
+        statusBarStyle: "default",
+        title: "KIXO",
+    },
     openGraph: {
         type: "website",
         locale: "en_US",
@@ -97,6 +103,9 @@ export default function RootLayout({
             </head>
             <body className="min-h-full bg-background text-foreground flex flex-col relative transition-colors duration-300">
                 <AuthProvider>
+                    {/* Register service worker */}
+                    <PWARegister />
+
                     {/* Global protection guard */}
                     <InspectGuard />
 
