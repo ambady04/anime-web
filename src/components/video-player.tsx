@@ -757,7 +757,7 @@ export default function VideoPlayer({
 
     // Resolution selector handles video source swapping
     const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
-        if (!videoRef.current || !activeDownload) return;
+        if (!videoRef.current) return;
         if (!keepAuto) {
             setIsAutoQuality(false);
         }
@@ -767,12 +767,16 @@ export default function VideoPlayer({
         setIsLoading(true);
         setActiveDownload(quality);
 
-        // The probeAndSetVideoSrc effect will resolve the new URL.
-        // We track the current time to restore after source swap.
+        const newUrl = useDirectUrl ? quality.url : buildStreamUrl(quality.url);
+
+        // Update the video src and call load() synchronously to bypass React render cycle lag
+        videoRef.current.src = newUrl;
+        videoRef.current.load();
+
         const currentTimeToRestore = currentPlayTime;
         const shouldPlay = wasPlaying;
 
-        // Listen for the video to be ready after source change (triggered by resolvedVideoSrc update)
+        // Use loadedmetadata event as it is the standard event fired when the timeline is active and ready for seeking.
         const restoreTime = () => {
             if (videoRef.current) {
                 videoRef.current.currentTime = currentTimeToRestore;
@@ -781,11 +785,11 @@ export default function VideoPlayer({
                     setIsPlaying(true);
                 }
                 setIsLoading(false);
-                videoRef.current.removeEventListener("canplay", restoreTime);
+                videoRef.current.removeEventListener("loadedmetadata", restoreTime);
             }
         };
 
-        videoRef.current.addEventListener("canplay", restoreTime);
+        videoRef.current.addEventListener("loadedmetadata", restoreTime);
         setShowQualityMenu(false);
     };
 
