@@ -212,7 +212,7 @@ export default function WatchClient({
         if (!isSeries || !subject.title) return;
 
         let isMounted = true;
-        const cacheKey = `fillers-v3-${subject.detailPath}`;
+        const cacheKey = `fillers-v4-${subject.detailPath}`;
 
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
@@ -238,10 +238,8 @@ export default function WatchClient({
 
                 if (isMounted) {
                     setFillerEpisodes(new Set(fillers));
-                    // Only cache if we actually got data — don't cache empty (might be a Jikan blip)
-                    if (fillers.length > 0) {
-                        localStorage.setItem(cacheKey, JSON.stringify(fillers));
-                    }
+                    // Cache any successful API response (including empty arrays for anime with 0 fillers)
+                    localStorage.setItem(cacheKey, JSON.stringify(fillers));
                 }
             } catch (e) {
                 console.error("Error fetching filler episodes:", e);
