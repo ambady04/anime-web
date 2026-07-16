@@ -305,6 +305,13 @@ export default function VideoPlayer({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload, useDirectUrl]);
 
+    // Force browser to load the new video source whenever resolvedVideoSrc changes
+    useEffect(() => {
+        if (videoRef.current && resolvedVideoSrc) {
+            videoRef.current.load();
+        }
+    }, [resolvedVideoSrc]);
+
     // Initialize source on mount or stream data update
     useEffect(() => {
         // Reset failed URLs tracker and refresh counter when stream changes
