@@ -267,19 +267,19 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
-    // Track URLs that failed via proxy â€” used to decide when to try direct
+    // Track URLs that failed via proxy — used to decide when to try direct
     const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
-    // Stall watchdog timer â€” fires if video stays in "loading" for too long
+    // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     const hlsRef = useRef<any>(null);
+    const seekOnLoadRef = useRef<number | null>(null);
+    const playOnLoadRef = useRef<boolean>(false);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
     const [videoProxyBase, setVideoProxyBase] = useState<string>("/api/video");
-
-
 
     // Build the stream URL immediately — no probe needed since CDN requires referer.
     // This eliminates an extra round-trip that was adding 500ms+ latency.
@@ -317,10 +317,30 @@ export default function VideoPlayer({
 
         const isHls = resolvedVideoSrc.includes(".m3u8") || resolvedVideoSrc.toLowerCase().includes("m3u8");
 
+        const setupRestoreTime = () => {
+            const restoreTime = () => {
+                if (video) {
+                    if (seekOnLoadRef.current !== null) {
+                        video.currentTime = seekOnLoadRef.current;
+                        seekOnLoadRef.current = null;
+                    }
+                    if (playOnLoadRef.current) {
+                        video.play().catch(() => {});
+                        setIsPlaying(true);
+                        playOnLoadRef.current = false;
+                    }
+                    setIsLoading(false);
+                    video.removeEventListener("loadedmetadata", restoreTime);
+                }
+            };
+            video.addEventListener("loadedmetadata", restoreTime);
+        };
+
         if (isHls) {
             if (video.canPlayType("application/vnd.apple.mpegurl")) {
                 // Native HLS support (Safari)
                 video.src = resolvedVideoSrc;
+                setupRestoreTime();
                 video.load();
             } else {
                 // Non-native HLS support (Chrome/Firefox/Edge) — load Hls.js dynamically
@@ -334,6 +354,7 @@ export default function VideoPlayer({
                         hlsRef.current = hls;
                         hls.attachMedia(video);
                         hls.loadSource(resolvedVideoSrc);
+                        setupRestoreTime();
 
                         hls.on(Hls.Events.ERROR, (event, data) => {
                             if (data.fatal) {
@@ -358,6 +379,7 @@ export default function VideoPlayer({
         } else {
             // Standard progressive formats (MP4, WebM)
             video.src = resolvedVideoSrc;
+            setupRestoreTime();
             video.load();
         }
 
@@ -836,35 +858,13 @@ export default function VideoPlayer({
         if (!keepAuto) {
             setIsAutoQuality(false);
         }
-        const currentPlayTime = videoRef.current.currentTime;
-        const wasPlaying = !videoRef.current.paused;
+
+        // Save current play time and playback state to refs to be restored on load
+        seekOnLoadRef.current = videoRef.current.currentTime;
+        playOnLoadRef.current = !videoRef.current.paused;
 
         setIsLoading(true);
         setActiveDownload(quality);
-
-        const newUrl = useDirectUrl ? quality.url : buildStreamUrl(quality.url);
-
-        // Update the video src and call load() synchronously to bypass React render cycle lag
-        videoRef.current.src = newUrl;
-        videoRef.current.load();
-
-        const currentTimeToRestore = currentPlayTime;
-        const shouldPlay = wasPlaying;
-
-        // Use loadedmetadata event as it is the standard event fired when the timeline is active and ready for seeking.
-        const restoreTime = () => {
-            if (videoRef.current) {
-                videoRef.current.currentTime = currentTimeToRestore;
-                if (shouldPlay) {
-                    videoRef.current.play().catch(() => {});
-                    setIsPlaying(true);
-                }
-                setIsLoading(false);
-                videoRef.current.removeEventListener("loadedmetadata", restoreTime);
-            }
-        };
-
-        videoRef.current.addEventListener("loadedmetadata", restoreTime);
         setShowQualityMenu(false);
     };
 
