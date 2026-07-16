@@ -279,7 +279,8 @@ export default function VideoPlayer({
 
     // Video proxy base URL — uses the Vercel-hosted API directly because
     // Cloudflare Workers cannot set custom Referer headers on outbound fetch requests.
-    const VIDEO_PROXY_BASE = "https://api.abisolutions.online/api/video";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
+    const VIDEO_PROXY_BASE = `${API_URL}/api/video`;
 
     // Build the stream URL immediately — no probe needed since CDN requires referer.
     // This eliminates an extra round-trip that was adding 500ms+ latency.
