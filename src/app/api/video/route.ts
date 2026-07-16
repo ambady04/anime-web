@@ -8,6 +8,7 @@ const REFERER_POOL = [
     "https://h5.aoneroom.com/",
     "https://moviebox.ph/",
     "https://www.movieboxpro.app/",
+    "https://fmoviesunblocked.net/",
 ];
 
 export async function GET(req: NextRequest) {
