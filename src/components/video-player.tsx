@@ -77,6 +77,7 @@ export default function VideoPlayer({
     const containerRef = useRef<HTMLDivElement>(null);
     const audioMenuRef = useRef<HTMLDivElement>(null);
     const qualityMenuRef = useRef<HTMLDivElement>(null);
+    const qualityMenuMobileRef = useRef<HTMLDivElement>(null);
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const subtitleMenuRef = useRef<HTMLDivElement>(null);
     const ratioMenuRef = useRef<HTMLDivElement>(null);
@@ -1263,7 +1264,8 @@ export default function VideoPlayer({
             }
             if (
                 qualityMenuRef.current &&
-                !qualityMenuRef.current.contains(target)
+                !qualityMenuRef.current.contains(target) &&
+                (!qualityMenuMobileRef.current || !qualityMenuMobileRef.current.contains(target))
             ) {
                 setShowQualityMenu(false);
             }
@@ -2942,7 +2944,7 @@ export default function VideoPlayer({
                                     {/* Quality compact badge (mobile) */}
                                     <div
                                         className="relative"
-                                        ref={qualityMenuRef}
+                                        ref={qualityMenuMobileRef}
                                     >
                                         <button
                                             onClick={() => {
