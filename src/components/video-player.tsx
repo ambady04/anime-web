@@ -271,24 +271,23 @@ export default function VideoPlayer({
     const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer â€” fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const hlsRef = useRef<any>(null);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
+    const [videoProxyBase, setVideoProxyBase] = useState<string>("/api/video");
 
-    // Video proxy base URL — uses the Vercel-hosted API directly because
-    // Cloudflare Workers cannot set custom Referer headers on outbound fetch requests.
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
-    const VIDEO_PROXY_BASE = `${API_URL}/api/video`;
+
 
     // Build the stream URL immediately — no probe needed since CDN requires referer.
     // This eliminates an extra round-trip that was adding 500ms+ latency.
     const buildStreamUrl = useCallback((url: string): string => {
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        return `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
-    }, [streamData.stream_domain]);
+        return `${videoProxyBase}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+    }, [streamData.stream_domain, videoProxyBase]);
 
     // Set resolved video source whenever activeDownload changes
     useEffect(() => {
@@ -307,9 +306,67 @@ export default function VideoPlayer({
 
     // Force browser to load the new video source whenever resolvedVideoSrc changes
     useEffect(() => {
-        if (videoRef.current && resolvedVideoSrc) {
-            videoRef.current.load();
+        const video = videoRef.current;
+        if (!video || !resolvedVideoSrc) return;
+
+        // Clean up previous Hls instance
+        if (hlsRef.current) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
         }
+
+        const isHls = resolvedVideoSrc.includes(".m3u8") || resolvedVideoSrc.toLowerCase().includes("m3u8");
+
+        if (isHls) {
+            if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                // Native HLS support (Safari)
+                video.src = resolvedVideoSrc;
+                video.load();
+            } else {
+                // Non-native HLS support (Chrome/Firefox/Edge) — load Hls.js dynamically
+                import("hls.js").then(({ default: Hls }) => {
+                    if (Hls.isSupported()) {
+                        const hls = new Hls({
+                            maxMaxBufferLength: 30, // Optimize memory buffer
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                        });
+                        hlsRef.current = hls;
+                        hls.attachMedia(video);
+                        hls.loadSource(resolvedVideoSrc);
+
+                        hls.on(Hls.Events.ERROR, (event, data) => {
+                            if (data.fatal) {
+                                switch (data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        hls.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        hls.recoverMediaError();
+                                        break;
+                                    default:
+                                        handlePlayerError(new Error("HLS playback failed"));
+                                        break;
+                                }
+                            }
+                        });
+                    } else {
+                        handlePlayerError(new Error("HLS is not supported in this browser"));
+                    }
+                });
+            }
+        } else {
+            // Standard progressive formats (MP4, WebM)
+            video.src = resolvedVideoSrc;
+            video.load();
+        }
+
+        return () => {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+        };
     }, [resolvedVideoSrc]);
 
     // Initialize source on mount or stream data update
@@ -321,6 +378,7 @@ export default function VideoPlayer({
         transientRetryCountRef.current = 0;
         setUseDirectUrl(true);
         setIsAutoQuality(true);
+        setVideoProxyBase("/api/video");
 
         if (sortedDownloads.length > 0) {
             // Pick 720p first (better reliability than 1080p on slow CDNs)
@@ -553,7 +611,7 @@ export default function VideoPlayer({
             setActiveDownload(nextQuality);
         } else if (useDirectUrl && sortedDownloads.length > 0) {
             // All direct CDN attempts failed - force stream proxy mode as fallback.
-            // Routes video bytes through /api/video proxy which adds the required Referer.
+            // Routes video bytes through local /api/video proxy which adds the required Referer.
             setAutoRetryLabel("Trying proxy stream mode...");
             setIsLoading(true);
             failedUrlsRef.current = new Set(); // Reset so all qualities get tried again
@@ -564,11 +622,28 @@ export default function VideoPlayer({
             const referer =
                 streamData.stream_domain || "https://videodownloader.site/";
             setResolvedVideoSrc(
-                `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(best.url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
+                `${videoProxyBase}?url=${encodeURIComponent(best.url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
             );
             setActiveDownload(best);
-            // Mark that we are now in stream-proxy fallback mode so next error triggers refresh
+            // Mark that we are now in stream-proxy fallback mode so next error triggers backup proxy check
             setUseDirectUrl(false);
+        } else if (videoProxyBase === "/api/video" && sortedDownloads.length > 0) {
+            // Local frontend proxy failed — fall back to Vercel-hosted backup backend proxy
+            setAutoRetryLabel("Switching to backup proxy...");
+            setIsLoading(true);
+            failedUrlsRef.current = new Set(); // Reset to try again with backup proxy
+            const backupBase = `${process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online"}/api/video`;
+            setVideoProxyBase(backupBase);
+            const best =
+                sortedDownloads.find((d) => d.resolution === 720) ||
+                sortedDownloads.find((d) => d.resolution === 480) ||
+                sortedDownloads[0];
+            const referer =
+                streamData.stream_domain || "https://videodownloader.site/";
+            setResolvedVideoSrc(
+                `${backupBase}?url=${encodeURIComponent(best.url)}&referer=${encodeURIComponent(referer)}&mode=stream`,
+            );
+            setActiveDownload(best);
         } else if (refreshCountRef.current < 2) {
             // All local qualities exhausted (both direct and proxied) - try fresh stream URLs
             refreshCountRef.current += 1;
@@ -635,18 +710,18 @@ export default function VideoPlayer({
         }
     };
 
-    // Stall watchdog â€” if isLoading stays true for 10 seconds, treat it as an error
+    // Stall watchdog — if isLoading stays true for 10 seconds, treat it as an error
     // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
     useEffect(() => {
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
 
         if (isLoading && activeDownload && !playerError) {
             stallTimerRef.current = setTimeout(() => {
-                // Only trigger if still in a loading state (not yet playing)
-                if (!videoRef.current || videoRef.current.readyState < 2) {
+                // Only trigger if still in a loading state (not yet ready to play future data)
+                if (!videoRef.current || videoRef.current.readyState < 3) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 }
-            }, 20_000);
+            }, 10_000);
         }
 
         return () => {
@@ -1604,7 +1679,6 @@ export default function VideoPlayer({
             {activeDownload && !playerError && resolvedVideoSrc && (
                 <video
                     ref={videoRef}
-                    src={resolvedVideoSrc}
                     onEnded={handleVideoEnded}
                     style={{ filter: `brightness(${brightnessLevel})` }}
                     className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
