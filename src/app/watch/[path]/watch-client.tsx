@@ -28,8 +28,13 @@ import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 import { useAuth } from "@/lib/auth-context";
-import DownloadModal from "@/components/download-modal";
+import dynamic from "next/dynamic";
 import { downloadStore } from "@/lib/download-store";
+
+const DownloadModal = dynamic(() => import("@/components/download-modal"), {
+    ssr: false,
+    loading: () => null,
+});
 
 const cleanTitle = (title: string): string => {
     return title

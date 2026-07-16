@@ -16,10 +16,15 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import dynamic from "next/dynamic";
 import { downloadStore } from "@/lib/download-store";
-import DownloadManager from "./download-manager";
 
 // Lazy load the heavy profile modal (includes firebase imports)
 const ProfileModal = dynamic(() => import("./profile-modal"), {
+    ssr: false,
+    loading: () => null,
+});
+
+// Lazy load the download manager (includes indexeddb/storage imports)
+const DownloadManager = dynamic(() => import("./download-manager"), {
     ssr: false,
     loading: () => null,
 });
