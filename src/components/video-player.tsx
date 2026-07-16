@@ -1650,6 +1650,9 @@ export default function VideoPlayer({
                             setIsLoading(false);
                         }
                     }}
+                    onCanPlay={() => {
+                        setIsLoading(false);
+                    }}
                     onPlaying={() => {
                         setIsLoading(false);
                         setAutoRetryLabel("");

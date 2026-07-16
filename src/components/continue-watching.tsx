@@ -7,8 +7,10 @@ import { localStore, HistoryItem } from "@/lib/storage";
 
 export default function ContinueWatching() {
     const [history, setHistory] = useState<HistoryItem[]>([]);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
         setHistory(localStore.getHistory());
     }, []);
 
@@ -40,7 +42,7 @@ export default function ContinueWatching() {
         return num < 10 ? `0${num}` : num;
     };
 
-    if (history.length === 0) return null;
+    if (!mounted || history.length === 0) return null;
 
     return (
         <div className="relative my-8 max-w-380 mx-auto px-4 sm:px-6 lg:px-8 animate-fade-in z-20">

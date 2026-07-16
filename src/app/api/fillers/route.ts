@@ -140,33 +140,23 @@ export async function GET(req: NextRequest) {
             if (ep.filler === true) fillerSet.add(ep.mal_id);
         }
 
-        // ── 3. Fetch remaining pages in parallel (max 5 concurrent) ──────────
+        // ── 3. Fetch remaining pages sequentially with rate-limiting delay ──
         if (totalPages > 1) {
-            const remaining = Array.from(
-                { length: totalPages - 1 },
-                (_, i) => i + 2,
-            );
-
-            const chunkSize = 5;
-            for (let i = 0; i < remaining.length; i += chunkSize) {
-                const chunk = remaining.slice(i, i + chunkSize);
-                const results = await Promise.allSettled(
-                    chunk.map((p) =>
-                        jikanGet(
-                            `https://api.jikan.moe/v4/anime/${malId}/episodes?page=${p}`,
-                        ),
-                    ),
-                );
-                for (const r of results) {
-                    if (r.status === "fulfilled") {
-                        for (const ep of r.value.data ?? []) {
+            for (let p = 2; p <= totalPages; p++) {
+                try {
+                    const pageData = await jikanGet(
+                        `https://api.jikan.moe/v4/anime/${malId}/episodes?page=${p}`,
+                    );
+                    if (pageData && pageData.data) {
+                        for (const ep of pageData.data) {
                             if (ep.filler === true) fillerSet.add(ep.mal_id);
                         }
                     }
+                } catch (err) {
+                    console.error(`Failed to fetch page ${p}:`, err);
                 }
-                if (i + chunkSize < remaining.length) {
-                    await new Promise((r) => setTimeout(r, 300));
-                }
+                // Jikan rate limit: max 3 requests per second. 350ms ensures we stay safe.
+                await new Promise((r) => setTimeout(r, 350));
             }
         }
 
@@ -180,8 +170,11 @@ export async function GET(req: NextRequest) {
                     "public, s-maxage=86400, stale-while-revalidate=3600",
             },
         });
-    } catch {
-        // Return graceful fallback, do not crash
-        return NextResponse.json({ fillers: [], malId: 0, total: 0 });
+    } catch (err) {
+        console.error("Error fetching filler episodes:", err);
+        return NextResponse.json(
+            { error: "Failed to fetch filler episodes from upstream provider" },
+            { status: 502 },
+        );
     }
 }

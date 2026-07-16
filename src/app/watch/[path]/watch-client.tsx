@@ -28,8 +28,13 @@ import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 import { useAuth } from "@/lib/auth-context";
-import DownloadModal from "@/components/download-modal";
+import dynamic from "next/dynamic";
 import { downloadStore } from "@/lib/download-store";
+
+const DownloadModal = dynamic(() => import("@/components/download-modal"), {
+    ssr: false,
+    loading: () => null,
+});
 
 const cleanTitle = (title: string): string => {
     return title
@@ -212,7 +217,7 @@ export default function WatchClient({
         if (!isSeries || !subject.title) return;
 
         let isMounted = true;
-        const cacheKey = `fillers-v3-${subject.detailPath}`;
+        const cacheKey = `fillers-v4-${subject.detailPath}`;
 
         const cached = localStorage.getItem(cacheKey);
         if (cached) {
@@ -238,10 +243,8 @@ export default function WatchClient({
 
                 if (isMounted) {
                     setFillerEpisodes(new Set(fillers));
-                    // Only cache if we actually got data — don't cache empty (might be a Jikan blip)
-                    if (fillers.length > 0) {
-                        localStorage.setItem(cacheKey, JSON.stringify(fillers));
-                    }
+                    // Cache any successful API response (including empty arrays for anime with 0 fillers)
+                    localStorage.setItem(cacheKey, JSON.stringify(fillers));
                 }
             } catch (e) {
                 console.error("Error fetching filler episodes:", e);
