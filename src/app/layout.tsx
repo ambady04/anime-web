@@ -107,7 +107,7 @@ export default function RootLayout({
                     <PWARegister />
 
                     {/* Global protection guard */}
-                    <InspectGuard />
+                    {/* <InspectGuard /> */}
 
                     {/* Scroll handler updating global styles dynamically */}
                     <ScrollHandler />
