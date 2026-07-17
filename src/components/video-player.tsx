@@ -130,7 +130,39 @@ export default function VideoPlayer({
     // ─── Native-style 3-flag playback pattern ───
     // Mirrors VideoPlayer.js: isVideoLoaded + initialSeekTime + isInitialSeekDone
     const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-    const [initialSeekTime, setInitialSeekTime] = useState<number | null>(null);
+    const [initialSeekTime, setInitialSeekTime] = useState<number | null>(() => {
+        if (typeof window === "undefined") return null;
+        const savedHistory = localStore.getHistory();
+        let historyItem: (typeof savedHistory)[number] | undefined;
+
+        if (isSeries && season && episode) {
+            historyItem = savedHistory.find(
+                (h) =>
+                    h.detailPath === (seriesDetailPath || detailPath) &&
+                    h.season === season &&
+                    h.episode === episode,
+            );
+        } else {
+            historyItem = savedHistory.find(
+                (h) => h.detailPath === (seriesDetailPath || detailPath),
+            );
+        }
+        if (!historyItem) {
+            historyItem = savedHistory.find(
+                (h) =>
+                    h.title === title &&
+                    (!isSeries ||
+                        (h.season === season && h.episode === episode)),
+            );
+        }
+        const resumeTime =
+            historyItem &&
+            historyItem.progress < 95 &&
+            historyItem.currentTime > 5
+                ? historyItem.currentTime
+                : 0;
+        return resumeTime;
+    });
     const [isInitialSeekDone, setIsInitialSeekDone] = useState(false);
     const [retryTrigger, setRetryTrigger] = useState(0);
 
@@ -345,6 +377,7 @@ export default function VideoPlayer({
                             manifestLoadingMaxRetry: 3,
                             levelLoadingMaxRetry: 4,
                             nudgeMaxRetry: 5,
+                            startPosition: (initialSeekTime && initialSeekTime > 0) ? initialSeekTime : -1,
                         });
                         hlsRef.current = hls;
                         hls.attachMedia(video);
@@ -397,12 +430,20 @@ export default function VideoPlayer({
     // Mirrors native VideoPlayer.js lines 1046-1061.
     // Fires once when: source ready (isVideoLoaded) + know where to start (initialSeekTime) + not yet sought.
     useEffect(() => {
+        console.log("⚡ Seek effect status:", {
+            isVideoLoaded,
+            initialSeekTime,
+            isInitialSeekDone,
+            hasVideoRef: !!videoRef.current,
+        });
+
         if (!isVideoLoaded || initialSeekTime === null || isInitialSeekDone)
             return;
         const video = videoRef.current;
         if (!video) return;
 
         if (initialSeekTime > 0) {
+            console.log("🎯 Seeking video element to:", initialSeekTime);
             video.currentTime = initialSeekTime;
         }
         setIsInitialSeekDone(true);
@@ -439,6 +480,16 @@ export default function VideoPlayer({
         const savedHistory = localStore.getHistory();
         let historyItem: (typeof savedHistory)[number] | undefined;
 
+        console.log("🔍 History lookup details:", {
+            detailPath,
+            seriesDetailPath,
+            isSeries,
+            season,
+            episode,
+            title,
+            savedHistoryLength: savedHistory.length,
+        });
+
         if (isSeries && season && episode) {
             historyItem = savedHistory.find(
                 (h) =>
@@ -459,12 +510,15 @@ export default function VideoPlayer({
                         (h.season === season && h.episode === episode)),
             );
         }
+        console.log("🔍 Found history item:", historyItem);
+
         const resumeTime =
             historyItem &&
             historyItem.progress < 95 &&
             historyItem.currentTime > 5
                 ? historyItem.currentTime
                 : 0;
+        console.log("🎯 Determined initialSeekTime (resumeTime):", resumeTime);
         setInitialSeekTime(resumeTime);
 
         if (sortedDownloads.length > 0) {
