@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { headers as getRequestHeaders } from "next/headers";
 
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
@@ -172,7 +173,30 @@ async function fetchFromApi<T>(
         ? fullEndpoint
         : `${API_BASE_URL}${fullEndpoint}`;
 
+    // On the server (Cloudflare Worker SSR), forward the real user IP to the
+    // backend so geo-restriction checks use the actual visitor's location,
+    // not the Cloudflare datacenter IP. Without this, backend returns 404
+    // "not available in your region" for titles that are fine for the user.
+    const fetchHeaders: Record<string, string> = {};
+    if (!isBrowser) {
+        try {
+            const reqHeaders = await getRequestHeaders();
+            const userIp =
+                reqHeaders.get("cf-connecting-ip") ||
+                reqHeaders.get("x-real-ip") ||
+                reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+                "";
+            if (userIp) {
+                fetchHeaders["X-Forwarded-For"] = userIp;
+                fetchHeaders["X-Real-IP"] = userIp;
+            }
+        } catch {
+            // headers() not available in this context — proceed without
+        }
+    }
+
     const response = await fetch(fetchUrl, {
+        headers: fetchHeaders,
         next: cacheOptions ?? { revalidate: 3600 },
     });
 
