@@ -574,11 +574,11 @@ export default function VideoPlayer({
         setInitialSeekTime(resumeTime);
 
         if (sortedDownloads.length > 0) {
-            // Start with the LOWEST available quality for fastest playback start.
-            // The proxy adds latency, so getting first-frame quickly at 480p is
-            // better UX than buffering forever at 720/1080p. The auto-upgrade
-            // effect will switch to higher quality once playback is stable.
-            const defaultQuality = sortedDownloads[sortedDownloads.length - 1]; // lowest resolution
+            // Start at 1080p directly for high quality playback.
+            // If 1080p isn't available, fall back to the highest available.
+            const defaultQuality =
+                sortedDownloads.find((d) => d.resolution === 1080) ||
+                sortedDownloads[0]; // sortedDownloads is sorted highest-first
             setActiveDownload(defaultQuality);
             setIsLoading(true);
             setPlayerError(false);
@@ -831,7 +831,8 @@ export default function VideoPlayer({
                         ? freshSorted.find(
                               (d) => d.resolution === currentResolution,
                           ) || freshSorted[0]
-                        : freshSorted[freshSorted.length - 1]; // Start lowest for fast first-frame
+                        : freshSorted.find((d) => d.resolution === 1080) ||
+                          freshSorted[0]; // highest available
 
                 setActiveDownload(null);
                 setTimeout(() => setActiveDownload(pick), 10);
@@ -1902,42 +1903,6 @@ export default function VideoPlayer({
                         setIsLoading(false);
                         setAutoRetryLabel("");
                         transientRetryCountRef.current = 0;
-
-                        // Auto-upgrade quality: if currently playing lowest quality
-                        // and isAutoQuality is on, schedule upgrade to HD after 3s
-                        // of stable playback for a smoother viewing experience.
-                        if (
-                            isAutoQuality &&
-                            activeDownload &&
-                            sortedDownloads.length > 1 &&
-                            !autoUpgradeTimerRef.current
-                        ) {
-                            const currentRes = activeDownload.resolution;
-                            const bestRes = sortedDownloads[0].resolution;
-                            if (currentRes < bestRes) {
-                                autoUpgradeTimerRef.current = setTimeout(() => {
-                                    autoUpgradeTimerRef.current = null;
-                                    // Only upgrade if still on auto and playing
-                                    if (
-                                        videoRef.current &&
-                                        !videoRef.current.paused &&
-                                        isAutoQuality
-                                    ) {
-                                        const target =
-                                            sortedDownloads.find(
-                                                (d) => d.resolution === 720,
-                                            ) ||
-                                            sortedDownloads.find(
-                                                (d) => d.resolution === 1080,
-                                            ) ||
-                                            sortedDownloads[0];
-                                        if (target.resolution > currentRes) {
-                                            handleQualityChange(target, true);
-                                        }
-                                    }
-                                }, 3000);
-                            }
-                        }
                     }}
                     onError={handlePlayerError}
                     autoPlay
