@@ -267,7 +267,9 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
-    // Track URLs that failed via proxy — used to decide when to try direct
+    // Track URLs that failed directly (without proxy)
+    const directFailedUrlsRef = useRef<Set<string>>(new Set());
+    // Track URLs that failed via proxy
     const proxyFailedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -280,26 +282,31 @@ export default function VideoPlayer({
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     const [resolvedVideoSrc, setResolvedVideoSrc] = useState<string>("");
     const [videoProxyBase, setVideoProxyBase] = useState<string>("/api/video");
+    // When true, play the direct CDN URL for maximum speed.
+    // Falls back to false (proxy) only when the direct URL fails.
+    const [useDirectUrl, setUseDirectUrl] = useState<boolean>(true);
 
-    // Build the stream URL — always routes through the Vercel proxy so the CDN
-    // Referer header requirement is satisfied and raw CDN URLs are never exposed.
-    const buildStreamUrl = useCallback((url: string): string => {
+    // Build the stream URL.
+    // Tries the direct CDN URL first (fastest). Falls back to the Vercel proxy
+    // only when direct=false, so the CDN Referer requirement is still satisfied.
+    const buildStreamUrl = useCallback((url: string, direct: boolean): string => {
+        if (direct) return url;
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
         return `${videoProxyBase}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
     }, [streamData.stream_domain, videoProxyBase]);
 
-    // Set resolved video source whenever activeDownload or proxy base changes
+    // Set resolved video source whenever activeDownload, proxy base, or direct-URL flag changes
     useEffect(() => {
         if (!activeDownload) {
             setResolvedVideoSrc("");
             return;
         }
-        // Always proxy through Vercel — never expose raw CDN URLs to the browser
-        setResolvedVideoSrc(buildStreamUrl(activeDownload.url));
+        // Try direct URL first; proxy is the fallback
+        setResolvedVideoSrc(buildStreamUrl(activeDownload.url, useDirectUrl));
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeDownload, videoProxyBase]);
+    }, [activeDownload, videoProxyBase, useDirectUrl]);
 
     // Force browser to load the new video source whenever resolvedVideoSrc changes
     useEffect(() => {
@@ -392,10 +399,12 @@ export default function VideoPlayer({
     useEffect(() => {
         // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
+        directFailedUrlsRef.current = new Set();
         proxyFailedUrlsRef.current = new Set();
         refreshCountRef.current = 0;
         transientRetryCountRef.current = 0;
         setIsAutoQuality(true);
+        setUseDirectUrl(true); // Always start with direct URL for fastest load
         setVideoProxyBase("/api/video");
 
         if (sortedDownloads.length > 0) {
@@ -610,11 +619,21 @@ export default function VideoPlayer({
             return;
         }
 
-        // Mark this URL as failed (always proxied now)
+        if (useDirectUrl) {
+            // Step 1: Direct URL failed — retry same quality via proxy
+            directFailedUrlsRef.current.add(activeDownload.url);
+            setAutoRetryLabel("Direct stream failed, trying proxy...");
+            setIsLoading(true);
+            setUseDirectUrl(false);
+            // Keep activeDownload the same; the source effect rebuilds with the proxy URL
+            return;
+        }
+
+        // Already in proxy mode — mark this URL as fully failed
         failedUrlsRef.current.add(activeDownload.url);
         proxyFailedUrlsRef.current.add(activeDownload.url);
 
-        // Step 1: Try next available quality via the same proxy
+        // Step 2: Try next available quality (still via proxy)
         const nextQuality = sortedDownloads.find(
             (d) => !failedUrlsRef.current.has(d.url),
         );
@@ -625,14 +644,13 @@ export default function VideoPlayer({
             setIsLoading(true);
             setActiveDownload(nextQuality);
         } else if (videoProxyBase === "/api/video" && sortedDownloads.length > 0) {
-            // Step 2: All qualities failed on local Vercel proxy — try backup API proxy
+            // Step 3: All qualities failed on local Vercel proxy — try backup API proxy
             setAutoRetryLabel("Switching to backup proxy...");
             setIsLoading(true);
             failedUrlsRef.current = new Set(); // Reset so all qualities get tried again
             proxyFailedUrlsRef.current = new Set();
             const backupBase = `${process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online"}/api/video`;
             setVideoProxyBase(backupBase);
-            // activeDownload stays the same; buildStreamUrl picks up the new videoProxyBase
             const best =
                 sortedDownloads.find((d) => d.resolution === 720) ||
                 sortedDownloads.find((d) => d.resolution === 480) ||
@@ -640,14 +658,15 @@ export default function VideoPlayer({
             setActiveDownload(null);
             setTimeout(() => setActiveDownload(best), 50);
         } else if (refreshCountRef.current < 2) {
-            // Step 3: Both proxies exhausted — fetch fresh stream URLs from API
+            // Step 4: Both proxies exhausted — fetch fresh stream URLs from API
             refreshCountRef.current += 1;
             setAutoRetryLabel("Fetching fresh stream links...");
             setIsLoading(true);
-            setVideoProxyBase("/api/video"); // Reset to local proxy for fresh attempt
+            setUseDirectUrl(true); // Reset: try direct first with fresh URLs
+            setVideoProxyBase("/api/video");
             refreshStreamData();
         } else {
-            // Step 4: Everything exhausted — show error screen
+            // Step 5: Everything exhausted — show error screen
             console.error(
                 "Video player: all qualities and proxies failed",
                 e,
@@ -669,8 +688,9 @@ export default function VideoPlayer({
             );
 
             if (freshStream.downloads && freshStream.downloads.length > 0) {
-                // Reset failed URLs and use new stream data (always proxy mode)
+                // Reset failed URLs and try direct first with the fresh links
                 failedUrlsRef.current = new Set();
+                directFailedUrlsRef.current = new Set();
                 proxyFailedUrlsRef.current = new Set();
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
@@ -1890,8 +1910,10 @@ export default function VideoPlayer({
                         onClick={() => {
                             // Full reset â€” clear failed URLs, reset refresh count, restart from highest quality
                             failedUrlsRef.current = new Set();
+                            directFailedUrlsRef.current = new Set();
                             proxyFailedUrlsRef.current = new Set();
                             refreshCountRef.current = 0;
+                            setUseDirectUrl(true);
                             setPlayerError(false);
                             setAutoRetryLabel("");
                             setIsLoading(true);
