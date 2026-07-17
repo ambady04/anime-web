@@ -343,13 +343,19 @@ export default function VideoPlayer({
 
         // The CDN behind activeDownload.url requires a specific Referer header
         // that browsers cannot attach to a direct <video src> request.
-        // We route all requests through our local `/api/video` proxy.
-        // On Cloudflare Workers, this endpoint runs at the edge and proxies 
-        // the stream with custom headers.
+        // Cloudflare Workers strip the Referer header on outbound fetch, so on
+        // production we route through the backend proxy (api.abisolutions.online)
+        // which can set Referer freely. In local dev, the local /api/video works.
         proxiedUrlsRef.current.add(activeDownload.url);
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        const proxyBase = "/api/video";
+        const isLocalDev =
+            typeof window !== "undefined" &&
+            (window.location.hostname === "localhost" ||
+                window.location.hostname === "127.0.0.1");
+        const proxyBase = isLocalDev
+            ? "/api/video"
+            : "https://api.abisolutions.online/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
@@ -477,7 +483,8 @@ export default function VideoPlayer({
                         if (video.currentTime === 0 || video.readyState < 2) {
                             // Retry once after a short delay — browser may need more buffer
                             setTimeout(() => {
-                                video.play()
+                                video
+                                    .play()
                                     .then(() => {
                                         setIsPlaying(true);
                                         setIsLoading(false);
@@ -530,7 +537,6 @@ export default function VideoPlayer({
         // Mirrors native VideoPlayer.js lines 1026-1043
         const savedHistory = localStore.getHistory();
         let historyItem: (typeof savedHistory)[number] | undefined;
-
 
         if (isSeries && season && episode) {
             historyItem = savedHistory.find(
@@ -1845,7 +1851,8 @@ export default function VideoPlayer({
                     onWaiting={() => {
                         // Only show loading spinner if video is genuinely stalled,
                         // not for brief buffer gaps during normal playback
-                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
                             if (
                                 videoRef.current &&
@@ -1858,28 +1865,35 @@ export default function VideoPlayer({
                     }}
                     onSeeking={() => {
                         // Don't show spinner immediately — brief seeks clear fast
-                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
-                            if (videoRef.current && videoRef.current.readyState < 3) {
+                            if (
+                                videoRef.current &&
+                                videoRef.current.readyState < 3
+                            ) {
                                 setIsLoading(true);
                             }
                         }, 200);
                     }}
                     onSeeked={() => {
                         // Always clear loading after seek completes — video has the frame ready
-                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         setIsLoading(false);
                     }}
                     onCanPlay={() => {
                         // Source is ready — trigger the initial-seek effect which seeks and plays
-                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         setIsVideoLoaded(true);
                         setIsLoading(false);
                         isInitialLoadRef.current = false;
                         isRecoveringRef.current = false;
                     }}
                     onPlaying={() => {
-                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         setIsLoading(false);
                         setAutoRetryLabel("");
                         transientRetryCountRef.current = 0;
