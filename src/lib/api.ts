@@ -179,6 +179,7 @@ async function fetchFromApi<T>(
     const fetchHeaders: Record<string, string> = {};
     if (!isBrowser) {
         try {
+            const { headers: getRequestHeaders } = await import("next/headers");
             const reqHeaders = await getRequestHeaders();
             const userIp =
                 reqHeaders.get("cf-connecting-ip") ||
