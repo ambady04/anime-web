@@ -152,8 +152,8 @@ export async function GET(req: NextRequest) {
                             if (ep.filler === true) fillerSet.add(ep.mal_id);
                         }
                     }
-                } catch (err) {
-                    console.error(`Failed to fetch page ${p}:`, err);
+                } catch {
+                    // Page unavailable — skip silently, we have partial data
                 }
                 // Jikan rate limit: max 3 requests per second. 350ms ensures we stay safe.
                 await new Promise((r) => setTimeout(r, 350));
@@ -171,10 +171,10 @@ export async function GET(req: NextRequest) {
             },
         });
     } catch (err) {
-        console.error("Error fetching filler episodes:", err);
-        return NextResponse.json(
-            { error: "Failed to fetch filler episodes from upstream provider" },
-            { status: 502 },
-        );
+        // Jikan/AniSkip unavailable — this is non-critical (only used for skip markers).
+        // Silently return empty so the player continues without filler data.
+        const emptyPayload = { fillers: [], malId: 0, total: 0 };
+        fillersCache.set(cacheKey, { ...emptyPayload, timestamp: Date.now() });
+        return NextResponse.json(emptyPayload);
     }
 }

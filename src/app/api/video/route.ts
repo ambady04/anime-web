@@ -1,9 +1,7 @@
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
-// Extend Vercel serverless function timeout to the max allowed (60s on Pro, 10s on Hobby)
-// This gives enough time for the CDN to respond with the first byte before we start streaming.
-export const maxDuration = 60;
+export const runtime = "edge"; // Run on Cloudflare Workers edge runtime for streaming support
 
 // Multiple referers to try — CDNs may accept different ones
 const REFERER_POOL = [
@@ -31,11 +29,8 @@ export async function GET(req: NextRequest) {
         ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
         : REFERER_POOL;
 
-    // === STREAM MODE ===
-    // All video is proxied through Vercel so the CDN Referer requirement is
-    // satisfied without exposing raw CDN URLs or tokens to the browser.
     let lastStatus = 0;
-    let lastError: Error | null = null;
+    let lastError: string = "";
 
     for (const referer of referersToTry) {
         const upstreamHeaders: Record<string, string> = {
@@ -51,17 +46,12 @@ export async function GET(req: NextRequest) {
             upstreamHeaders["Range"] = range;
         }
 
-        const controller = new AbortController();
-        // 25s timeout — leaves headroom below Vercel's 30s default / 60s Pro limit
-        const timeout = setTimeout(() => controller.abort(), 25_000);
-
         try {
             const upstream = await fetch(targetUrl, {
                 headers: upstreamHeaders,
-                signal: controller.signal,
+                signal: AbortSignal.timeout(15_000),
             });
 
-            clearTimeout(timeout);
             lastStatus = upstream.status;
 
             if ([403, 404, 410].includes(upstream.status)) {
@@ -110,52 +100,25 @@ export async function GET(req: NextRequest) {
             }
 
             resHeaders.set("Access-Control-Allow-Origin", "*");
-            // Disable CDN and browser caching. Range requests must never be cached
-            // because they share the same URL but request different byte ranges.
+            // Disable caching — range requests must never be cached
             resHeaders.set(
                 "Cache-Control",
                 "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
             );
             resHeaders.set("CDN-Cache-Control", "no-store");
             resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
-            // Prevent Nginx/proxy buffering so bytes flow directly to the browser
-            resHeaders.set("X-Accel-Buffering", "no");
 
-            // Pipe the upstream body through a fresh ReadableStream to avoid
-            // the Node.js 25 / Next.js 16 TransformStream internal bug:
-            // "controller[kState].transformAlgorithm is not a function"
-            // This happens when passing fetch's ReadableStream directly as a Response body.
-            const body = upstream.body;
-            let responseBody: ReadableStream<Uint8Array> | null = null;
-
-            if (body) {
-                const reader = body.getReader();
-                responseBody = new ReadableStream<Uint8Array>({
-                    async pull(ctrl) {
-                        try {
-                            const { done, value } = await reader.read();
-                            if (done) {
-                                ctrl.close();
-                            } else {
-                                ctrl.enqueue(value);
-                            }
-                        } catch (err) {
-                            ctrl.error(err);
-                        }
-                    },
-                    cancel() {
-                        reader.cancel().catch(() => {});
-                    },
-                });
-            }
-
-            return new Response(responseBody, {
+            // On edge runtime (Cloudflare Workers), pass the upstream body directly.
+            // Workers handle ReadableStream passthrough natively without the Node.js
+            // TransformStream bug. This is the most efficient path — zero buffering,
+            // bytes flow directly from CDN → Worker → browser.
+            return new Response(upstream.body, {
                 status: upstream.status,
                 headers: resHeaders,
             });
         } catch (err: unknown) {
-            clearTimeout(timeout);
-            lastError = err as Error;
+            lastError =
+                err instanceof Error ? err.message : "Unknown fetch error";
             continue;
         }
     }
@@ -174,7 +137,7 @@ export async function GET(req: NextRequest) {
         );
     }
 
-    if (lastError && "name" in lastError && lastError.name === "AbortError") {
+    if (lastError.includes("timeout") || lastError.includes("abort")) {
         return new Response(
             JSON.stringify({
                 error: "timeout",
@@ -193,7 +156,7 @@ export async function GET(req: NextRequest) {
     return new Response(
         JSON.stringify({
             error: "proxy_error",
-            message: "Stream unavailable from all mirrors",
+            message: lastError || "Stream unavailable from all mirrors",
             cdnStatus: lastStatus || 502,
         }),
         {
