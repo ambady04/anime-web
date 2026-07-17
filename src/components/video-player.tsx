@@ -90,9 +90,7 @@ export default function VideoPlayer({
 
     // Sort qualities from highest to lowest
     const sortedDownloads = useMemo(() => {
-        return [...downloads].sort(
-            (a, b) => b.resolution - a.resolution,
-        );
+        return [...downloads].sort((a, b) => b.resolution - a.resolution);
     }, [downloads]);
 
     // States
@@ -128,6 +126,13 @@ export default function VideoPlayer({
     const [autoRetryLabel, setAutoRetryLabel] = useState("");
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showRemaining, setShowRemaining] = useState(false);
+
+    // ─── Native-style 3-flag playback pattern ───
+    // Mirrors VideoPlayer.js: isVideoLoaded + initialSeekTime + isInitialSeekDone
+    const [isVideoLoaded, setIsVideoLoaded] = useState(false);
+    const [initialSeekTime, setInitialSeekTime] = useState<number | null>(null);
+    const [isInitialSeekDone, setIsInitialSeekDone] = useState(false);
+    const [retryTrigger, setRetryTrigger] = useState(0);
 
     // Premium states
     const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
@@ -267,111 +272,116 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
+    // Track which URLs are using the proxy fallback
+    const proxiedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
+    // True only during initial source load — prevents watchdog from firing on normal seek buffering
+    const isInitialLoadRef = useRef<boolean>(false);
     const hlsRef = useRef<any>(null);
     const seekOnLoadRef = useRef<number | null>(null);
     const playOnLoadRef = useRef<boolean>(false);
-    // Preserved seek time for quality switches (so forward/quality-change doesn't restart from 0)
+    // Preserved seek time for quality switches
     const preservedTimeRef = useRef<number>(0);
     const preservedPlayingRef = useRef<boolean>(false);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
+    // Prevents controls from auto-hiding on every buffer/seek — only once on first real playback
+    const hasInitiallyLoadedRef = useRef(false);
 
-    // Load video source directly whenever activeDownload changes.
-    // Preserves the current playback time and play state across quality switches.
+    // ─── Source loading effect ───
+    // Mirrors native VideoPlayer.js: just loads the source and stops.
+    // Seek + play are handled by the initial-seek effect once canplay fires.
+    // If direct play fails, the proxy fallback URL will be used on retry.
     useEffect(() => {
-        const video = videoRef.current;
-        if (!activeDownload || !video) return;
+        if (!activeDownload) return;
 
-        const src = activeDownload.url;
+        const useProxy = proxiedUrlsRef.current.has(activeDownload.url);
+        const referer =
+            streamData.stream_domain || "https://videodownloader.site/";
+        const src = useProxy
+            ? `/api/video?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`
+            : activeDownload.url;
 
-        // Snapshot time/playing state before tearing down the old source
-        const snapTime = video.currentTime > 2 ? video.currentTime : (seekOnLoadRef.current ?? 0);
-        const snapPlaying = !video.paused || playOnLoadRef.current;
-        preservedTimeRef.current = snapTime;
-        preservedPlayingRef.current = snapPlaying;
-
-        // Destroy any existing HLS instance
-        if (hlsRef.current) {
-            hlsRef.current.destroy();
-            hlsRef.current = null;
-        }
-
-        const isHls = src.includes(".m3u8") || src.toLowerCase().includes("m3u8");
-
-        const onReady = () => {
+        const setup = () => {
+            const video = videoRef.current;
             if (!video) return;
-            // Restore seek position if needed
-            if (preservedTimeRef.current > 2) {
-                video.currentTime = preservedTimeRef.current;
-            } else if (seekOnLoadRef.current !== null) {
-                video.currentTime = seekOnLoadRef.current;
-                seekOnLoadRef.current = null;
+
+            isInitialLoadRef.current = true;
+            setIsVideoLoaded(false);
+
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
             }
-            // Restore play state
-            if (preservedPlayingRef.current || playOnLoadRef.current) {
-                video.play().catch(() => {});
-                setIsPlaying(true);
-                playOnLoadRef.current = false;
+
+            const isHls =
+                src.includes(".m3u8") || src.toLowerCase().includes("m3u8");
+
+            if (isHls) {
+                if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                    // Native HLS (Safari)
+                    video.src = src;
+                    video.load();
+                } else {
+                    // Hls.js (Chrome / Firefox / Edge)
+                    import("hls.js").then(({ default: Hls }) => {
+                        if (!Hls.isSupported()) {
+                            handlePlayerError(new Error("HLS not supported"));
+                            return;
+                        }
+                        const hls = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: false,
+                            maxBufferLength: 60,
+                            maxMaxBufferLength: 120,
+                            maxBufferSize: 60 * 1000 * 1000,
+                            startLevel: -1,
+                            abrEwmaFastLive: 3,
+                            abrEwmaSlowLive: 9,
+                            fragLoadingMaxRetry: 4,
+                            manifestLoadingMaxRetry: 3,
+                            levelLoadingMaxRetry: 4,
+                            nudgeMaxRetry: 5,
+                        });
+                        hlsRef.current = hls;
+                        hls.attachMedia(video);
+                        hls.loadSource(src);
+                        // canplay on the video element fires after HLS buffers first fragment
+
+                        hls.on(Hls.Events.ERROR, (_event, data) => {
+                            if (data.fatal) {
+                                if (
+                                    data.type === Hls.ErrorTypes.NETWORK_ERROR
+                                ) {
+                                    hls.startLoad();
+                                } else if (
+                                    data.type === Hls.ErrorTypes.MEDIA_ERROR
+                                ) {
+                                    hls.recoverMediaError();
+                                } else {
+                                    handlePlayerError(
+                                        new Error("HLS playback failed"),
+                                    );
+                                }
+                            }
+                        });
+                    });
+                }
+            } else {
+                // Progressive MP4 / WebM
+                video.src = src;
+                video.load();
             }
-            setIsLoading(false);
         };
 
-        if (isHls) {
-            if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                // Native HLS (Safari)
-                video.src = src;
-                video.addEventListener("loadedmetadata", onReady, { once: true });
-                video.load();
-            } else {
-                // Hls.js (Chrome / Firefox / Edge)
-                import("hls.js").then(({ default: Hls }) => {
-                    if (!Hls.isSupported()) {
-                        handlePlayerError(new Error("HLS not supported"));
-                        return;
-                    }
-                    const hls = new Hls({
-                        enableWorker: true,
-                        lowLatencyMode: false,       // disable for VOD — reduces overhead
-                        maxBufferLength: 60,          // buffer 60s ahead for smooth seeking
-                        maxMaxBufferLength: 120,
-                        maxBufferSize: 60 * 1000 * 1000, // 60 MB
-                        startLevel: -1,              // auto quality on start
-                        abrEwmaFastLive: 3,          // faster ABR reaction
-                        abrEwmaSlowLive: 9,
-                        fragLoadingMaxRetry: 4,
-                        manifestLoadingMaxRetry: 3,
-                        levelLoadingMaxRetry: 4,
-                        nudgeMaxRetry: 5,
-                    });
-                    hlsRef.current = hls;
-                    hls.attachMedia(video);
-                    hls.loadSource(src);
-
-                    // Start playback as soon as first fragment is parsed
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => onReady());
-
-                    hls.on(Hls.Events.ERROR, (_event, data) => {
-                        if (data.fatal) {
-                            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                                hls.startLoad();
-                            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                                hls.recoverMediaError();
-                            } else {
-                                handlePlayerError(new Error("HLS playback failed"));
-                            }
-                        }
-                    });
-                });
-            }
+        if (videoRef.current) {
+            setup();
         } else {
-            // Progressive MP4 / WebM
-            video.src = src;
-            video.addEventListener("loadedmetadata", onReady, { once: true });
-            video.load();
+            const raf = requestAnimationFrame(() => setup());
+            return () => cancelAnimationFrame(raf);
         }
 
         return () => {
@@ -381,19 +391,83 @@ export default function VideoPlayer({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeDownload]);
+    }, [activeDownload, retryTrigger]);
+
+    // ─── Initial seek + play effect ───
+    // Mirrors native VideoPlayer.js lines 1046-1061.
+    // Fires once when: source ready (isVideoLoaded) + know where to start (initialSeekTime) + not yet sought.
+    useEffect(() => {
+        if (!isVideoLoaded || initialSeekTime === null || isInitialSeekDone)
+            return;
+        const video = videoRef.current;
+        if (!video) return;
+
+        if (initialSeekTime > 0) {
+            video.currentTime = initialSeekTime;
+        }
+        setIsInitialSeekDone(true);
+
+        // 300 ms delayed play — same as native delayedPlay() — avoids seek race condition
+        const t = setTimeout(() => {
+            video.play().catch(() => {});
+            setIsPlaying(true);
+            if (!hasInitiallyLoadedRef.current) {
+                hasInitiallyLoadedRef.current = true;
+            }
+        }, 300);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isVideoLoaded, initialSeekTime, isInitialSeekDone]);
 
     // Initialize source on mount or stream data update
+    // Mirrors native: reset seek flags, look up history, set initialSeekTime BEFORE load
     useEffect(() => {
-        // Reset failed URLs tracker and refresh counter when stream changes
         failedUrlsRef.current = new Set();
+        proxiedUrlsRef.current = new Set();
+        setRetryTrigger(0);
         refreshCountRef.current = 0;
         transientRetryCountRef.current = 0;
+        preservedTimeRef.current = 0;
+        preservedPlayingRef.current = false;
+        hasInitiallyLoadedRef.current = false;
+        setIsVideoLoaded(false);
+        setIsInitialSeekDone(false);
         setIsAutoQuality(true);
 
+        // ─── History resume: look up saved position BEFORE loading source ───
+        // Mirrors native VideoPlayer.js lines 1026-1043
+        const savedHistory = localStore.getHistory();
+        let historyItem: (typeof savedHistory)[number] | undefined;
+
+        if (isSeries && season && episode) {
+            historyItem = savedHistory.find(
+                (h) =>
+                    h.detailPath === (seriesDetailPath || detailPath) &&
+                    h.season === season &&
+                    h.episode === episode,
+            );
+        } else {
+            historyItem = savedHistory.find(
+                (h) => h.detailPath === (seriesDetailPath || detailPath),
+            );
+        }
+        if (!historyItem) {
+            historyItem = savedHistory.find(
+                (h) =>
+                    h.title === title &&
+                    (!isSeries ||
+                        (h.season === season && h.episode === episode)),
+            );
+        }
+        const resumeTime =
+            historyItem &&
+            historyItem.progress < 95 &&
+            historyItem.currentTime > 5
+                ? historyItem.currentTime
+                : 0;
+        setInitialSeekTime(resumeTime);
+
         if (sortedDownloads.length > 0) {
-            // Pick 720p first (better reliability than 1080p on slow CDNs)
-            // then fall to highest available if no 720p
             const defaultQuality =
                 sortedDownloads.find((d) => d.resolution === 720) ||
                 sortedDownloads.find((d) => d.resolution === 1080) ||
@@ -417,7 +491,7 @@ export default function VideoPlayer({
             }
         }
 
-        // Convert SRT to WebVTT if subtitle exists â€” prefer English, fallback to first available
+        // Subtitles
         if (captions.length > 0) {
             const englishCaption = captions.find(
                 (c) =>
@@ -518,53 +592,12 @@ export default function VideoPlayer({
         }
     }, []);
 
-    // Setup continue watching resume timestamp on load
+    // Only sets duration — history lookup and seek are handled by the init effect + initial-seek effect
     const handleLoadedMetadata = () => {
         const videoDur = videoRef.current?.duration || 0;
-        // Only set duration if it's a finite number (not Infinity from live streams)
         setDuration(isFinite(videoDur) ? videoDur : 0);
-        setIsLoading(false);
         setPlayerError(false);
         setAutoRetryLabel("");
-
-        // Check history to resume from last position
-        const history = localStore.getHistory();
-        let currentHistoryItem: (typeof history)[number] | undefined;
-
-        if (isSeries && season && episode) {
-            // For series: match by detailPath AND season/episode to avoid resuming wrong episode
-            currentHistoryItem = history.find(
-                (h) =>
-                    h.detailPath === (seriesDetailPath || detailPath) &&
-                    h.season === season &&
-                    h.episode === episode,
-            );
-        } else {
-            // For movies: match by detailPath
-            currentHistoryItem = history.find(
-                (h) => h.detailPath === (seriesDetailPath || detailPath),
-            );
-        }
-
-        // Fallback: find by title/season/episode to support audio track swaps
-        if (!currentHistoryItem) {
-            currentHistoryItem = history.find(
-                (h) =>
-                    h.title === title &&
-                    (!isSeries ||
-                        (h.season === season && h.episode === episode)),
-            );
-        }
-
-        if (currentHistoryItem && videoRef.current) {
-            // Resume only if watched less than 95% and more than 5 seconds
-            if (
-                currentHistoryItem.progress < 95 &&
-                currentHistoryItem.currentTime > 5
-            ) {
-                videoRef.current.currentTime = currentHistoryItem.currentTime;
-            }
-        }
     };
 
     const handlePlayerError = (e: any) => {
@@ -577,17 +610,23 @@ export default function VideoPlayer({
         // Recovery path: if the video has already successfully loaded and played a bit,
         // any subsequent error during skip/seek is transient (e.g., network timeout during range request).
         // Try reloading the current URL and restoring time rather than swapping to a new URL/quality/mode.
-        if (videoRef.current && videoRef.current.currentTime > 2 && transientRetryCountRef.current < 2) {
+        if (
+            videoRef.current &&
+            videoRef.current.currentTime > 2 &&
+            transientRetryCountRef.current < 2
+        ) {
             transientRetryCountRef.current += 1;
             const restoreTime = videoRef.current.currentTime;
             const wasPlaying = isPlaying;
-            
-            console.warn("Transient seek/network error detected. Attempting recovery...");
+
+            console.warn(
+                "Transient seek/network error detected. Attempting recovery...",
+            );
             setAutoRetryLabel("Recovering playback...");
             setIsLoading(true);
-            
+
             videoRef.current.load();
-            
+
             const onCanPlay = () => {
                 if (videoRef.current) {
                     videoRef.current.currentTime = restoreTime;
@@ -603,7 +642,24 @@ export default function VideoPlayer({
             return;
         }
 
-        // Mark this quality as failed
+        // Try proxy fallback before marking the entire quality as failed
+        const isProxied = proxiedUrlsRef.current.has(activeDownload.url);
+        if (!isProxied) {
+            console.warn(
+                "Direct CDN link failed. Switching to proxy fallback...",
+            );
+            setAutoRetryLabel("Switching to secure playback mirror...");
+            proxiedUrlsRef.current.add(activeDownload.url);
+
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            setIsLoading(true);
+            setRetryTrigger((prev) => prev + 1);
+            return;
+        }
+
+        // Mark this quality as failed (both direct and proxy failed)
         failedUrlsRef.current.add(activeDownload.url);
 
         // Step 1: Try next available quality
@@ -615,6 +671,11 @@ export default function VideoPlayer({
                 `Auto-switching to ${nextQuality.resolution}p...`,
             );
             setIsLoading(true);
+            // Save current position so initial-seek effect restores it after new source loads
+            // Mirrors native changeQuality(): setInitialSeekTime(currentTimeRef.current)
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
             setActiveDownload(nextQuality);
         } else if (refreshCountRef.current < 2) {
             // Step 2: All qualities failed — fetch fresh stream URLs from API
@@ -624,10 +685,7 @@ export default function VideoPlayer({
             refreshStreamData();
         } else {
             // Step 3: Everything exhausted — show error screen
-            console.error(
-                "Video player: all stream qualities failed",
-                e,
-            );
+            console.error("Video player: all stream qualities failed", e);
             setPlayerError(true);
             setIsLoading(false);
             setAutoRetryLabel("");
@@ -645,8 +703,10 @@ export default function VideoPlayer({
             );
 
             if (freshStream.downloads && freshStream.downloads.length > 0) {
-                // Reset failed URLs and resume with fresh direct links
+                // Reset failed and proxied URLs and resume with fresh direct links
                 failedUrlsRef.current = new Set();
+                proxiedUrlsRef.current = new Set();
+                setRetryTrigger(0);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
                 // Notify parent if callback provided
@@ -684,13 +744,17 @@ export default function VideoPlayer({
     useEffect(() => {
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
 
-        if (isLoading && activeDownload && !playerError) {
+        if (
+            isLoading &&
+            activeDownload &&
+            !playerError &&
+            isInitialLoadRef.current
+        ) {
             stallTimerRef.current = setTimeout(() => {
-                // Only trigger if still in a loading state (not yet ready to play future data)
                 if (!videoRef.current || videoRef.current.readyState < 3) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 }
-            }, 7_000); // 7 s — faster fallback on silent CDN stalls
+            }, 12_000);
         }
 
         return () => {
@@ -849,19 +913,22 @@ export default function VideoPlayer({
     }, [isMuted]);
 
     // Volume slider adjustment
-    const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!videoRef.current) return;
-        const newVolume = Number(e.target.value);
-        videoRef.current.volume = newVolume;
-        setVolume(newVolume);
-        if (newVolume === 0) {
-            videoRef.current.muted = true;
-            setIsMuted(true);
-        } else {
-            videoRef.current.muted = false;
-            setIsMuted(false);
-        }
-    }, []);
+    const handleVolumeChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            if (!videoRef.current) return;
+            const newVolume = Number(e.target.value);
+            videoRef.current.volume = newVolume;
+            setVolume(newVolume);
+            if (newVolume === 0) {
+                videoRef.current.muted = true;
+                setIsMuted(true);
+            } else {
+                videoRef.current.muted = false;
+                setIsMuted(false);
+            }
+        },
+        [],
+    );
 
     // Playback speeds multiplier
     const handleSpeedChange = useCallback((rate: number) => {
@@ -1211,7 +1278,8 @@ export default function VideoPlayer({
             if (
                 qualityMenuRef.current &&
                 !qualityMenuRef.current.contains(target) &&
-                (!qualityMenuMobileRef.current || !qualityMenuMobileRef.current.contains(target))
+                (!qualityMenuMobileRef.current ||
+                    !qualityMenuMobileRef.current.contains(target))
             ) {
                 setShowQualityMenu(false);
             }
@@ -1685,7 +1753,11 @@ export default function VideoPlayer({
                         }
                     }}
                     onCanPlay={() => {
+                        // Web equivalent of native statusChange → readyToPlay
+                        // Triggers the initial-seek effect which seeks and plays
+                        setIsVideoLoaded(true);
                         setIsLoading(false);
+                        isInitialLoadRef.current = false;
                     }}
                     onPlaying={() => {
                         setIsLoading(false);
@@ -1965,7 +2037,8 @@ export default function VideoPlayer({
                                     setIsScrubbing(true);
                                     const track = e.currentTarget;
                                     if (videoRef.current) {
-                                        scrubbingTimeRef.current = videoRef.current.currentTime;
+                                        scrubbingTimeRef.current =
+                                            videoRef.current.currentTime;
                                     }
                                     const seek = (ev: MouseEvent) => {
                                         if (!videoRef.current || !duration)
@@ -1995,7 +2068,8 @@ export default function VideoPlayer({
                                         );
                                         setIsScrubbing(false);
                                         if (videoRef.current) {
-                                            videoRef.current.currentTime = scrubbingTimeRef.current;
+                                            videoRef.current.currentTime =
+                                                scrubbingTimeRef.current;
                                             // Resume playback after drag seek
                                             if (!videoRef.current.paused) {
                                                 videoRef.current
@@ -2015,7 +2089,8 @@ export default function VideoPlayer({
                                     setIsScrubbing(true);
                                     const track = e.currentTarget;
                                     if (videoRef.current) {
-                                        scrubbingTimeRef.current = videoRef.current.currentTime;
+                                        scrubbingTimeRef.current =
+                                            videoRef.current.currentTime;
                                     }
                                     const seek = (ev: TouchEvent) => {
                                         if (
@@ -2050,7 +2125,8 @@ export default function VideoPlayer({
                                         );
                                         setIsScrubbing(false);
                                         if (videoRef.current) {
-                                            videoRef.current.currentTime = scrubbingTimeRef.current;
+                                            videoRef.current.currentTime =
+                                                scrubbingTimeRef.current;
                                             // Resume playback after touch seek
                                             if (!videoRef.current.paused) {
                                                 videoRef.current

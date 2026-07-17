@@ -92,7 +92,7 @@ export default async function HomePage() {
                 <div className="space-y-4">
                     {shelves.map((shelf, idx) => (
                         <MovieShelf
-                            key={shelf.opId || idx}
+                            key={`${shelf.opId || "shelf"}-${idx}`}
                             title={shelf.title}
                             subjects={shelf.subjects}
                         />
@@ -131,10 +131,10 @@ export default async function HomePage() {
             {customCollections.some((c) => c.subjects.length > 0) && (
                 <div className="space-y-4">
                     {customCollections.map(
-                        (collection) =>
+                        (collection, idx) =>
                             collection.subjects.length > 0 && (
                                 <MovieShelf
-                                    key={collection.title}
+                                    key={`${collection.title || "collection"}-${idx}`}
                                     title={collection.title}
                                     subjects={collection.subjects}
                                 />

@@ -84,9 +84,9 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                     ref={rowRef}
                     className="flex overflow-x-auto space-x-3 sm:space-x-4 py-4 px-2 no-scrollbar scroll-smooth w-full select-none"
                 >
-                    {subjects.map((subject) => (
+                    {subjects.map((subject, index) => (
                         <div
-                            key={subject.subjectId}
+                            key={`${subject.subjectId}-${index}`}
                             className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px] xl:w-[210px] 2xl:w-[240px]"
                         >
                             <MovieCard subject={subject} />
