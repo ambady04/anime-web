@@ -25,6 +25,22 @@ export async function GET(req: NextRequest) {
             return new Response("Missing url parameter", { status: 400 });
         }
 
+        // Quick URL format validation before entering the loop
+        try {
+            new URL(targetUrl);
+        } catch {
+            return new Response(
+                JSON.stringify({ error: "invalid_url", message: "Invalid target URL format" }),
+                {
+                    status: 400,
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*",
+                    },
+                }
+            );
+        }
+
         const clientReferer = searchParams.get("referer");
         const range = req.headers.get("range");
 
@@ -39,35 +55,49 @@ export async function GET(req: NextRequest) {
         let lastError = "";
 
         for (const referer of referersToTry) {
-            const headers = new Headers();
-            headers.set("Referer", referer);
-            headers.set("Origin", new URL(referer).origin);
-            headers.set(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            );
-            headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
-            headers.set("Accept-Encoding", "identity");
-            if (range) {
-                headers.set("Range", range);
-            }
-
             try {
-                // Construct an explicit Request object with the target URL and headers.
+                // Safely extract origin to prevent TypeError: Invalid URL
+                let origin = "https://videodownloader.site";
+                if (referer) {
+                    try {
+                        origin = new URL(referer).origin;
+                    } catch {
+                        // Prepend https:// and try again if it was a bare domain name
+                        try {
+                            origin = new URL(referer.includes("://") ? referer : `https://${referer}`).origin;
+                        } catch {
+                            // Fallback to default origin
+                        }
+                    }
+                }
+
+                const headers = new Headers();
+                headers.set("Referer", referer || "https://videodownloader.site/");
+                headers.set("Origin", origin);
+                headers.set(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                );
+                headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
+                headers.set("Accept-Encoding", "identity");
+                if (range) {
+                    headers.set("Range", range);
+                }
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+                // Construct an explicit Request object with the target URL, headers, and signal.
                 // This ensures Cloudflare Workers preserves the Referer header on the
                 // outbound fetch (plain headers object can get stripped by the runtime).
                 const upstreamReq = new Request(targetUrl, {
                     method: "GET",
                     headers,
                     redirect: "follow",
-                });
-
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-                const upstream = await fetch(upstreamReq, {
                     signal: controller.signal,
                 });
+
+                const upstream = await fetch(upstreamReq);
 
                 clearTimeout(timeoutId);
                 lastStatus = upstream.status;
@@ -131,6 +161,7 @@ export async function GET(req: NextRequest) {
                 continue;
             }
         }
+
 
         // All referers failed
         if (lastStatus === 403 || lastStatus === 404 || lastStatus === 410) {
