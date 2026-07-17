@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 // Run at the Cloudflare edge (V8 isolate) — no Node.js overhead, fastest possible
 // streaming response. This is the optimal runtime for a video proxy on Workers.
@@ -18,23 +18,22 @@ const REFERER_POOL = [
 
 export async function GET(req: NextRequest) {
     try {
-        const { searchParams } = new URL(req.url);
+        const { searchParams } = req.nextUrl;
         const targetUrl = searchParams.get("url");
 
         if (!targetUrl) {
-            return new Response("Missing url parameter", { status: 400 });
+            return new NextResponse("Missing url parameter", { status: 400 });
         }
 
         // Quick URL format validation before entering the loop
         try {
             new URL(targetUrl);
         } catch {
-            return new Response(
-                JSON.stringify({ error: "invalid_url", message: "Invalid target URL format" }),
+            return NextResponse.json(
+                { error: "invalid_url", message: "Invalid target URL format" },
                 {
                     status: 400,
                     headers: {
-                        "Content-Type": "application/json",
                         "Access-Control-Allow-Origin": "*",
                     },
                 }
@@ -146,7 +145,7 @@ export async function GET(req: NextRequest) {
                 resHeaders.set("CDN-Cache-Control", "no-store");
                 resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
 
-                return new Response(upstream.body, {
+                return new NextResponse(upstream.body, {
                     status: upstream.status,
                     headers: resHeaders,
                 });
@@ -160,18 +159,17 @@ export async function GET(req: NextRequest) {
 
         // All referers failed
         if (lastStatus === 403 || lastStatus === 404 || lastStatus === 410) {
-            return new Response(
-                JSON.stringify({
+            return NextResponse.json(
+                {
                     error: "cdn_rejected",
                     cdnStatus: lastStatus,
                     tried: referersToTry.length,
                     message:
                         "CDN rejected all referer attempts. The stream token may have expired.",
-                }),
+                },
                 {
                     status: 422,
                     headers: {
-                        "Content-Type": "application/json",
                         "Access-Control-Allow-Origin": "*",
                     },
                 },
@@ -183,46 +181,44 @@ export async function GET(req: NextRequest) {
             lastError.includes("abort") ||
             lastError.includes("Abort")
         ) {
-            return new Response(
-                JSON.stringify({
+            return NextResponse.json(
+                {
                     error: "timeout",
                     message: "All referers timed out",
-                }),
+                },
                 {
                     status: 504,
                     headers: {
-                        "Content-Type": "application/json",
                         "Access-Control-Allow-Origin": "*",
                     },
                 },
             );
         }
 
-        return new Response(
-            JSON.stringify({
+        return NextResponse.json(
+            {
                 error: "proxy_error",
                 message: lastError || "Stream unavailable from all mirrors",
                 cdnStatus: lastStatus || 502,
-            }),
+            },
             {
                 status: 502,
                 headers: {
-                    "Content-Type": "application/json",
                     "Access-Control-Allow-Origin": "*",
                 },
             },
         );
     } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Internal proxy error";
-        return new Response(
-            JSON.stringify({ error: "internal_error", message: msg }),
+        return NextResponse.json(
+            { error: "internal_error", message: msg },
             {
                 status: 500,
                 headers: {
-                    "Content-Type": "application/json",
                     "Access-Control-Allow-Origin": "*",
                 },
             },
         );
     }
 }
+
