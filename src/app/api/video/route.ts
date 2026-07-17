@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
+// Extend Vercel serverless function timeout to the max allowed (60s on Pro, 10s on Hobby)
+// This gives enough time for the CDN to respond with the first byte before we start streaming.
+export const maxDuration = 60;
 
 // Multiple referers to try — CDNs may accept different ones
 const REFERER_POOL = [
@@ -14,7 +17,6 @@ const REFERER_POOL = [
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const targetUrl = searchParams.get("url");
-    const mode = searchParams.get("mode"); // "probe" = find working URL, "stream" = proxy bytes
 
     if (!targetUrl) {
         return new Response("Missing url parameter", { status: 400 });
@@ -29,95 +31,9 @@ export async function GET(req: NextRequest) {
         ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
         : REFERER_POOL;
 
-    // === PROBE MODE (default) ===
-    // Instead of streaming gigabytes through Vercel, we:
-    // 1. Send a HEAD/Range request to find a working referer
-    // 2. Return the working referer + CDN URL to the client
-    // 3. Client uses this info to fetch directly from CDN via <video> tag
-    //
-    // This reduces Origin Transfer from ~16GB to nearly zero for video data.
-    if (mode !== "stream") {
-        for (const referer of referersToTry) {
-            const upstreamHeaders: Record<string, string> = {
-                Referer: referer,
-                Origin: new URL(referer).origin,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "*/*",
-                "Accept-Encoding": "identity",
-                Range: "bytes=0-1", // Minimal probe request
-            };
-
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 8_000);
-
-            try {
-                const upstream = await fetch(targetUrl, {
-                    headers: upstreamHeaders,
-                    signal: controller.signal,
-                });
-
-                clearTimeout(timeout);
-
-                if ([403, 404, 410].includes(upstream.status)) {
-                    continue;
-                }
-                if (upstream.status >= 500) {
-                    continue;
-                }
-
-                // Success! Return the working referer info to client
-                const contentLength = upstream.headers.get("content-length");
-                const contentType = upstream.headers.get("content-type");
-                const acceptRanges = upstream.headers.get("accept-ranges");
-
-                return new Response(
-                    JSON.stringify({
-                        url: targetUrl,
-                        referer: referer,
-                        origin: new URL(referer).origin,
-                        contentType: contentType || "video/mp4",
-                        contentLength: contentLength,
-                        acceptRanges: acceptRanges || "bytes",
-                        mode: "direct", // Tell client to fetch directly
-                    }),
-                    {
-                        status: 200,
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Access-Control-Allow-Origin": "*",
-                            "Cache-Control":
-                                "public, max-age=1800, s-maxage=1800",
-                        },
-                    },
-                );
-            } catch {
-                clearTimeout(timeout);
-                continue;
-            }
-        }
-
-        // All probes failed — fall back to stream mode
-        // (Client will retry with mode=stream)
-        return new Response(
-            JSON.stringify({
-                mode: "stream",
-                message: "Direct access unavailable, use stream mode",
-            }),
-            {
-                status: 200,
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-store",
-                },
-            },
-        );
-    }
-
-    // === STREAM MODE (fallback) ===
-    // Only used when CDN requires referer validation that browsers can't provide.
-    // This is the old behavior — proxy bytes through Vercel origin.
+    // === STREAM MODE ===
+    // All video is proxied through Vercel so the CDN Referer requirement is
+    // satisfied without exposing raw CDN URLs or tokens to the browser.
     let lastStatus = 0;
     let lastError: Error | null = null;
 
@@ -127,7 +43,7 @@ export async function GET(req: NextRequest) {
             Origin: new URL(referer).origin,
             "User-Agent":
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            Accept: "*/*",
+            Accept: "video/mp4,video/*;q=0.9,*/*;q=0.8",
             "Accept-Encoding": "identity",
         };
 
@@ -136,7 +52,8 @@ export async function GET(req: NextRequest) {
         }
 
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
+        // 25s timeout — leaves headroom below Vercel's 30s default / 60s Pro limit
+        const timeout = setTimeout(() => controller.abort(), 25_000);
 
         try {
             const upstream = await fetch(targetUrl, {
@@ -156,6 +73,7 @@ export async function GET(req: NextRequest) {
 
             const resHeaders = new Headers();
 
+            // Forward relevant CDN headers to the browser
             for (const h of [
                 "content-type",
                 "content-length",
@@ -168,10 +86,17 @@ export async function GET(req: NextRequest) {
                 if (v) resHeaders.set(h, v);
             }
 
+            // Ensure browser knows range requests are supported (required for seeking)
             if (!resHeaders.has("accept-ranges")) {
                 resHeaders.set("accept-ranges", "bytes");
             }
 
+            // Force correct MIME type for video if missing
+            if (!resHeaders.has("content-type")) {
+                resHeaders.set("content-type", "video/mp4");
+            }
+
+            // Handle optional download mode
             const download = searchParams.get("download");
             const filename = searchParams.get("filename");
             if (download === "true" || filename) {
@@ -180,16 +105,17 @@ export async function GET(req: NextRequest) {
                     .replace(/[^\x20-\x7E]/g, "_");
                 resHeaders.set(
                     "Content-Disposition",
-                    `attachment; filename="${safeFilename}"`
+                    `attachment; filename="${safeFilename}"`,
                 );
             }
 
             resHeaders.set("Access-Control-Allow-Origin", "*");
-            // Aggressive caching for streamed video segments
+            // Short cache — CDN tokens expire, so don't cache too aggressively
             resHeaders.set(
                 "Cache-Control",
-                "public, max-age=7200, s-maxage=7200",
+                "public, max-age=1800, s-maxage=1800",
             );
+            // Prevent Nginx/proxy buffering so bytes flow directly to the browser
             resHeaders.set("X-Accel-Buffering", "no");
 
             return new Response(upstream.body as ReadableStream, {
@@ -203,6 +129,7 @@ export async function GET(req: NextRequest) {
         }
     }
 
+    // All referers failed — return a descriptive error
     if (lastStatus === 403 || lastStatus === 404 || lastStatus === 410) {
         return new Response(
             JSON.stringify({ error: "cdn_rejected", cdnStatus: lastStatus }),
