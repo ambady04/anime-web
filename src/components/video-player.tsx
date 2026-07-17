@@ -450,33 +450,64 @@ export default function VideoPlayer({
     }, [activeDownload, retryTrigger, isHistoryChecked]);
 
     // ─── Initial seek + play effect ───
-    // Mirrors native VideoPlayer.js lines 1046-1061.
     // Fires once when: source ready (isVideoLoaded) + know where to start (initialSeekTime) + not yet sought.
     useEffect(() => {
-        console.log("⚡ Seek effect status:", {
-            isVideoLoaded,
-            initialSeekTime,
-            isInitialSeekDone,
-            hasVideoRef: !!videoRef.current,
-        });
-
         if (!isVideoLoaded || initialSeekTime === null || isInitialSeekDone)
             return;
         const video = videoRef.current;
         if (!video) return;
 
         if (initialSeekTime > 0) {
-            console.log("🎯 Seeking video element to:", initialSeekTime);
             video.currentTime = initialSeekTime;
         }
         setIsInitialSeekDone(true);
 
-        // 300 ms delayed play — same as native delayedPlay() — avoids seek race condition
+        // 300 ms delayed play — avoids seek race condition on slow connections
         const t = setTimeout(() => {
-            video.play().catch(() => {});
-            setIsPlaying(true);
-            if (!hasInitiallyLoadedRef.current) {
-                hasInitiallyLoadedRef.current = true;
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        // Play started successfully
+                        setIsPlaying(true);
+                        setIsLoading(false);
+                        if (!hasInitiallyLoadedRef.current) {
+                            hasInitiallyLoadedRef.current = true;
+                        }
+                    })
+                    .catch((err) => {
+                        // Play was rejected (autoplay policy, interrupted, etc.)
+                        // Only treat as real error if video hasn't started at all
+                        if (video.currentTime === 0 || video.readyState < 2) {
+                            // Retry once after a short delay — browser may need more buffer
+                            setTimeout(() => {
+                                video.play()
+                                    .then(() => {
+                                        setIsPlaying(true);
+                                        setIsLoading(false);
+                                        if (!hasInitiallyLoadedRef.current) {
+                                            hasInitiallyLoadedRef.current = true;
+                                        }
+                                    })
+                                    .catch(() => {
+                                        // Show paused state — user can tap to play
+                                        setIsPlaying(false);
+                                        setIsLoading(false);
+                                    });
+                            }, 800);
+                        } else {
+                            // Video has buffered; rejection was benign (e.g., interrupted by seek)
+                            setIsPlaying(false);
+                            setIsLoading(false);
+                        }
+                    });
+            } else {
+                // Old browser fallback
+                setIsPlaying(true);
+                setIsLoading(false);
+                if (!hasInitiallyLoadedRef.current) {
+                    hasInitiallyLoadedRef.current = true;
+                }
             }
         }, 300);
         return () => clearTimeout(t);
@@ -504,15 +535,6 @@ export default function VideoPlayer({
         const savedHistory = localStore.getHistory();
         let historyItem: (typeof savedHistory)[number] | undefined;
 
-        console.log("🔍 History lookup details:", {
-            detailPath,
-            seriesDetailPath,
-            isSeries,
-            season,
-            episode,
-            title,
-            savedHistoryLength: savedHistory.length,
-        });
 
         if (isSeries && season && episode) {
             historyItem = savedHistory.find(
@@ -534,7 +556,6 @@ export default function VideoPlayer({
                         (h.season === season && h.episode === episode)),
             );
         }
-        console.log("🔍 Found history item:", historyItem);
 
         const resumeTime =
             historyItem &&
@@ -542,7 +563,6 @@ export default function VideoPlayer({
             historyItem.currentTime > 5
                 ? historyItem.currentTime
                 : 0;
-        console.log("🎯 Determined initialSeekTime (resumeTime):", resumeTime);
         setInitialSeekTime(resumeTime);
 
         if (sortedDownloads.length > 0) {
@@ -824,22 +844,24 @@ export default function VideoPlayer({
         }
     };
 
-    // Stall watchdog — if isLoading stays true for 10 seconds, treat it as an error
-    // and auto-fallback to the next quality. This catches silent CDN timeouts on mobile.
+    // Stall watchdog — if isLoading stays true for too long (initial load OR mid-playback buffer stall),
+    // treat it as an error and auto-fallback to the next quality. Catches silent CDN timeouts on mobile.
     useEffect(() => {
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
 
-        if (
-            isLoading &&
-            activeDownload &&
-            !playerError &&
-            isInitialLoadRef.current
-        ) {
+        if (isLoading && activeDownload && !playerError) {
+            // Use a shorter timeout for initial load vs mid-playback stalls
+            const timeoutMs = isInitialLoadRef.current ? 12_000 : 15_000;
             stallTimerRef.current = setTimeout(() => {
-                if (!videoRef.current || videoRef.current.readyState < 3) {
+                const video = videoRef.current;
+                // Only escalate if the video is genuinely stalled (not just buffering briefly)
+                if (!video || video.readyState < 3) {
                     handlePlayerError(new Error("Stream stall timeout"));
+                } else {
+                    // readyState is fine — just clear the loading spinner
+                    setIsLoading(false);
                 }
-            }, 25_000);
+            }, timeoutMs);
         }
 
         return () => {
@@ -1825,28 +1847,43 @@ export default function VideoPlayer({
                         }
                     }}
                     onWaiting={() => {
-                        setIsLoading(true);
+                        // Only show loading spinner if video is genuinely stalled,
+                        // not for brief buffer gaps during normal playback
+                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        waitingTimeoutRef.current = setTimeout(() => {
+                            if (
+                                videoRef.current &&
+                                videoRef.current.readyState < 3 &&
+                                !videoRef.current.paused
+                            ) {
+                                setIsLoading(true);
+                            }
+                        }, 300);
                     }}
                     onSeeking={() => {
-                        setIsLoading(true);
+                        // Don't show spinner immediately — brief seeks clear fast
+                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        waitingTimeoutRef.current = setTimeout(() => {
+                            if (videoRef.current && videoRef.current.readyState < 3) {
+                                setIsLoading(true);
+                            }
+                        }, 200);
                     }}
                     onSeeked={() => {
-                        if (
-                            videoRef.current &&
-                            videoRef.current.readyState >= 3
-                        ) {
-                            setIsLoading(false);
-                        }
+                        // Always clear loading after seek completes — video has the frame ready
+                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+                        setIsLoading(false);
                     }}
                     onCanPlay={() => {
-                        // Web equivalent of native statusChange → readyToPlay
-                        // Triggers the initial-seek effect which seeks and plays
+                        // Source is ready — trigger the initial-seek effect which seeks and plays
+                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
                         setIsVideoLoaded(true);
                         setIsLoading(false);
                         isInitialLoadRef.current = false;
                         isRecoveringRef.current = false;
                     }}
                     onPlaying={() => {
+                        if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
                         setIsLoading(false);
                         setAutoRetryLabel("");
                         transientRetryCountRef.current = 0;

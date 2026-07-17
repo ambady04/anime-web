@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
 
+// Run at the Cloudflare edge (V8 isolate) — no Node.js overhead, fastest possible
+// streaming response. This is the optimal runtime for a video proxy on Workers.
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 // The CDN requires a specific Referer header. Cloudflare Workers may strip/override
