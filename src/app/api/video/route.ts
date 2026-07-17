@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
-// Note: Do NOT set runtime = "edge" here. OpenNext for Cloudflare already runs
-// all routes as Workers. Explicitly setting edge causes bundling conflicts.
 
-// Multiple referers to try — CDNs may accept different ones
+// The CDN requires a specific Referer header. Cloudflare Workers may strip/override
+// headers set via the `headers` option. To work around this, we construct the Request
+// object explicitly with the headers baked in, which Workers respect.
 const REFERER_POOL = [
     "https://videodownloader.site/",
     "https://h5.aoneroom.com/",
@@ -22,11 +22,9 @@ export async function GET(req: NextRequest) {
             return new Response("Missing url parameter", { status: 400 });
         }
 
-        // Optional referer override from the client
         const clientReferer = searchParams.get("referer");
         const range = req.headers.get("range");
 
-        // Build referer list — client-provided one goes first, then the pool
         const referersToTry = clientReferer
             ? [
                   clientReferer,
@@ -38,26 +36,33 @@ export async function GET(req: NextRequest) {
         let lastError = "";
 
         for (const referer of referersToTry) {
-            const upstreamHeaders: Record<string, string> = {
-                Referer: referer,
-                Origin: new URL(referer).origin,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "video/mp4,video/*;q=0.9,*/*;q=0.8",
-                "Accept-Encoding": "identity",
-            };
-
+            const headers = new Headers();
+            headers.set("Referer", referer);
+            headers.set("Origin", new URL(referer).origin);
+            headers.set(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            );
+            headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
+            headers.set("Accept-Encoding", "identity");
             if (range) {
-                upstreamHeaders["Range"] = range;
+                headers.set("Range", range);
             }
 
             try {
-                // Use AbortController for timeout (universally supported in Workers + Node)
+                // Construct an explicit Request object with the target URL and headers.
+                // This ensures Cloudflare Workers preserves the Referer header on the
+                // outbound fetch (plain headers object can get stripped by the runtime).
+                const upstreamReq = new Request(targetUrl, {
+                    method: "GET",
+                    headers,
+                    redirect: "follow",
+                });
+
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
-                const upstream = await fetch(targetUrl, {
-                    headers: upstreamHeaders,
+                const upstream = await fetch(upstreamReq, {
                     signal: controller.signal,
                 });
 
@@ -73,7 +78,6 @@ export async function GET(req: NextRequest) {
 
                 const resHeaders = new Headers();
 
-                // Forward relevant CDN headers to the browser
                 const forwardHeaders = [
                     "content-type",
                     "content-length",
@@ -87,17 +91,13 @@ export async function GET(req: NextRequest) {
                     if (v) resHeaders.set(h, v);
                 }
 
-                // Ensure browser knows range requests are supported
                 if (!resHeaders.has("accept-ranges")) {
                     resHeaders.set("accept-ranges", "bytes");
                 }
-
-                // Force correct MIME type for video if missing
                 if (!resHeaders.has("content-type")) {
                     resHeaders.set("content-type", "video/mp4");
                 }
 
-                // Handle optional download mode
                 const download = searchParams.get("download");
                 const filename = searchParams.get("filename");
                 if (download === "true" || filename) {
@@ -118,8 +118,6 @@ export async function GET(req: NextRequest) {
                 resHeaders.set("CDN-Cache-Control", "no-store");
                 resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
 
-                // Pass the upstream body directly as a streaming response.
-                // Both Cloudflare Workers and Node.js support ReadableStream passthrough.
                 return new Response(upstream.body, {
                     status: upstream.status,
                     headers: resHeaders,
@@ -137,6 +135,9 @@ export async function GET(req: NextRequest) {
                 JSON.stringify({
                     error: "cdn_rejected",
                     cdnStatus: lastStatus,
+                    tried: referersToTry.length,
+                    message:
+                        "CDN rejected all referer attempts. The stream token may have expired.",
                 }),
                 {
                     status: 422,
@@ -183,8 +184,6 @@ export async function GET(req: NextRequest) {
             },
         );
     } catch (err: unknown) {
-        // Top-level catch — if anything unexpected crashes, return JSON error
-        // instead of Cloudflare's generic 500 page
         const msg = err instanceof Error ? err.message : "Internal proxy error";
         return new Response(
             JSON.stringify({ error: "internal_error", message: msg }),

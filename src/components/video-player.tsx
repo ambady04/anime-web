@@ -342,15 +342,19 @@ export default function VideoPlayer({
         if (!isHistoryChecked || !activeDownload) return;
 
         // The CDN behind activeDownload.url requires a specific Referer header
-        // that browsers cannot attach to a direct <video src> request (and that
-        // our own page origin would never satisfy). Attempting a direct load
-        // first is a guaranteed failure for this backend's CDN, so we always
-        // route through our own /api/video proxy, which sets the Referer
-        // server-side. This avoids a wasted failing request + error on every load.
+        // that browsers cannot attach to a direct <video src> request.
+        // In production (Cloudflare Workers), the local /api/video proxy cannot
+        // set Referer on outbound fetch (Workers strip it). So we route through
+        // the backend's own proxy at api.abisolutions.online which CAN set it.
+        // In dev, the local /api/video route works fine.
         proxiedUrlsRef.current.add(activeDownload.url);
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        const src = `/api/video?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+        const proxyBase =
+            process.env.NODE_ENV === "production"
+                ? "https://api.abisolutions.online/api/video"
+                : "/api/video";
+        const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
             const video = videoRef.current;
