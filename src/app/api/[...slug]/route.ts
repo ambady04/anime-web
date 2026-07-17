@@ -25,7 +25,7 @@ export async function GET(
 ) {
     const { slug } = await params;
     const endpoint = slug[0]; // e.g. "home", "details", "stream"
-    const path = "/" + slug.join("/");
+    const path = "/api/" + slug.join("/");
 
     const { searchParams } = new URL(req.url);
     const qs = searchParams.toString();
