@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Run at the Cloudflare edge (V8 isolate) — no Node.js overhead, fastest possible
 // streaming response. This is the optimal runtime for a video proxy on Workers.
+// Video bytes are served from the nearest CF edge POP to the user.
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
+
+// Handle CORS preflight — instant response avoids an extra round-trip before video fetch
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "Range, Content-Type",
+            "Access-Control-Expose-Headers":
+                "Content-Range, Content-Length, Accept-Ranges",
+            "Access-Control-Max-Age": "86400",
+        },
+    });
+}
 
 // The CDN requires a specific Referer header. Cloudflare Workers may strip/override
 // headers set via the `headers` option. To work around this, we construct the Request
@@ -36,7 +52,7 @@ export async function GET(req: NextRequest) {
                     headers: {
                         "Access-Control-Allow-Origin": "*",
                     },
-                }
+                },
             );
         }
 
@@ -63,7 +79,11 @@ export async function GET(req: NextRequest) {
                     } catch {
                         // Prepend https:// and try again if it was a bare domain name
                         try {
-                            origin = new URL(referer.includes("://") ? referer : `https://${referer}`).origin;
+                            origin = new URL(
+                                referer.includes("://")
+                                    ? referer
+                                    : `https://${referer}`,
+                            ).origin;
                         } catch {
                             // Fallback to default origin
                         }
@@ -71,7 +91,10 @@ export async function GET(req: NextRequest) {
                 }
 
                 const headers = new Headers();
-                headers.set("Referer", referer || "https://videodownloader.site/");
+                headers.set(
+                    "Referer",
+                    referer || "https://videodownloader.site/",
+                );
                 headers.set("Origin", origin);
                 headers.set(
                     "User-Agent",
@@ -94,7 +117,6 @@ export async function GET(req: NextRequest) {
 
                 const upstream = await fetch(upstreamReq);
                 lastStatus = upstream.status;
-
 
                 if ([403, 404, 410].includes(upstream.status)) {
                     continue;
@@ -139,11 +161,21 @@ export async function GET(req: NextRequest) {
 
                 resHeaders.set("Access-Control-Allow-Origin", "*");
                 resHeaders.set(
-                    "Cache-Control",
-                    "no-store, no-cache, must-revalidate, max-age=0",
+                    "Access-Control-Expose-Headers",
+                    "Content-Range, Content-Length, Accept-Ranges, Content-Type",
                 );
-                resHeaders.set("CDN-Cache-Control", "no-store");
-                resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
+                // Allow CF edge to cache video bytes for 5 minutes — CDN tokens
+                // typically last 30-60 min, so short-term caching is safe and
+                // eliminates redundant upstream fetches on seeks/replays.
+                resHeaders.set(
+                    "Cache-Control",
+                    "public, s-maxage=300, max-age=60, stale-while-revalidate=120",
+                );
+                resHeaders.set("CDN-Cache-Control", "public, max-age=300");
+                resHeaders.set(
+                    "Cloudflare-CDN-Cache-Control",
+                    "public, max-age=300",
+                );
 
                 return new NextResponse(upstream.body, {
                     status: upstream.status,
@@ -155,7 +187,6 @@ export async function GET(req: NextRequest) {
                 continue;
             }
         }
-
 
         // All referers failed
         if (lastStatus === 403 || lastStatus === 404 || lastStatus === 410) {
@@ -221,4 +252,3 @@ export async function GET(req: NextRequest) {
         );
     }
 }
-

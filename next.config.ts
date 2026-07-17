@@ -15,8 +15,14 @@ const nextConfig: NextConfig = {
         const securityHeaders = [
             { key: "X-Content-Type-Options", value: "nosniff" },
             { key: "X-Frame-Options", value: "SAMEORIGIN" },
-            { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-            { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+            {
+                key: "Referrer-Policy",
+                value: "strict-origin-when-cross-origin",
+            },
+            {
+                key: "Permissions-Policy",
+                value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+            },
             { key: "X-DNS-Prefetch-Control", value: "on" },
         ];
 
@@ -30,18 +36,36 @@ const nextConfig: NextConfig = {
             {
                 source: "/",
                 headers: [
-                    { key: "Cache-Control", value: "public, s-maxage=3600, stale-while-revalidate=7200" },
-                    { key: "CDN-Cache-Control", value: "public, max-age=3600, stale-while-revalidate=7200" },
-                    { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=3600, stale-while-revalidate=7200" },
+                    {
+                        key: "Cache-Control",
+                        value: "public, s-maxage=3600, stale-while-revalidate=7200",
+                    },
+                    {
+                        key: "CDN-Cache-Control",
+                        value: "public, max-age=3600, stale-while-revalidate=7200",
+                    },
+                    {
+                        key: "Cloudflare-CDN-Cache-Control",
+                        value: "public, max-age=3600, stale-while-revalidate=7200",
+                    },
                 ],
             },
             // Search / Favorites / History — static shells, cache 24h
             {
                 source: "/(search|favorites|history)",
                 headers: [
-                    { key: "Cache-Control", value: "public, s-maxage=86400, stale-while-revalidate=86400" },
-                    { key: "CDN-Cache-Control", value: "public, max-age=86400, stale-while-revalidate=86400" },
-                    { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=86400, stale-while-revalidate=86400" },
+                    {
+                        key: "Cache-Control",
+                        value: "public, s-maxage=86400, stale-while-revalidate=86400",
+                    },
+                    {
+                        key: "CDN-Cache-Control",
+                        value: "public, max-age=86400, stale-while-revalidate=86400",
+                    },
+                    {
+                        key: "Cloudflare-CDN-Cache-Control",
+                        value: "public, max-age=86400, stale-while-revalidate=86400",
+                    },
                 ],
             },
             // Watch pages — dynamic (stream URLs expire), never cache at edge
@@ -57,27 +81,70 @@ const nextConfig: NextConfig = {
             {
                 source: "/api/(home|details)",
                 headers: [
-                    { key: "Cache-Control", value: "public, s-maxage=3600, stale-while-revalidate=7200" },
-                    { key: "CDN-Cache-Control", value: "public, max-age=3600, stale-while-revalidate=7200" },
-                    { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=3600, stale-while-revalidate=7200" },
+                    {
+                        key: "Cache-Control",
+                        value: "public, s-maxage=3600, stale-while-revalidate=7200",
+                    },
+                    {
+                        key: "CDN-Cache-Control",
+                        value: "public, max-age=3600, stale-while-revalidate=7200",
+                    },
+                    {
+                        key: "Cloudflare-CDN-Cache-Control",
+                        value: "public, max-age=3600, stale-while-revalidate=7200",
+                    },
                 ],
             },
             // API: search + category — cache 30min
             {
                 source: "/api/(search|category)",
                 headers: [
-                    { key: "Cache-Control", value: "public, s-maxage=1800, stale-while-revalidate=3600" },
-                    { key: "CDN-Cache-Control", value: "public, max-age=1800, stale-while-revalidate=3600" },
-                    { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=1800, stale-while-revalidate=3600" },
+                    {
+                        key: "Cache-Control",
+                        value: "public, s-maxage=1800, stale-while-revalidate=3600",
+                    },
+                    {
+                        key: "CDN-Cache-Control",
+                        value: "public, max-age=1800, stale-while-revalidate=3600",
+                    },
+                    {
+                        key: "Cloudflare-CDN-Cache-Control",
+                        value: "public, max-age=1800, stale-while-revalidate=3600",
+                    },
                 ],
             },
             // API: stream — never cache (expiring CDN tokens)
             {
                 source: "/api/stream",
                 headers: [
-                    { key: "Cache-Control", value: "private, no-store, max-age=0" },
+                    {
+                        key: "Cache-Control",
+                        value: "private, no-store, max-age=0",
+                    },
                     { key: "CDN-Cache-Control", value: "no-store" },
                     { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
+                ],
+            },
+            // API: video proxy — short-term CF edge cache for byte-range responses.
+            // Video CDN tokens last 30-60 min; 5 min edge cache avoids redundant
+            // upstream fetches on seeks, replays, and quality switches.
+            {
+                source: "/api/video",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "public, s-maxage=300, max-age=60, stale-while-revalidate=120",
+                    },
+                    { key: "CDN-Cache-Control", value: "public, max-age=300" },
+                    {
+                        key: "Cloudflare-CDN-Cache-Control",
+                        value: "public, max-age=300",
+                    },
+                    { key: "Access-Control-Allow-Origin", value: "*" },
+                    {
+                        key: "Access-Control-Expose-Headers",
+                        value: "Content-Range, Content-Length, Accept-Ranges",
+                    },
                 ],
             },
         ];
