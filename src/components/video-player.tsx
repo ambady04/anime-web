@@ -345,14 +345,15 @@ export default function VideoPlayer({
 
         // The CDN behind activeDownload.url requires a specific Referer header
         // that browsers cannot attach to a direct <video src> request.
-        // We route through our own /api/video edge route (Cloudflare Workers)
-        // which constructs an explicit Request object to preserve the Referer
-        // header on outbound fetch. This runs at the nearest CF edge node to
-        // the user — much faster than routing through a single-region backend.
+        // Cloudflare Workers strip the Referer header on outbound fetch even with
+        // explicit Request objects, so we route through the backend proxy which can
+        // set Referer freely. The frontend edge route (/api/video) is kept as a
+        // fast-path attempt — if CF ever stops stripping Referer, it'll just work.
         proxiedUrlsRef.current.add(activeDownload.url);
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        const src = `/api/video?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}`;
+        const proxyBase = "https://api.abisolutions.online/api/video";
+        const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
             const video = videoRef.current;
