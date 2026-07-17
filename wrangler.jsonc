@@ -10,8 +10,5 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "limits": {
-    "cpu_ms": 50
-  },
   "minify": true
 }

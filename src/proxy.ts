@@ -2,17 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Edge middleware — runs on Cloudflare Workers at the network boundary.
+ * Edge proxy — runs on Cloudflare Workers at the network boundary.
  * Responsibilities:
  * 1. Set security headers on all responses
  * 2. Set CDN-Cache-Control / Cloudflare-CDN-Cache-Control so Cloudflare
  *    caches SSR pages at the edge (separate from browser Cache-Control)
  *
  * IMPORTANT: No DB access, no heavy logic — this runs on every request.
- * NOTE: File is named middleware.ts for @opennextjs/cloudflare compatibility.
- *       (proxy.ts is the Next.js 16 convention but OpenNext doesn't support it yet.)
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const response = NextResponse.next();
 
