@@ -85,8 +85,15 @@ export default function VideoPlayer({
     const transientRetryCountRef = useRef<number>(0);
 
     // Stream options
-    const downloads = streamData.downloads || [];
-    const captions = streamData.captions || [];
+    // Memoize derived arrays from streamData to stabilize references across renders
+    const downloads = useMemo(
+        () => streamData.downloads || [],
+        [streamData.downloads],
+    );
+    const captions = useMemo(
+        () => streamData.captions || [],
+        [streamData.captions],
+    );
 
     // Sort qualities from highest to lowest
     const sortedDownloads = useMemo(() => {
@@ -206,10 +213,27 @@ export default function VideoPlayer({
         moved: boolean;
     } | null>(null);
     const gestureTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Track if user is on a touch device — on touch, taps toggle controls, not play/pause
+    const isTouchDeviceRef = useRef(false);
+    // Track whether the current click originated from a touch event
+    const lastInteractionWasTouchRef = useRef(false);
+    // Double-tap detection for mobile seek (left/right sides)
+    const doubleTapRef = useRef<{
+        time: number;
+        side: "left" | "right" | "center";
+    } | null>(null);
 
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
     }, [subtitleSize]);
+
+    // Detect touch device on mount
+    useEffect(() => {
+        isTouchDeviceRef.current =
+            "ontouchstart" in window ||
+            navigator.maxTouchPoints > 0 ||
+            window.matchMedia("(pointer: coarse)").matches;
+    }, []);
 
     // Dynamic AniSkip intro/outro states
     const [introStart, setIntroStart] = useState<number | null>(null);
@@ -1157,6 +1181,10 @@ export default function VideoPlayer({
     // Double-tap left/right to seek, vertical swipe right side for volume,
     // vertical swipe left side for brightness (filter overlay)
     const handleGestureTouchStart = (e: React.TouchEvent) => {
+        // Mark that the last interaction was touch — used by handleScreenClick
+        // to distinguish touch taps from mouse clicks
+        lastInteractionWasTouchRef.current = true;
+
         // Ignore if touching controls panel, buttons, or progress bar
         const target = e.target as HTMLElement;
         if (
@@ -1275,11 +1303,58 @@ export default function VideoPlayer({
     const handleGestureTouchEnd = () => {
         if (!touchStartRef.current) return;
 
+        const { moved, side, time } = touchStartRef.current;
+
         // Clear gesture indicator after a short delay
         if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
         gestureTimeoutRef.current = setTimeout(() => {
             setGestureIndicator({ type: null, value: 0 });
         }, 600);
+
+        // Double-tap detection for mobile seek (only if tap didn't move/gesture)
+        if (!moved && (side === "left" || side === "right")) {
+            const now = Date.now();
+            if (
+                doubleTapRef.current &&
+                now - doubleTapRef.current.time < 350 &&
+                doubleTapRef.current.side === side
+            ) {
+                // Double-tap confirmed — seek
+                if (side === "left" && videoRef.current) {
+                    videoRef.current.currentTime = Math.max(
+                        0,
+                        videoRef.current.currentTime - 10,
+                    );
+                    setCurrentTime(videoRef.current.currentTime);
+                    setShowLeftSkipAnimation(true);
+                    if (leftSkipTimeoutRef.current)
+                        clearTimeout(leftSkipTimeoutRef.current);
+                    leftSkipTimeoutRef.current = setTimeout(
+                        () => setShowLeftSkipAnimation(false),
+                        800,
+                    );
+                } else if (side === "right" && videoRef.current) {
+                    videoRef.current.currentTime = Math.min(
+                        videoRef.current.duration || 0,
+                        videoRef.current.currentTime + 10,
+                    );
+                    setCurrentTime(videoRef.current.currentTime);
+                    setShowRightSkipAnimation(true);
+                    if (rightSkipTimeoutRef.current)
+                        clearTimeout(rightSkipTimeoutRef.current);
+                    rightSkipTimeoutRef.current = setTimeout(
+                        () => setShowRightSkipAnimation(false),
+                        800,
+                    );
+                }
+                doubleTapRef.current = null;
+                triggerControlsVisibility();
+            } else {
+                doubleTapRef.current = { time: now, side };
+            }
+        } else {
+            doubleTapRef.current = null;
+        }
 
         touchStartRef.current = null;
     };
@@ -1298,6 +1373,8 @@ export default function VideoPlayer({
     };
 
     // Handle single clicks on the screen
+    // Desktop: click toggles play/pause
+    // Mobile/Touch: tap toggles controls visibility (play/pause via center button only)
     const handleScreenClick = (e: React.MouseEvent) => {
         const clickTarget = e.target as HTMLElement;
         if (
@@ -1313,6 +1390,24 @@ export default function VideoPlayer({
 
         e.stopPropagation();
         e.preventDefault();
+
+        // On touch devices: tap shows/hides controls instead of play/pause
+        if (lastInteractionWasTouchRef.current || isTouchDeviceRef.current) {
+            lastInteractionWasTouchRef.current = false;
+            if (showControls) {
+                setShowControls(false);
+                setShowQualityMenu(false);
+                setShowSpeedMenu(false);
+                setShowAudioMenu(false);
+                setShowSubtitleMenu(false);
+                setShowRatioMenu(false);
+            } else {
+                triggerControlsVisibility();
+            }
+            return;
+        }
+
+        // Desktop: click toggles play/pause
         togglePlay();
     };
 
@@ -1487,8 +1582,10 @@ export default function VideoPlayer({
             clearTimeout(controlsTimeoutRef.current);
         }
 
-        // Hide controls after 1.2 seconds of inactivity while playing
+        // Hide controls after inactivity while playing
+        // Touch devices get more time (3.5s) since interactions are slower
         if (isPlaying) {
+            const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
             controlsTimeoutRef.current = setTimeout(() => {
                 setShowControls(false);
                 setShowQualityMenu(false);
@@ -1496,7 +1593,7 @@ export default function VideoPlayer({
                 setShowAudioMenu(false);
                 setShowSubtitleMenu(false);
                 setShowRatioMenu(false);
-            }, 1200);
+            }, hideDelay);
         }
     };
 
@@ -2104,9 +2201,9 @@ export default function VideoPlayer({
                 onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between p-6 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
                     <div className="text-white drop-shadow-md">
-                        <h2 className="font-extrabold text-sm sm:text-base line-clamp-1">
+                        <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
                             {title}
                         </h2>
                         {isSeries && season && episode && (
@@ -2127,27 +2224,27 @@ export default function VideoPlayer({
                     !showRatioMenu && (
                         <button
                             onClick={togglePlay}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
                         >
-                            <Play className="w-7 h-7 fill-white translate-x-0.5" />
+                            <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-white translate-x-0.5" />
                         </button>
                     )}
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
-                    className="w-full max-w-6xl mx-auto px-2 pb-2 sm:px-6 sm:pb-6"
+                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6"
                     data-controls-panel
                 >
-                    <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 md:p-5 shadow-2xl space-y-2.5 sm:space-y-4 transition-all duration-300 hover:border-white/15">
+                    <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">
                         {/* Timeline Seek Scrubber Track */}
-                        <div className="flex items-center space-x-3">
-                            <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">
+                        <div className="flex items-center space-x-2 sm:space-x-3">
+                            <span className="text-white/80 font-mono text-[10px] sm:text-xs select-none min-w-[38px] sm:min-w-[45px] text-right">
                                 {formatTime(currentTime)}
                             </span>
 
                             {/* Custom progress bar with buffer indicator */}
                             <div
-                                className="grow relative h-5 sm:h-4 flex items-center cursor-pointer group/scrub select-none"
+                                className="grow relative h-7 sm:h-5 flex items-center cursor-pointer group/scrub select-none"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (!videoRef.current || !duration) return;
@@ -2317,7 +2414,7 @@ export default function VideoPlayer({
                                 onClick={() =>
                                     setShowRemaining((prev) => !prev)
                                 }
-                                className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
+                                className="text-white/60 font-mono text-[10px] sm:text-xs select-none min-w-[38px] sm:min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
                                 title={
                                     showRemaining
                                         ? "Click to show duration"
@@ -2333,27 +2430,27 @@ export default function VideoPlayer({
                         {/* Controls Bar Row */}
                         <div className="flex items-center justify-between">
                             {/* Left Controls: Prev, Play, Next, Volume */}
-                            <div className="flex items-center space-x-2.5 sm:space-x-3">
+                            <div className="flex items-center space-x-1 sm:space-x-3">
                                 {/* Prev Episode */}
                                 {isSeries && onPrevEpisode && (
                                     <button
                                         onClick={onPrevEpisode}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                         title="Previous Episode"
                                     >
-                                        <SkipBack className="w-4 h-4 fill-white text-white" />
+                                        <SkipBack className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
                                     </button>
                                 )}
 
                                 {/* Play Pause */}
                                 <button
                                     onClick={togglePlay}
-                                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                    className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                 >
                                     {isPlaying ? (
-                                        <Pause className="w-4.5 h-4.5 fill-white" />
+                                        <Pause className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
                                     ) : (
-                                        <Play className="w-4.5 h-4.5 fill-white" />
+                                        <Play className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
                                     )}
                                 </button>
 
@@ -2361,10 +2458,10 @@ export default function VideoPlayer({
                                 {isSeries && onNextEpisode && (
                                     <button
                                         onClick={handleNextEpisodeClick}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                         title="Next Episode"
                                     >
-                                        <SkipForward className="w-4 h-4 fill-white text-white" />
+                                        <SkipForward className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
                                     </button>
                                 )}
 
@@ -2395,12 +2492,12 @@ export default function VideoPlayer({
                                 {/* Mobile-only mute button */}
                                 <button
                                     onClick={toggleMute}
-                                    className="sm:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                    className="sm:hidden p-2.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                 >
                                     {isMuted || volume === 0 ? (
-                                        <VolumeX className="w-4 h-4 text-primary" />
+                                        <VolumeX className="w-4.5 h-4.5 text-primary" />
                                     ) : (
-                                        <Volume2 className="w-4 h-4" />
+                                        <Volume2 className="w-4.5 h-4.5" />
                                     )}
                                 </button>
                             </div>
@@ -2855,7 +2952,7 @@ export default function VideoPlayer({
                                     )}
                                 </div>
                                 {/* ── MOBILE-ONLY: compact icon controls ── */}
-                                <div className="sm:hidden flex items-center space-x-0.5">
+                                <div className="sm:hidden flex items-center space-x-0">
                                     {/* Subtitle (mobile icon) */}
                                     {captions.length > 0 && (
                                         <div className="relative">
@@ -2869,7 +2966,7 @@ export default function VideoPlayer({
                                                     setShowAudioMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
                                                     showSubtitleMenu ||
                                                     showSubtitles
                                                         ? "text-primary bg-primary/10"
@@ -2877,7 +2974,7 @@ export default function VideoPlayer({
                                                 }`}
                                                 title="Subtitles"
                                             >
-                                                <Subtitles className="w-4 h-4" />
+                                                <Subtitles className="w-4.5 h-4.5" />
                                             </button>
                                             {showSubtitleMenu && (
                                                 <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
@@ -2970,14 +3067,14 @@ export default function VideoPlayer({
                                                     setShowSubtitleMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
                                                     showAudioMenu
                                                         ? "text-primary bg-primary/10"
                                                         : "text-white/60 hover:text-white hover:bg-white/10"
                                                 }`}
                                                 title="Audio Track"
                                             >
-                                                <Headphones className="w-4 h-4" />
+                                                <Headphones className="w-4.5 h-4.5" />
                                             </button>
                                             {showAudioMenu && (
                                                 <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
@@ -3029,7 +3126,7 @@ export default function VideoPlayer({
                                                 setShowAudioMenu(false);
                                                 setShowSubtitleMenu(false);
                                             }}
-                                            className={`p-1.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center ${
+                                            className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
                                                 showRatioMenu
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/60 hover:text-white hover:bg-white/10"
@@ -3043,7 +3140,7 @@ export default function VideoPlayer({
                                                 strokeWidth="2"
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
-                                                className="w-4 h-4"
+                                                className="w-4.5 h-4.5"
                                             >
                                                 <rect
                                                     x="3"
@@ -3192,7 +3289,7 @@ export default function VideoPlayer({
                                 {/* Fullscreen (always visible) */}
                                 <button
                                     onClick={toggleFullscreen}
-                                    className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
+                                    className="p-2.5 sm:p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                     title={
                                         isFullscreen
                                             ? "Exit Fullscreen"
@@ -3200,9 +3297,9 @@ export default function VideoPlayer({
                                     }
                                 >
                                     {isFullscreen ? (
-                                        <Minimize className="w-4.5 h-4.5" />
+                                        <Minimize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
                                     ) : (
-                                        <Maximize className="w-4.5 h-4.5" />
+                                        <Maximize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
                                     )}
                                 </button>
                             </div>

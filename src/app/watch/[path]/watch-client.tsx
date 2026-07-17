@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     Heart,
@@ -116,7 +116,10 @@ export default function WatchClient({
         };
     }, [showSeasonDropdown]);
 
-    const { subject, stars, resource, related, metadata } = details;
+    const { subject, stars, resource, related, metadata } = useMemo(
+        () => details,
+        [details],
+    );
 
     useEffect(() => {
         setIsPageLoading(false);
@@ -204,8 +207,9 @@ export default function WatchClient({
     }, [isSeries, subject.detailPath, path, router]);
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
-    const currentSeasonData = resource?.seasons?.find(
-        (s) => s.se === selectedSeason,
+    const currentSeasonData = useMemo(
+        () => resource?.seasons?.find((s) => s.se === selectedSeason),
+        [resource?.seasons, selectedSeason],
     );
     const totalEpisodes = currentSeasonData?.maxEp || 0;
 
@@ -312,7 +316,10 @@ export default function WatchClient({
         );
     };
 
-    const hasDubs = subject.dubs && subject.dubs.length > 0;
+    const hasDubs = useMemo(
+        () => subject.dubs && subject.dubs.length > 0,
+        [subject.dubs],
+    );
 
     // Track which episodes have been watched (loaded from localStorage per season)
     const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(
@@ -320,6 +327,19 @@ export default function WatchClient({
     );
     const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
 
+    // Memoized lookup map for episode progress — avoids O(n) .find() per episode in the grid
+    const episodeProgressMap = useMemo(() => {
+        const map = new Map<string, HistoryItem>();
+        for (const h of watchHistory) {
+            if (
+                h.detailPath === subject.detailPath &&
+                h.season === selectedSeason
+            ) {
+                map.set(`${h.season}-${h.episode}`, h);
+            }
+        }
+        return map;
+    }, [watchHistory, subject.detailPath, selectedSeason]);
     useEffect(() => {
         // Load local state synchronously first for instant UI response
         setWatchedEpisodes(
@@ -948,14 +968,10 @@ export default function WatchClient({
                                             const isFiller =
                                                 fillerEpisodes.has(epNum);
 
-                                            const epHistory = watchHistory.find(
-                                                (h) =>
-                                                    h.detailPath ===
-                                                        subject.detailPath &&
-                                                    h.season ===
-                                                        selectedSeason &&
-                                                    h.episode === epNum,
-                                            );
+                                            const epHistory =
+                                                episodeProgressMap.get(
+                                                    `${selectedSeason}-${epNum}`,
+                                                );
                                             const hasProgress =
                                                 !isActive &&
                                                 epHistory &&
