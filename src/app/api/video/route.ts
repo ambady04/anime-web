@@ -164,18 +164,14 @@ export async function GET(req: NextRequest) {
                     "Access-Control-Expose-Headers",
                     "Content-Range, Content-Length, Accept-Ranges, Content-Type",
                 );
-                // Allow CF edge to cache video bytes for 5 minutes — CDN tokens
-                // typically last 30-60 min, so short-term caching is safe and
-                // eliminates redundant upstream fetches on seeks/replays.
+                // Edge route currently unused in production (CDN blocks CF IPs).
+                // Keep no-store to avoid caching error responses.
                 resHeaders.set(
                     "Cache-Control",
-                    "public, s-maxage=300, max-age=60, stale-while-revalidate=120",
+                    "no-store, no-cache, must-revalidate, max-age=0",
                 );
-                resHeaders.set("CDN-Cache-Control", "public, max-age=300");
-                resHeaders.set(
-                    "Cloudflare-CDN-Cache-Control",
-                    "public, max-age=300",
-                );
+                resHeaders.set("CDN-Cache-Control", "no-store");
+                resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
 
                 return new NextResponse(upstream.body, {
                     status: upstream.status,

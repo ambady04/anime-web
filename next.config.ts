@@ -125,28 +125,6 @@ const nextConfig: NextConfig = {
                     { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
                 ],
             },
-            // API: video proxy — short-term CF edge cache for byte-range responses.
-            // Video CDN tokens last 30-60 min; 5 min edge cache avoids redundant
-            // upstream fetches on seeks, replays, and quality switches.
-            {
-                source: "/api/video",
-                headers: [
-                    {
-                        key: "Cache-Control",
-                        value: "public, s-maxage=300, max-age=60, stale-while-revalidate=120",
-                    },
-                    { key: "CDN-Cache-Control", value: "public, max-age=300" },
-                    {
-                        key: "Cloudflare-CDN-Cache-Control",
-                        value: "public, max-age=300",
-                    },
-                    { key: "Access-Control-Allow-Origin", value: "*" },
-                    {
-                        key: "Access-Control-Expose-Headers",
-                        value: "Content-Range, Content-Length, Accept-Ranges",
-                    },
-                ],
-            },
         ];
     },
 };
