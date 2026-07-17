@@ -617,7 +617,6 @@ export default function VideoPlayer({
         ) {
             transientRetryCountRef.current += 1;
             const restoreTime = videoRef.current.currentTime;
-            const wasPlaying = isPlaying;
 
             console.warn(
                 "Transient seek/network error detected. Attempting recovery...",
@@ -625,20 +624,10 @@ export default function VideoPlayer({
             setAutoRetryLabel("Recovering playback...");
             setIsLoading(true);
 
-            videoRef.current.load();
-
-            const onCanPlay = () => {
-                if (videoRef.current) {
-                    videoRef.current.currentTime = restoreTime;
-                    if (wasPlaying) {
-                        videoRef.current.play().catch(() => {});
-                    }
-                    setIsLoading(false);
-                    setAutoRetryLabel("");
-                    videoRef.current.removeEventListener("canplay", onCanPlay);
-                }
-            };
-            videoRef.current.addEventListener("canplay", onCanPlay);
+            setInitialSeekTime(restoreTime);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            setRetryTrigger((prev) => prev + 1);
             return;
         }
 
@@ -870,9 +859,10 @@ export default function VideoPlayer({
             setIsAutoQuality(false);
         }
 
-        // Save current play time and playback state to refs to be restored on load
-        seekOnLoadRef.current = videoRef.current.currentTime;
-        playOnLoadRef.current = !videoRef.current.paused;
+        // Save current position and reset seek flags so initial-seek effect restores it after new source loads
+        setInitialSeekTime(videoRef.current.currentTime);
+        setIsInitialSeekDone(false);
+        setIsVideoLoaded(false);
 
         setIsLoading(true);
         setActiveDownload(quality);
@@ -1762,6 +1752,7 @@ export default function VideoPlayer({
                     onPlaying={() => {
                         setIsLoading(false);
                         setAutoRetryLabel("");
+                        transientRetryCountRef.current = 0;
                     }}
                     onError={handlePlayerError}
                     autoPlay
