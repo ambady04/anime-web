@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { headers as getRequestHeaders } from "next/headers";
 
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
