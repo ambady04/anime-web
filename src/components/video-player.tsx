@@ -333,6 +333,8 @@ export default function VideoPlayer({
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     // Prevents controls from auto-hiding on every buffer/seek — only once on first real playback
     const hasInitiallyLoadedRef = useRef(false);
+    // Auto quality upgrade: after initial low-quality playback starts, schedule an upgrade to HD
+    const autoUpgradeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // ─── Source loading effect ───
     // Mirrors native VideoPlayer.js: just loads the source and stops.
@@ -529,6 +531,10 @@ export default function VideoPlayer({
         preservedTimeRef.current = 0;
         preservedPlayingRef.current = false;
         hasInitiallyLoadedRef.current = false;
+        if (autoUpgradeTimerRef.current) {
+            clearTimeout(autoUpgradeTimerRef.current);
+            autoUpgradeTimerRef.current = null;
+        }
         setIsVideoLoaded(false);
         setIsInitialSeekDone(false);
         setIsAutoQuality(true);
@@ -568,10 +574,11 @@ export default function VideoPlayer({
         setInitialSeekTime(resumeTime);
 
         if (sortedDownloads.length > 0) {
-            const defaultQuality =
-                sortedDownloads.find((d) => d.resolution === 720) ||
-                sortedDownloads.find((d) => d.resolution === 1080) ||
-                sortedDownloads[0];
+            // Start with the LOWEST available quality for fastest playback start.
+            // The proxy adds latency, so getting first-frame quickly at 480p is
+            // better UX than buffering forever at 720/1080p. The auto-upgrade
+            // effect will switch to higher quality once playback is stable.
+            const defaultQuality = sortedDownloads[sortedDownloads.length - 1]; // lowest resolution
             setActiveDownload(defaultQuality);
             setIsLoading(true);
             setPlayerError(false);
@@ -824,9 +831,7 @@ export default function VideoPlayer({
                         ? freshSorted.find(
                               (d) => d.resolution === currentResolution,
                           ) || freshSorted[0]
-                        : freshSorted.find((d) => d.resolution === 720) ||
-                          freshSorted.find((d) => d.resolution === 1080) ||
-                          freshSorted[0];
+                        : freshSorted[freshSorted.length - 1]; // Start lowest for fast first-frame
 
                 setActiveDownload(null);
                 setTimeout(() => setActiveDownload(pick), 10);
@@ -1897,6 +1902,42 @@ export default function VideoPlayer({
                         setIsLoading(false);
                         setAutoRetryLabel("");
                         transientRetryCountRef.current = 0;
+
+                        // Auto-upgrade quality: if currently playing lowest quality
+                        // and isAutoQuality is on, schedule upgrade to HD after 3s
+                        // of stable playback for a smoother viewing experience.
+                        if (
+                            isAutoQuality &&
+                            activeDownload &&
+                            sortedDownloads.length > 1 &&
+                            !autoUpgradeTimerRef.current
+                        ) {
+                            const currentRes = activeDownload.resolution;
+                            const bestRes = sortedDownloads[0].resolution;
+                            if (currentRes < bestRes) {
+                                autoUpgradeTimerRef.current = setTimeout(() => {
+                                    autoUpgradeTimerRef.current = null;
+                                    // Only upgrade if still on auto and playing
+                                    if (
+                                        videoRef.current &&
+                                        !videoRef.current.paused &&
+                                        isAutoQuality
+                                    ) {
+                                        const target =
+                                            sortedDownloads.find(
+                                                (d) => d.resolution === 720,
+                                            ) ||
+                                            sortedDownloads.find(
+                                                (d) => d.resolution === 1080,
+                                            ) ||
+                                            sortedDownloads[0];
+                                        if (target.resolution > currentRes) {
+                                            handleQualityChange(target, true);
+                                        }
+                                    }
+                                }, 3000);
+                            }
+                        }
                     }}
                     onError={handlePlayerError}
                     autoPlay
