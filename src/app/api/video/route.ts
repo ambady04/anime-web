@@ -84,23 +84,18 @@ export async function GET(req: NextRequest) {
                     headers.set("Range", range);
                 }
 
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-                // Construct an explicit Request object with the target URL, headers, and signal.
+                // Construct an explicit Request object with the target URL and headers.
                 // This ensures Cloudflare Workers preserves the Referer header on the
                 // outbound fetch (plain headers object can get stripped by the runtime).
                 const upstreamReq = new Request(targetUrl, {
                     method: "GET",
                     headers,
                     redirect: "follow",
-                    signal: controller.signal,
                 });
 
                 const upstream = await fetch(upstreamReq);
-
-                clearTimeout(timeoutId);
                 lastStatus = upstream.status;
+
 
                 if ([403, 404, 410].includes(upstream.status)) {
                     continue;
