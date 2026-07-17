@@ -391,9 +391,9 @@ export default function VideoPlayer({
                         const hls = new Hls({
                             enableWorker: true,
                             lowLatencyMode: false,
-                            maxBufferLength: 60,
-                            maxMaxBufferLength: 120,
-                            maxBufferSize: 60 * 1000 * 1000,
+                            maxBufferLength: 120,
+                            maxMaxBufferLength: 300,
+                            maxBufferSize: 120 * 1000 * 1000,
                             startLevel: -1,
                             abrEwmaFastLive: 3,
                             abrEwmaSlowLive: 9,
