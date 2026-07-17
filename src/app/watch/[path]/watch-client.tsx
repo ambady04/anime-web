@@ -662,12 +662,12 @@ export default function WatchClient({
                                                         b.resolution -
                                                         a.resolution,
                                                 )
-                                                .map((link) => {
+                                                .map((link, idx) => {
                                                     const folder = `${cleanFilename(subject.title)}_Season_${activeSeason}`;
                                                     const filename = `${folder}/${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
                                                     return (
                                                         <button
-                                                            key={link.id}
+                                                            key={`${link.id || "download"}-${idx}`}
                                                             onClick={() => {
                                                                 setShowDownloadMenu(
                                                                     false,

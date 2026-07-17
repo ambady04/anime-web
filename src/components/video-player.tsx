@@ -651,17 +651,16 @@ export default function VideoPlayer({
         // Mark this quality as failed (both direct and proxy failed)
         failedUrlsRef.current.add(activeDownload.url);
 
-        // Step 1: Try next available quality
-        const nextQuality = sortedDownloads.find(
-            (d) => !failedUrlsRef.current.has(d.url),
-        );
+        // Step 1: Try next available quality (only if in Auto Quality mode)
+        const nextQuality = isAutoQuality
+            ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
+            : undefined;
         if (nextQuality) {
             setAutoRetryLabel(
                 `Auto-switching to ${nextQuality.resolution}p...`,
             );
             setIsLoading(true);
             // Save current position so initial-seek effect restores it after new source loads
-            // Mirrors native changeQuality(): setInitialSeekTime(currentTimeRef.current)
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
@@ -701,14 +700,17 @@ export default function VideoPlayer({
                 // Notify parent if callback provided
                 if (onStreamRefresh) onStreamRefresh(freshStream);
 
-                // Pick best available quality from fresh data
+                // Pick best available quality from fresh data (respecting user's choice if manual)
                 const freshSorted = [...freshStream.downloads].sort(
                     (a, b) => b.resolution - a.resolution,
                 );
+                const currentResolution = activeDownload?.resolution;
                 const pick =
-                    freshSorted.find((d) => d.resolution === 720) ||
-                    freshSorted.find((d) => d.resolution === 1080) ||
-                    freshSorted[0];
+                    (!isAutoQuality && currentResolution)
+                        ? (freshSorted.find((d) => d.resolution === currentResolution) || freshSorted[0])
+                        : (freshSorted.find((d) => d.resolution === 720) ||
+                           freshSorted.find((d) => d.resolution === 1080) ||
+                           freshSorted[0]);
 
                 setActiveDownload(null);
                 setTimeout(() => setActiveDownload(pick), 10);
@@ -2522,10 +2524,10 @@ export default function VideoPlayer({
                                                             Auto
                                                         </button>
                                                         {sortedDownloads.map(
-                                                            (link) => (
+                                                            (link, idx) => (
                                                                 <button
                                                                     key={
-                                                                        link.id
+                                                                        `${link.id || "quality"}-${idx}`
                                                                     }
                                                                     onClick={() => {
                                                                         handleQualityChange(
@@ -3014,10 +3016,10 @@ export default function VideoPlayer({
                                                             Auto
                                                         </button>
                                                         {sortedDownloads.map(
-                                                            (link) => (
+                                                            (link, idx) => (
                                                                 <button
                                                                     key={
-                                                                        link.id
+                                                                        `${link.id || "quality"}-${idx}`
                                                                     }
                                                                     onClick={() => {
                                                                         handleQualityChange(

@@ -723,7 +723,7 @@ export default function DownloadModal({
                   ) : (
                     [...singleStream.downloads]
                       .sort((a, b) => b.resolution - a.resolution)
-                      .map((link) => {
+                      .map((link, idx) => {
                         const copyId = `single-${link.id}`;
                         const activeTask = tasks.find((t) =>
                           t.id.startsWith(link.url),
@@ -734,7 +734,7 @@ export default function DownloadModal({
 
                         return (
                           <div
-                            key={link.id}
+                            key={`${link.id || "download"}-${idx}`}
                             className="flex items-center justify-between p-3.5 bg-zinc-900/60 border border-white/5 hover:border-white/15 rounded-2xl transition-all duration-300 group"
                           >
                             <div className="flex items-center space-x-3.5">

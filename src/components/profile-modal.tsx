@@ -1160,11 +1160,10 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                                     cloudWatchlist.map(
                                                                         (
                                                                             item,
+                                                                            idx,
                                                                         ) => (
                                                                             <div
-                                                                                key={
-                                                                                    item.detailPath
-                                                                                }
+                                                                                key={`${item.detailPath}-${idx}`}
                                                                                 onClick={() =>
                                                                                     toggleItemSelection(
                                                                                         item.detailPath,
@@ -1220,11 +1219,9 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                                 </div>
                                                             ) : (
                                                                 cloudHistory.map(
-                                                                    (item) => (
+                                                                    (item, idx) => (
                                                                         <div
-                                                                            key={
-                                                                                item.detailPath
-                                                                            }
+                                                                            key={`${item.detailPath}-${idx}`}
                                                                             onClick={() =>
                                                                                 toggleItemSelection(
                                                                                     item.detailPath,
