@@ -130,41 +130,50 @@ export default function VideoPlayer({
     // ─── Native-style 3-flag playback pattern ───
     // Mirrors VideoPlayer.js: isVideoLoaded + initialSeekTime + isInitialSeekDone
     const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-    const [initialSeekTime, setInitialSeekTime] = useState<number | null>(() => {
-        if (typeof window === "undefined") return null;
-        const savedHistory = localStore.getHistory();
-        let historyItem: (typeof savedHistory)[number] | undefined;
+    const [initialSeekTime, setInitialSeekTime] = useState<number | null>(
+        () => {
+            if (typeof window === "undefined") return null;
+            const savedHistory = localStore.getHistory();
+            let historyItem: (typeof savedHistory)[number] | undefined;
 
-        if (isSeries && season && episode) {
-            historyItem = savedHistory.find(
-                (h) =>
-                    h.detailPath === (seriesDetailPath || detailPath) &&
-                    h.season === season &&
-                    h.episode === episode,
-            );
-        } else {
-            historyItem = savedHistory.find(
-                (h) => h.detailPath === (seriesDetailPath || detailPath),
-            );
-        }
-        if (!historyItem) {
-            historyItem = savedHistory.find(
-                (h) =>
-                    h.title === title &&
-                    (!isSeries ||
-                        (h.season === season && h.episode === episode)),
-            );
-        }
-        const resumeTime =
-            historyItem &&
-            historyItem.progress < 95 &&
-            historyItem.currentTime > 5
-                ? historyItem.currentTime
-                : 0;
-        return resumeTime;
-    });
+            if (isSeries && season && episode) {
+                historyItem = savedHistory.find(
+                    (h) =>
+                        h.detailPath === (seriesDetailPath || detailPath) &&
+                        h.season === season &&
+                        h.episode === episode,
+                );
+            } else {
+                historyItem = savedHistory.find(
+                    (h) => h.detailPath === (seriesDetailPath || detailPath),
+                );
+            }
+            if (!historyItem) {
+                historyItem = savedHistory.find(
+                    (h) =>
+                        h.title === title &&
+                        (!isSeries ||
+                            (h.season === season && h.episode === episode)),
+                );
+            }
+            const resumeTime =
+                historyItem &&
+                historyItem.progress < 95 &&
+                historyItem.currentTime > 5
+                    ? historyItem.currentTime
+                    : 0;
+            return resumeTime;
+        },
+    );
     const [isInitialSeekDone, setIsInitialSeekDone] = useState(false);
     const [retryTrigger, setRetryTrigger] = useState(0);
+    const [isHistoryChecked, setIsHistoryChecked] = useState(false);
+    const [prevPath, setPrevPath] = useState(detailPath);
+
+    if (detailPath !== prevPath) {
+        setPrevPath(detailPath);
+        setIsHistoryChecked(false);
+    }
 
     // Premium states
     const [showLeftSkipAnimation, setShowLeftSkipAnimation] = useState(false);
@@ -318,6 +327,8 @@ export default function VideoPlayer({
     const preservedPlayingRef = useRef<boolean>(false);
     // Track how many times we've refreshed streams to avoid infinite loops
     const refreshCountRef = useRef(0);
+    // Guard flag: true while we're switching source (proxy/quality). Prevents duplicate onError handling.
+    const isRecoveringRef = useRef(false);
     // Track which episodes have already been marked as watched (prevent duplicate syncs)
     const markedEpisodesRef = useRef<Set<string>>(new Set());
     // Prevents controls from auto-hiding on every buffer/seek — only once on first real playback
@@ -328,20 +339,25 @@ export default function VideoPlayer({
     // Seek + play are handled by the initial-seek effect once canplay fires.
     // If direct play fails, the proxy fallback URL will be used on retry.
     useEffect(() => {
-        if (!activeDownload) return;
+        if (!isHistoryChecked || !activeDownload) return;
 
-        const useProxy = proxiedUrlsRef.current.has(activeDownload.url);
+        // The CDN behind activeDownload.url requires a specific Referer header
+        // that browsers cannot attach to a direct <video src> request (and that
+        // our own page origin would never satisfy). Attempting a direct load
+        // first is a guaranteed failure for this backend's CDN, so we always
+        // route through our own /api/video proxy, which sets the Referer
+        // server-side. This avoids a wasted failing request + error on every load.
+        proxiedUrlsRef.current.add(activeDownload.url);
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        const src = useProxy
-            ? `/api/video?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`
-            : activeDownload.url;
+        const src = `/api/video?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
             const video = videoRef.current;
             if (!video) return;
 
             isInitialLoadRef.current = true;
+            isRecoveringRef.current = false;
             setIsVideoLoaded(false);
 
             if (hlsRef.current) {
@@ -377,7 +393,10 @@ export default function VideoPlayer({
                             manifestLoadingMaxRetry: 3,
                             levelLoadingMaxRetry: 4,
                             nudgeMaxRetry: 5,
-                            startPosition: (initialSeekTime && initialSeekTime > 0) ? initialSeekTime : -1,
+                            startPosition:
+                                initialSeekTime && initialSeekTime > 0
+                                    ? initialSeekTime
+                                    : -1,
                         });
                         hlsRef.current = hls;
                         hls.attachMedia(video);
@@ -424,7 +443,7 @@ export default function VideoPlayer({
             }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeDownload, retryTrigger]);
+    }, [activeDownload, retryTrigger, isHistoryChecked]);
 
     // ─── Initial seek + play effect ───
     // Mirrors native VideoPlayer.js lines 1046-1061.
@@ -467,6 +486,7 @@ export default function VideoPlayer({
         proxiedUrlsRef.current = new Set();
         setRetryTrigger(0);
         refreshCountRef.current = 0;
+        isRecoveringRef.current = false;
         transientRetryCountRef.current = 0;
         preservedTimeRef.current = 0;
         preservedPlayingRef.current = false;
@@ -564,6 +584,7 @@ export default function VideoPlayer({
 
         setIsPlaying(false);
         setShowAudioMenu(false);
+        setIsHistoryChecked(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [streamData]);
 
@@ -575,12 +596,10 @@ export default function VideoPlayer({
         }
     }, [shouldPause]);
 
-    // Set referrerPolicy directly on the video DOM element to bypass TypeScript's type check limit
-    useEffect(() => {
-        if (videoRef.current) {
-            videoRef.current.setAttribute("referrerpolicy", "no-referrer");
-        }
-    }, [activeDownload]);
+    // Note: referrerPolicy is no longer forced here. All playback now routes
+    // through /api/video (same-origin proxy), which is the only path that can
+    // satisfy the CDN's Referer requirement — the browser's own Referer to our
+    // proxy endpoint doesn't matter.
 
     // Check for Picture-in-Picture support
     useEffect(() => {
@@ -654,7 +673,32 @@ export default function VideoPlayer({
         setAutoRetryLabel("");
     };
 
-    const handlePlayerError = (e: any) => {
+    const handlePlayerError = (e: unknown) => {
+        // Extract a useful error message from whatever was passed:
+        // - Error objects have .message
+        // - React SyntheticEvents / native Events: check videoRef.current.error (MediaError)
+        // - Fallback: stringify to avoid [object Object]
+        let errorMsg: string;
+        if (e instanceof Error) {
+            errorMsg = e.message;
+        } else if (videoRef.current?.error) {
+            errorMsg = `MediaError code ${videoRef.current.error.code}: ${videoRef.current.error.message || "unknown"}`;
+        } else if (typeof e === "object" && e !== null) {
+            try {
+                errorMsg = JSON.stringify(e).slice(0, 200);
+            } catch {
+                errorMsg = "Unknown playback error";
+            }
+        } else {
+            errorMsg = String(e);
+        }
+
+        // GUARD: If we're already in recovery mode (switching to proxy/next quality),
+        // ignore duplicate onError events from the dying previous source.
+        if (isRecoveringRef.current) {
+            return;
+        }
+
         if (!activeDownload) {
             setPlayerError(true);
             setIsLoading(false);
@@ -667,14 +711,16 @@ export default function VideoPlayer({
         if (
             videoRef.current &&
             videoRef.current.currentTime > 2 &&
-            transientRetryCountRef.current < 2
+            transientRetryCountRef.current < 3
         ) {
             transientRetryCountRef.current += 1;
             const restoreTime = videoRef.current.currentTime;
 
             console.warn(
-                "Transient seek/network error detected. Attempting recovery...",
+                `Transient playback error (attempt ${transientRetryCountRef.current}/3):`,
+                errorMsg,
             );
+            isRecoveringRef.current = true;
             setAutoRetryLabel("Recovering playback...");
             setIsLoading(true);
 
@@ -685,24 +731,9 @@ export default function VideoPlayer({
             return;
         }
 
-        // Try proxy fallback before marking the entire quality as failed
-        const isProxied = proxiedUrlsRef.current.has(activeDownload.url);
-        if (!isProxied) {
-            console.warn(
-                "Direct CDN link failed. Switching to proxy fallback...",
-            );
-            setAutoRetryLabel("Switching to secure playback mirror...");
-            proxiedUrlsRef.current.add(activeDownload.url);
-
-            setInitialSeekTime(videoRef.current?.currentTime || 0);
-            setIsInitialSeekDone(false);
-            setIsVideoLoaded(false);
-            setIsLoading(true);
-            setRetryTrigger((prev) => prev + 1);
-            return;
-        }
-
-        // Mark this quality as failed (both direct and proxy failed)
+        // All playback goes through the /api/video proxy (see source-loading
+        // effect), so a real onError here means the proxy itself failed for
+        // this quality — not a "direct CDN" failure. Mark it failed and move on.
         failedUrlsRef.current.add(activeDownload.url);
 
         // Step 1: Try next available quality (only if in Auto Quality mode)
@@ -727,7 +758,10 @@ export default function VideoPlayer({
             refreshStreamData();
         } else {
             // Step 3: Everything exhausted — show error screen
-            console.error("Video player: all stream qualities failed", e);
+            console.error(
+                "Video player: all stream qualities failed:",
+                errorMsg,
+            );
             setPlayerError(true);
             setIsLoading(false);
             setAutoRetryLabel("");
@@ -760,11 +794,13 @@ export default function VideoPlayer({
                 );
                 const currentResolution = activeDownload?.resolution;
                 const pick =
-                    (!isAutoQuality && currentResolution)
-                        ? (freshSorted.find((d) => d.resolution === currentResolution) || freshSorted[0])
-                        : (freshSorted.find((d) => d.resolution === 720) ||
-                           freshSorted.find((d) => d.resolution === 1080) ||
-                           freshSorted[0]);
+                    !isAutoQuality && currentResolution
+                        ? freshSorted.find(
+                              (d) => d.resolution === currentResolution,
+                          ) || freshSorted[0]
+                        : freshSorted.find((d) => d.resolution === 720) ||
+                          freshSorted.find((d) => d.resolution === 1080) ||
+                          freshSorted[0];
 
                 setActiveDownload(null);
                 setTimeout(() => setActiveDownload(pick), 10);
@@ -799,7 +835,7 @@ export default function VideoPlayer({
                 if (!videoRef.current || videoRef.current.readyState < 3) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 }
-            }, 12_000);
+            }, 25_000);
         }
 
         return () => {
@@ -1804,6 +1840,7 @@ export default function VideoPlayer({
                         setIsVideoLoaded(true);
                         setIsLoading(false);
                         isInitialLoadRef.current = false;
+                        isRecoveringRef.current = false;
                     }}
                     onPlaying={() => {
                         setIsLoading(false);
@@ -2580,9 +2617,7 @@ export default function VideoPlayer({
                                                         {sortedDownloads.map(
                                                             (link, idx) => (
                                                                 <button
-                                                                    key={
-                                                                        `${link.id || "quality"}-${idx}`
-                                                                    }
+                                                                    key={`${link.id || "quality"}-${idx}`}
                                                                     onClick={() => {
                                                                         handleQualityChange(
                                                                             link,
@@ -3072,9 +3107,7 @@ export default function VideoPlayer({
                                                         {sortedDownloads.map(
                                                             (link, idx) => (
                                                                 <button
-                                                                    key={
-                                                                        `${link.id || "quality"}-${idx}`
-                                                                    }
+                                                                    key={`${link.id || "quality"}-${idx}`}
                                                                     onClick={() => {
                                                                         handleQualityChange(
                                                                             link,

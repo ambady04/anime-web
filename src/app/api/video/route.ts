@@ -110,15 +110,46 @@ export async function GET(req: NextRequest) {
             }
 
             resHeaders.set("Access-Control-Allow-Origin", "*");
-            // Short cache — CDN tokens expire, so don't cache too aggressively
+            // Disable CDN and browser caching. Range requests must never be cached
+            // because they share the same URL but request different byte ranges.
             resHeaders.set(
                 "Cache-Control",
-                "public, max-age=1800, s-maxage=1800",
+                "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
             );
+            resHeaders.set("CDN-Cache-Control", "no-store");
+            resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
             // Prevent Nginx/proxy buffering so bytes flow directly to the browser
             resHeaders.set("X-Accel-Buffering", "no");
 
-            return new Response(upstream.body as ReadableStream, {
+            // Pipe the upstream body through a fresh ReadableStream to avoid
+            // the Node.js 25 / Next.js 16 TransformStream internal bug:
+            // "controller[kState].transformAlgorithm is not a function"
+            // This happens when passing fetch's ReadableStream directly as a Response body.
+            const body = upstream.body;
+            let responseBody: ReadableStream<Uint8Array> | null = null;
+
+            if (body) {
+                const reader = body.getReader();
+                responseBody = new ReadableStream<Uint8Array>({
+                    async pull(ctrl) {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                ctrl.close();
+                            } else {
+                                ctrl.enqueue(value);
+                            }
+                        } catch (err) {
+                            ctrl.error(err);
+                        }
+                    },
+                    cancel() {
+                        reader.cancel().catch(() => {});
+                    },
+                });
+            }
+
+            return new Response(responseBody, {
                 status: upstream.status,
                 headers: resHeaders,
             });
