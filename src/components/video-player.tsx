@@ -228,6 +228,10 @@ export default function VideoPlayer({
     // Mirror of showControls so timers/callbacks can read the latest value
     // without being re-created on every visibility change.
     const showControlsRef = useRef(true);
+    // Live mirrors used by the auto-hide timer so it never hides the controls
+    // while the video is paused or the user is actively scrubbing the seek bar.
+    const isPlayingRef = useRef(false);
+    const isScrubbingRef = useRef(false);
 
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
@@ -1216,6 +1220,10 @@ export default function VideoPlayer({
             target.closest("[data-controls-panel]") ||
             target.closest("[data-progress-bar]")
         ) {
+            // The user is interacting with the controls (button, seek bar, menu).
+            // Keep the controls visible and restart the inactivity timer so they
+            // don't disappear mid-interaction.
+            triggerControlsVisibility();
             return;
         }
 
@@ -1638,10 +1646,21 @@ export default function VideoPlayer({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload]);
 
-    // Keep the ref in sync so tap/timer callbacks read the latest visibility.
+    // Keep the refs in sync so tap/timer callbacks read the latest values.
     useEffect(() => {
         showControlsRef.current = showControls;
     }, [showControls]);
+    useEffect(() => {
+        isPlayingRef.current = isPlaying;
+    }, [isPlaying]);
+    useEffect(() => {
+        isScrubbingRef.current = isScrubbing;
+    }, [isScrubbing]);
+
+    // How long the controls stay on screen with no interaction.
+    // Touch devices get a longer window (interactions are slower on mobile).
+    const CONTROLS_HIDE_DELAY_TOUCH = 4000;
+    const CONTROLS_HIDE_DELAY_MOUSE = 2500;
 
     // Hide controls and close every open menu. Centralised so tap, timer and
     // keyboard paths all behave identically.
@@ -1659,23 +1678,34 @@ export default function VideoPlayer({
         setShowRatioMenu(false);
     }, []);
 
-    // Controls Visibility Timers
-    const triggerControlsVisibility = () => {
-        showControlsRef.current = true;
-        setShowControls(true);
+    // Schedule the auto-hide. Never hides while paused or while the user is
+    // actively scrubbing — in those cases it simply re-arms itself so the
+    // controls stay put until the user is genuinely idle.
+    const scheduleControlsHide = useCallback(() => {
         if (controlsTimeoutRef.current) {
             clearTimeout(controlsTimeoutRef.current);
+            controlsTimeoutRef.current = null;
         }
+        if (!isPlayingRef.current) return; // stay visible while paused
+        const hideDelay = isTouchDeviceRef.current
+            ? CONTROLS_HIDE_DELAY_TOUCH
+            : CONTROLS_HIDE_DELAY_MOUSE;
+        controlsTimeoutRef.current = setTimeout(() => {
+            if (isScrubbingRef.current) {
+                // Still dragging the seek bar — check again shortly.
+                scheduleControlsHide();
+                return;
+            }
+            hideControls();
+        }, hideDelay);
+    }, [hideControls]);
 
-        // Hide controls after inactivity while playing
-        // Touch devices get more time (3.5s) since interactions are slower
-        if (isPlaying) {
-            const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
-            controlsTimeoutRef.current = setTimeout(() => {
-                hideControls();
-            }, hideDelay);
-        }
-    };
+    // Show the controls and (re)start the inactivity countdown.
+    const triggerControlsVisibility = useCallback(() => {
+        showControlsRef.current = true;
+        setShowControls(true);
+        scheduleControlsHide();
+    }, [scheduleControlsHide]);
 
     // Mobile single-tap: toggle controls (show if hidden, hide if visible).
     const toggleControlsMobile = () => {
@@ -1688,23 +1718,9 @@ export default function VideoPlayer({
 
     // Auto hide controls when playing, show them when paused, and clean up timers
     useEffect(() => {
-        if (isPlaying) {
-            showControlsRef.current = true;
-            setShowControls(true);
-            if (controlsTimeoutRef.current) {
-                clearTimeout(controlsTimeoutRef.current);
-            }
-            const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
-            controlsTimeoutRef.current = setTimeout(() => {
-                hideControls();
-            }, hideDelay);
-        } else {
-            showControlsRef.current = true;
-            setShowControls(true);
-            if (controlsTimeoutRef.current) {
-                clearTimeout(controlsTimeoutRef.current);
-            }
-        }
+        showControlsRef.current = true;
+        setShowControls(true);
+        scheduleControlsHide();
 
         return () => {
             if (controlsTimeoutRef.current) {
@@ -2432,6 +2448,9 @@ export default function VideoPlayer({
                                                     .catch(() => {});
                                             }
                                         }
+                                        // Give the controls a fresh visibility
+                                        // window after the drag finishes.
+                                        triggerControlsVisibility();
                                     };
                                     document.addEventListener(
                                         "mousemove",
@@ -2489,6 +2508,9 @@ export default function VideoPlayer({
                                                     .catch(() => {});
                                             }
                                         }
+                                        // Give the controls a fresh visibility
+                                        // window after the drag finishes.
+                                        triggerControlsVisibility();
                                     };
                                     document.addEventListener(
                                         "touchmove",
