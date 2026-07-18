@@ -1181,11 +1181,8 @@ export default function VideoPlayer({
     // Double-tap left/right to seek, vertical swipe right side for volume,
     // vertical swipe left side for brightness (filter overlay)
     const handleGestureTouchStart = (e: React.TouchEvent) => {
-        // Mark that the last interaction was touch — used by handleScreenClick
-        // to distinguish touch taps from mouse clicks
-        lastInteractionWasTouchRef.current = true;
-
         // Ignore if touching controls panel, buttons, or progress bar
+        // Do NOT set lastInteractionWasTouchRef here — let button clicks pass through
         const target = e.target as HTMLElement;
         if (
             target.closest("button") ||
@@ -1195,6 +1192,10 @@ export default function VideoPlayer({
         ) {
             return;
         }
+
+        // Mark that the last interaction was touch — used by handleScreenClick
+        // to suppress the synthetic click event on touch devices
+        lastInteractionWasTouchRef.current = true;
 
         const touch = e.touches[0];
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1303,7 +1304,7 @@ export default function VideoPlayer({
     const handleGestureTouchEnd = () => {
         if (!touchStartRef.current) return;
 
-        const { moved, side, time } = touchStartRef.current;
+        const { moved, side } = touchStartRef.current;
 
         // Clear gesture indicator after a short delay
         if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
@@ -1311,8 +1312,15 @@ export default function VideoPlayer({
             setGestureIndicator({ type: null, value: 0 });
         }, 600);
 
-        // Double-tap detection for mobile seek (only if tap didn't move/gesture)
-        if (!moved && (side === "left" || side === "right")) {
+        // If the touch moved (gesture like swipe), don't treat as a tap
+        if (moved) {
+            touchStartRef.current = null;
+            doubleTapRef.current = null;
+            return;
+        }
+
+        // Double-tap detection for mobile seek (left/right sides only)
+        if (side === "left" || side === "right") {
             const now = Date.now();
             if (
                 doubleTapRef.current &&
@@ -1349,11 +1357,28 @@ export default function VideoPlayer({
                 }
                 doubleTapRef.current = null;
                 triggerControlsVisibility();
-            } else {
-                doubleTapRef.current = { time: now, side };
+                touchStartRef.current = null;
+                return;
             }
+            // First tap on side — record for potential double-tap
+            doubleTapRef.current = { time: Date.now(), side };
         } else {
+            // Center tap — clear double-tap tracking
             doubleTapRef.current = null;
+        }
+
+        // Single tap (center or first side tap): toggle controls visibility
+        // This is the core mobile UX: tap → show controls, tap again → hide
+        // Play/pause is ONLY via the on-screen buttons, never via tap
+        if (showControls) {
+            setShowControls(false);
+            setShowQualityMenu(false);
+            setShowSpeedMenu(false);
+            setShowAudioMenu(false);
+            setShowSubtitleMenu(false);
+            setShowRatioMenu(false);
+        } else {
+            triggerControlsVisibility();
         }
 
         touchStartRef.current = null;
@@ -1374,8 +1399,17 @@ export default function VideoPlayer({
 
     // Handle single clicks on the screen
     // Desktop: click toggles play/pause
-    // Mobile/Touch: tap toggles controls visibility (play/pause via center button only)
+    // Mobile/Touch: handled by handleMobileTap via onTouchEnd — click is suppressed
     const handleScreenClick = (e: React.MouseEvent) => {
+        // Suppress click events that originated from touch (mobile)
+        // Touch interactions are handled entirely by handleMobileTap
+        if (lastInteractionWasTouchRef.current) {
+            lastInteractionWasTouchRef.current = false;
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+        }
+
         const clickTarget = e.target as HTMLElement;
         if (
             clickTarget.closest("button") ||
@@ -1391,23 +1425,7 @@ export default function VideoPlayer({
         e.stopPropagation();
         e.preventDefault();
 
-        // On touch devices: tap shows/hides controls instead of play/pause
-        if (lastInteractionWasTouchRef.current || isTouchDeviceRef.current) {
-            lastInteractionWasTouchRef.current = false;
-            if (showControls) {
-                setShowControls(false);
-                setShowQualityMenu(false);
-                setShowSpeedMenu(false);
-                setShowAudioMenu(false);
-                setShowSubtitleMenu(false);
-                setShowRatioMenu(false);
-            } else {
-                triggerControlsVisibility();
-            }
-            return;
-        }
-
-        // Desktop: click toggles play/pause
+        // Desktop only: click toggles play/pause
         togglePlay();
     };
 
@@ -1604,6 +1622,7 @@ export default function VideoPlayer({
             if (controlsTimeoutRef.current) {
                 clearTimeout(controlsTimeoutRef.current);
             }
+            const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
             controlsTimeoutRef.current = setTimeout(() => {
                 setShowControls(false);
                 setShowQualityMenu(false);
@@ -1611,7 +1630,7 @@ export default function VideoPlayer({
                 setShowAudioMenu(false);
                 setShowSubtitleMenu(false);
                 setShowRatioMenu(false);
-            }, 1200);
+            }, hideDelay);
         } else {
             setShowControls(true);
             if (controlsTimeoutRef.current) {
