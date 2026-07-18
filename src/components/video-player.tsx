@@ -222,6 +222,12 @@ export default function VideoPlayer({
         time: number;
         side: "left" | "right" | "center";
     } | null>(null);
+    // Pending single-tap timer — lets us wait briefly to see if a second tap
+    // (double-tap to seek) is coming before we toggle the controls.
+    const singleTapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    // Mirror of showControls so timers/callbacks can read the latest value
+    // without being re-created on every visibility change.
+    const showControlsRef = useRef(true);
 
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
@@ -233,6 +239,26 @@ export default function VideoPlayer({
             "ontouchstart" in window ||
             navigator.maxTouchPoints > 0 ||
             window.matchMedia("(pointer: coarse)").matches;
+    }, []);
+
+    // Non-passive touchmove listener so gesture controls (volume / brightness /
+    // seek swipes) can actually block the browser's default scroll/zoom.
+    // React attaches onTouchMove as a PASSIVE listener, which makes
+    // e.preventDefault() a no-op and causes the page to scroll during swipes —
+    // the main source of janky mobile gestures. We only prevent default while a
+    // custom gesture is genuinely in progress, so taps and menu scrolling are
+    // left untouched.
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const onNativeTouchMove = (e: TouchEvent) => {
+            const t = touchStartRef.current;
+            if (t && (t.isVerticalGesture || t.isHorizontalGesture)) {
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+        el.addEventListener("touchmove", onNativeTouchMove, { passive: false });
+        return () => el.removeEventListener("touchmove", onNativeTouchMove);
     }, []);
 
     // Dynamic AniSkip intro/outro states
@@ -1301,10 +1327,41 @@ export default function VideoPlayer({
         }
     };
 
+    // Perform a ±10s skip on double-tap and show the skip animation.
+    const doubleTapSeek = (side: "left" | "right") => {
+        const video = videoRef.current;
+        if (!video) return;
+        if (side === "left") {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            setCurrentTime(video.currentTime);
+            setShowLeftSkipAnimation(true);
+            if (leftSkipTimeoutRef.current)
+                clearTimeout(leftSkipTimeoutRef.current);
+            leftSkipTimeoutRef.current = setTimeout(
+                () => setShowLeftSkipAnimation(false),
+                600,
+            );
+        } else {
+            video.currentTime = Math.min(
+                video.duration || 0,
+                video.currentTime + 10,
+            );
+            setCurrentTime(video.currentTime);
+            setShowRightSkipAnimation(true);
+            if (rightSkipTimeoutRef.current)
+                clearTimeout(rightSkipTimeoutRef.current);
+            rightSkipTimeoutRef.current = setTimeout(
+                () => setShowRightSkipAnimation(false),
+                600,
+            );
+        }
+    };
+
     const handleGestureTouchEnd = () => {
         if (!touchStartRef.current) return;
 
         const { moved, side } = touchStartRef.current;
+        touchStartRef.current = null;
 
         // Clear gesture indicator after a short delay
         if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
@@ -1314,74 +1371,55 @@ export default function VideoPlayer({
 
         // If the touch moved (gesture like swipe), don't treat as a tap
         if (moved) {
-            touchStartRef.current = null;
             doubleTapRef.current = null;
+            if (singleTapTimeoutRef.current) {
+                clearTimeout(singleTapTimeoutRef.current);
+                singleTapTimeoutRef.current = null;
+            }
             return;
         }
 
-        // Double-tap detection for mobile seek (left/right sides only)
+        const now = Date.now();
+
+        // ─── Left / right zones: support double-tap-to-seek ───
+        // We wait briefly on the first tap to see whether a second tap arrives.
+        // If it does → seek. If it doesn't → toggle controls. This prevents the
+        // controls from flashing every time the user double-taps to skip.
         if (side === "left" || side === "right") {
-            const now = Date.now();
             if (
                 doubleTapRef.current &&
-                now - doubleTapRef.current.time < 350 &&
-                doubleTapRef.current.side === side
+                doubleTapRef.current.side === side &&
+                now - doubleTapRef.current.time < 300
             ) {
-                // Double-tap confirmed — seek
-                if (side === "left" && videoRef.current) {
-                    videoRef.current.currentTime = Math.max(
-                        0,
-                        videoRef.current.currentTime - 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    setShowLeftSkipAnimation(true);
-                    if (leftSkipTimeoutRef.current)
-                        clearTimeout(leftSkipTimeoutRef.current);
-                    leftSkipTimeoutRef.current = setTimeout(
-                        () => setShowLeftSkipAnimation(false),
-                        800,
-                    );
-                } else if (side === "right" && videoRef.current) {
-                    videoRef.current.currentTime = Math.min(
-                        videoRef.current.duration || 0,
-                        videoRef.current.currentTime + 10,
-                    );
-                    setCurrentTime(videoRef.current.currentTime);
-                    setShowRightSkipAnimation(true);
-                    if (rightSkipTimeoutRef.current)
-                        clearTimeout(rightSkipTimeoutRef.current);
-                    rightSkipTimeoutRef.current = setTimeout(
-                        () => setShowRightSkipAnimation(false),
-                        800,
-                    );
+                // Second tap → confirmed double-tap → seek
+                if (singleTapTimeoutRef.current) {
+                    clearTimeout(singleTapTimeoutRef.current);
+                    singleTapTimeoutRef.current = null;
                 }
                 doubleTapRef.current = null;
-                triggerControlsVisibility();
-                touchStartRef.current = null;
+                doubleTapSeek(side);
                 return;
             }
-            // First tap on side — record for potential double-tap
-            doubleTapRef.current = { time: Date.now(), side };
-        } else {
-            // Center tap — clear double-tap tracking
-            doubleTapRef.current = null;
+
+            // First tap on a side zone — defer the toggle to disambiguate.
+            doubleTapRef.current = { time: now, side };
+            if (singleTapTimeoutRef.current)
+                clearTimeout(singleTapTimeoutRef.current);
+            singleTapTimeoutRef.current = setTimeout(() => {
+                singleTapTimeoutRef.current = null;
+                doubleTapRef.current = null;
+                toggleControlsMobile();
+            }, 280);
+            return;
         }
 
-        // Single tap (center or first side tap): toggle controls visibility
-        // This is the core mobile UX: tap → show controls, tap again → hide
-        // Play/pause is ONLY via the on-screen buttons, never via tap
-        if (showControls) {
-            setShowControls(false);
-            setShowQualityMenu(false);
-            setShowSpeedMenu(false);
-            setShowAudioMenu(false);
-            setShowSubtitleMenu(false);
-            setShowRatioMenu(false);
-        } else {
-            triggerControlsVisibility();
+        // ─── Center zone: single tap toggles controls immediately ───
+        doubleTapRef.current = null;
+        if (singleTapTimeoutRef.current) {
+            clearTimeout(singleTapTimeoutRef.current);
+            singleTapTimeoutRef.current = null;
         }
-
-        touchStartRef.current = null;
+        toggleControlsMobile();
     };
 
     // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
@@ -1431,6 +1469,13 @@ export default function VideoPlayer({
 
     // Handle double clicks on the screen to toggle fullscreen or seek
     const handleScreenDoubleClick = (e: React.MouseEvent) => {
+        // On touch devices, double-tap is handled entirely by the gesture
+        // handlers (onTouchEnd). Ignore any synthetic dblclick so we don't
+        // trigger fullscreen/seek twice.
+        if (isTouchDeviceRef.current || lastInteractionWasTouchRef.current) {
+            return;
+        }
+
         const target = e.currentTarget as HTMLElement;
         const clickTarget = e.target as HTMLElement;
         if (
@@ -1593,8 +1638,30 @@ export default function VideoPlayer({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeDownload]);
 
+    // Keep the ref in sync so tap/timer callbacks read the latest visibility.
+    useEffect(() => {
+        showControlsRef.current = showControls;
+    }, [showControls]);
+
+    // Hide controls and close every open menu. Centralised so tap, timer and
+    // keyboard paths all behave identically.
+    const hideControls = useCallback(() => {
+        if (controlsTimeoutRef.current) {
+            clearTimeout(controlsTimeoutRef.current);
+            controlsTimeoutRef.current = null;
+        }
+        showControlsRef.current = false;
+        setShowControls(false);
+        setShowQualityMenu(false);
+        setShowSpeedMenu(false);
+        setShowAudioMenu(false);
+        setShowSubtitleMenu(false);
+        setShowRatioMenu(false);
+    }, []);
+
     // Controls Visibility Timers
     const triggerControlsVisibility = () => {
+        showControlsRef.current = true;
         setShowControls(true);
         if (controlsTimeoutRef.current) {
             clearTimeout(controlsTimeoutRef.current);
@@ -1605,33 +1672,34 @@ export default function VideoPlayer({
         if (isPlaying) {
             const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
             controlsTimeoutRef.current = setTimeout(() => {
-                setShowControls(false);
-                setShowQualityMenu(false);
-                setShowSpeedMenu(false);
-                setShowAudioMenu(false);
-                setShowSubtitleMenu(false);
-                setShowRatioMenu(false);
+                hideControls();
             }, hideDelay);
+        }
+    };
+
+    // Mobile single-tap: toggle controls (show if hidden, hide if visible).
+    const toggleControlsMobile = () => {
+        if (showControlsRef.current) {
+            hideControls();
+        } else {
+            triggerControlsVisibility();
         }
     };
 
     // Auto hide controls when playing, show them when paused, and clean up timers
     useEffect(() => {
         if (isPlaying) {
+            showControlsRef.current = true;
             setShowControls(true);
             if (controlsTimeoutRef.current) {
                 clearTimeout(controlsTimeoutRef.current);
             }
             const hideDelay = isTouchDeviceRef.current ? 3500 : 1200;
             controlsTimeoutRef.current = setTimeout(() => {
-                setShowControls(false);
-                setShowQualityMenu(false);
-                setShowSpeedMenu(false);
-                setShowAudioMenu(false);
-                setShowSubtitleMenu(false);
-                setShowRatioMenu(false);
+                hideControls();
             }, hideDelay);
         } else {
+            showControlsRef.current = true;
             setShowControls(true);
             if (controlsTimeoutRef.current) {
                 clearTimeout(controlsTimeoutRef.current);
@@ -1645,8 +1713,43 @@ export default function VideoPlayer({
             if (clickTimeoutRef.current) {
                 clearTimeout(clickTimeoutRef.current);
             }
+            if (singleTapTimeoutRef.current) {
+                clearTimeout(singleTapTimeoutRef.current);
+            }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPlaying]);
+
+    // Keep controls pinned open while any settings menu is open — otherwise the
+    // inactivity timer would hide the controls and dismiss the menu mid-use.
+    useEffect(() => {
+        const anyMenuOpen =
+            showQualityMenu ||
+            showSpeedMenu ||
+            showAudioMenu ||
+            showSubtitleMenu ||
+            showRatioMenu;
+        if (anyMenuOpen) {
+            if (controlsTimeoutRef.current) {
+                clearTimeout(controlsTimeoutRef.current);
+                controlsTimeoutRef.current = null;
+            }
+            showControlsRef.current = true;
+            setShowControls(true);
+        } else {
+            // Menu just closed while playing — restart the inactivity timer.
+            if (isPlaying) {
+                triggerControlsVisibility();
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        showQualityMenu,
+        showSpeedMenu,
+        showAudioMenu,
+        showSubtitleMenu,
+        showRatioMenu,
+    ]);
 
     // formatTime helper is moved to global file scope
 
