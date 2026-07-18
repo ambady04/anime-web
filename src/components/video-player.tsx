@@ -1226,6 +1226,14 @@ export default function VideoPlayer({
             target.closest("[data-controls-panel]") ||
             target.closest("[data-progress-bar]")
         ) {
+            // Cancel any pending single-tap timer from a previous screen tap.
+            // Without this, that timer could fire mid-interaction and hide the
+            // controls right as the user is trying to press this button.
+            if (singleTapTimeoutRef.current) {
+                clearTimeout(singleTapTimeoutRef.current);
+                singleTapTimeoutRef.current = null;
+            }
+            doubleTapRef.current = null;
             triggerControlsVisibility();
             return;
         }
@@ -1366,6 +1374,10 @@ export default function VideoPlayer({
         }
     };
 
+    // Window (ms) within which a second tap in the same side zone counts as a
+    // double-tap-to-seek rather than a controls toggle.
+    const DOUBLE_TAP_MS = 300;
+
     const handleGestureTouchEnd = () => {
         if (!touchStartRef.current) return;
 
@@ -1378,7 +1390,7 @@ export default function VideoPlayer({
             setGestureIndicator({ type: null, value: 0 });
         }, 600);
 
-        // If the touch moved (gesture like swipe), don't treat as a tap
+        // If the touch moved (swipe gesture), it's not a tap — reset tap state.
         if (moved) {
             doubleTapRef.current = null;
             if (singleTapTimeoutRef.current) {
@@ -1389,50 +1401,51 @@ export default function VideoPlayer({
         }
 
         const now = Date.now();
+        const isSideZone = side === "left" || side === "right";
 
-        // ─── Left / right zones: double-tap seeks, single-tap toggles HUD ───
-        // The singleTap timer (320 ms) is intentionally shorter than the
-        // double-tap window (350 ms) so both timers never fire for the same
-        // gesture — eliminating the race that caused the HUD to flash on seek.
-        if (side === "left" || side === "right") {
-            if (
-                doubleTapRef.current &&
-                doubleTapRef.current.side === side &&
-                now - doubleTapRef.current.time < 350
-            ) {
-                // ── Confirmed double-tap: seek silently ──
-                // Cancel the pending single-tap action first so the HUD
-                // doesn't flash, then seek without changing HUD state.
-                if (singleTapTimeoutRef.current) {
-                    clearTimeout(singleTapTimeoutRef.current);
-                    singleTapTimeoutRef.current = null;
-                }
-                doubleTapRef.current = null;
-                doubleTapSeek(side);
-                // Restart hide timer if controls are already visible.
-                if (showControlsRef.current) scheduleControlsHide();
-                return;
-            }
-
-            // ── First tap on side zone: wait to see if a double-tap follows ──
-            doubleTapRef.current = { time: now, side };
-            if (singleTapTimeoutRef.current)
+        // ─── Confirmed double-tap on a side zone → seek ±10s ───
+        // Detected on the SECOND tap. Any control-toggle we did on the first tap
+        // simply left the HUD visible, which is fine — we just seek from here.
+        if (
+            isSideZone &&
+            doubleTapRef.current &&
+            doubleTapRef.current.side === side &&
+            now - doubleTapRef.current.time < DOUBLE_TAP_MS
+        ) {
+            if (singleTapTimeoutRef.current) {
                 clearTimeout(singleTapTimeoutRef.current);
-            singleTapTimeoutRef.current = setTimeout(() => {
                 singleTapTimeoutRef.current = null;
-                doubleTapRef.current = null;
-                toggleControlsMobile();
-            }, 320);
+            }
+            doubleTapRef.current = null;
+            doubleTapSeek(side);
+            // Keep the HUD alive with a fresh countdown if it's showing.
+            if (showControlsRef.current) scheduleControlsHide();
             return;
         }
 
-        // ─── Center zone: single tap toggles controls immediately ───
-        doubleTapRef.current = null;
-        if (singleTapTimeoutRef.current) {
-            clearTimeout(singleTapTimeoutRef.current);
-            singleTapTimeoutRef.current = null;
+        // ─── Single tap ───
+        if (showControlsRef.current) {
+            // Controls are visible. Center → hide instantly. Side → defer the
+            // hide briefly so a following tap can register as a seek instead.
+            if (isSideZone) {
+                doubleTapRef.current = { time: now, side };
+                if (singleTapTimeoutRef.current)
+                    clearTimeout(singleTapTimeoutRef.current);
+                singleTapTimeoutRef.current = setTimeout(() => {
+                    singleTapTimeoutRef.current = null;
+                    doubleTapRef.current = null;
+                    hideControls();
+                }, DOUBLE_TAP_MS);
+            } else {
+                doubleTapRef.current = null;
+                hideControls();
+            }
+        } else {
+            // Controls hidden → show them immediately (no lag). On side zones we
+            // still record the tap so a quick second tap seeks.
+            triggerControlsVisibility();
+            doubleTapRef.current = isSideZone ? { time: now, side } : null;
         }
-        toggleControlsMobile();
     };
 
     // Blur any focused controls after click to ensure Spacebar immediately triggers play/pause
@@ -1711,15 +1724,6 @@ export default function VideoPlayer({
         scheduleControlsHide();
     }, [scheduleControlsHide]);
 
-    // Mobile single-tap: toggle controls (show if hidden, hide if visible).
-    const toggleControlsMobile = () => {
-        if (showControlsRef.current) {
-            hideControls();
-        } else {
-            triggerControlsVisibility();
-        }
-    };
-
     // Auto hide controls when playing, show them when paused, and clean up timers
     useEffect(() => {
         showControlsRef.current = true;
@@ -1973,7 +1977,9 @@ export default function VideoPlayer({
         <div
             ref={containerRef}
             onMouseMove={triggerControlsVisibility}
-            onMouseLeave={() => isPlaying && !isTouchDeviceRef.current && setShowControls(false)}
+            onMouseLeave={() =>
+                isPlaying && !isTouchDeviceRef.current && setShowControls(false)
+            }
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
             onClickCapture={handlePlayerClickCapture}
