@@ -26,6 +26,8 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
         // Fetch details and stream in PARALLEL to eliminate waterfall.
         // For series: if season/episode provided in URL, use them directly.
         // If not provided, default to S1E1 (will be corrected after details load).
+        // For movies (no season/episode params), pass 0 so the backend uses its
+        // movie-specific attempt order [(0,0), (1,1)].
         const streamSeason = parsedSeason || (season !== undefined ? 1 : 0);
         const streamEpisode = parsedEpisode || (episode !== undefined ? 1 : 0);
 

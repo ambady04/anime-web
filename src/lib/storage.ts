@@ -37,7 +37,8 @@ export interface WatchlistItem {
 }
 
 export const localStore = {
-    // Watch History
+    // Watch History — returns deduplicated list (one entry per series/movie) for UI display.
+    // For per-episode resume lookup, use getRawHistory() instead.
     getHistory: (): HistoryItem[] => {
         if (typeof window === "undefined") return [];
         try {
@@ -67,20 +68,40 @@ export const localStore = {
         }
     },
 
+    // Raw history — returns ALL entries (including per-episode entries for series).
+    // Used by VideoPlayer to look up resume position for specific episodes.
+    getRawHistory: (): HistoryItem[] => {
+        if (typeof window === "undefined") return [];
+        try {
+            const data = localStorage.getItem("kixo_history");
+            if (!data) return [];
+            const history = JSON.parse(data) as HistoryItem[];
+            return [...history].sort((a, b) => b.updatedAt - a.updatedAt);
+        } catch {
+            return [];
+        }
+    },
+
     saveHistoryItem: (item: Omit<HistoryItem, "updatedAt">) => {
         if (typeof window === "undefined") return;
         try {
-            const history = localStore.getHistory();
-            const baseTitleOfNew = item.title
-                .replace(/\[[^\]]+\]/g, "")
-                .trim()
-                .toLowerCase();
+            // Read raw history (not deduplicated) to preserve per-episode entries
+            const data = localStorage.getItem("kixo_history");
+            const history: HistoryItem[] = data ? JSON.parse(data) : [];
+
+            // For series: only remove the entry for the SAME episode (not all entries for the title).
+            // For movies: remove any existing entry for the same detailPath.
             const filtered = history.filter((h) => {
-                const baseTitleOfExisting = h.title
-                    .replace(/\[[^\]]+\]/g, "")
-                    .trim()
-                    .toLowerCase();
-                return baseTitleOfExisting !== baseTitleOfNew;
+                if (item.isSeries && item.season && item.episode) {
+                    // Keep entries for other episodes of the same series
+                    return !(
+                        h.detailPath === item.detailPath &&
+                        h.season === item.season &&
+                        h.episode === item.episode
+                    );
+                }
+                // Movies: deduplicate by detailPath
+                return h.detailPath !== item.detailPath;
             });
 
             const newItem: HistoryItem = {
@@ -88,7 +109,8 @@ export const localStore = {
                 updatedAt: Date.now(),
             };
 
-            const updated = [newItem, ...filtered].slice(0, 40);
+            // Keep more entries to accommodate per-episode history (max 200 entries)
+            const updated = [newItem, ...filtered].slice(0, 200);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
 
             // Sync to cloud every 15 seconds of progress or on completion

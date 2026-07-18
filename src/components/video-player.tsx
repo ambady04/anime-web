@@ -140,7 +140,7 @@ export default function VideoPlayer({
     const [initialSeekTime, setInitialSeekTime] = useState<number | null>(
         () => {
             if (typeof window === "undefined") return null;
-            const savedHistory = localStore.getHistory();
+            const savedHistory = localStore.getRawHistory();
             let historyItem: (typeof savedHistory)[number] | undefined;
 
             if (isSeries && season && episode) {
@@ -560,7 +560,7 @@ export default function VideoPlayer({
 
         // ─── History resume: look up saved position BEFORE loading source ───
         // Mirrors native VideoPlayer.js lines 1026-1043
-        const savedHistory = localStore.getHistory();
+        const savedHistory = localStore.getRawHistory();
         let historyItem: (typeof savedHistory)[number] | undefined;
 
         if (isSeries && season && episode) {
@@ -2685,7 +2685,13 @@ export default function VideoPlayer({
                                                                             setShowAudioMenu(
                                                                                 false,
                                                                             );
-                                                                            window.location.href = `/watch/${dub.detailPath}`;
+                                                                            const epParams =
+                                                                                isSeries &&
+                                                                                season &&
+                                                                                episode
+                                                                                    ? `?season=${season}&episode=${episode}`
+                                                                                    : "";
+                                                                            window.location.href = `/watch/${dub.detailPath}${epParams}`;
                                                                         }}
                                                                         className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
                                                                             isCurrent
@@ -3109,7 +3115,13 @@ export default function VideoPlayer({
                                                                         setShowAudioMenu(
                                                                             false,
                                                                         );
-                                                                        window.location.href = `/watch/${dub.detailPath}`;
+                                                                        const epParams =
+                                                                            isSeries &&
+                                                                            season &&
+                                                                            episode
+                                                                                ? `?season=${season}&episode=${episode}`
+                                                                                : "";
+                                                                        window.location.href = `/watch/${dub.detailPath}${epParams}`;
                                                                     }}
                                                                     className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
                                                                         detailPath ===

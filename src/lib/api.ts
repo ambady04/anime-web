@@ -1,6 +1,3 @@
-import { cache } from "react";
-import { getCached, setCache, makeCacheKey, CACHE_TTL } from "./api-cache";
-
 const isBrowser = typeof window !== "undefined";
 export const API_BASE_URL = isBrowser
     ? ""
@@ -153,14 +150,10 @@ export interface StreamData {
     stream_domain: string;
 }
 
-// Core fetch function with proper caching
-// On the browser: checks sessionStorage cache first (avoids redundant fetches)
-// On the server: uses Next.js fetch cache with revalidate TTL
+// Core fetch function — NO CACHING. Every request goes fresh to the API.
 async function fetchFromApi<T>(
     endpoint: string,
     params: Record<string, string | number | boolean> = {},
-    cacheOptions?: RequestInit["next"],
-    browserCacheTtl?: number,
 ): Promise<T> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -172,21 +165,12 @@ async function fetchFromApi<T>(
     const queryString = searchParams.toString();
     const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-    // Browser-side: check sessionStorage cache first
-    if (isBrowser && browserCacheTtl) {
-        const cacheKey = makeCacheKey(endpoint, params);
-        const cached = getCached<T>(cacheKey);
-        if (cached) return cached;
-    }
-
     const fetchUrl = isBrowser
         ? fullEndpoint
         : `${API_BASE_URL}${fullEndpoint}`;
 
     // On the server (Cloudflare Worker SSR), forward the real user IP to the
-    // backend so geo-restriction checks use the actual visitor's location,
-    // not the Cloudflare datacenter IP. Without this, backend returns 404
-    // "not available in your region" for titles that are fine for the user.
+    // backend so geo-restriction checks use the actual visitor's location.
     const fetchHeaders: Record<string, string> = {};
     if (!isBrowser) {
         try {
@@ -208,7 +192,7 @@ async function fetchFromApi<T>(
 
     const response = await fetch(fetchUrl, {
         headers: fetchHeaders,
-        next: cacheOptions ?? { revalidate: 3600 },
+        cache: "no-store",
     });
 
     if (!response.ok) {
@@ -217,99 +201,50 @@ async function fetchFromApi<T>(
         );
     }
 
-    const data = (await response.json()) as T;
-
-    // Browser-side: store in sessionStorage cache
-    if (isBrowser && browserCacheTtl) {
-        const cacheKey = makeCacheKey(endpoint, params);
-        setCache(cacheKey, data, browserCacheTtl);
-    }
-
-    return data;
+    return (await response.json()) as T;
 }
 
-// Server-side request deduplication using React cache()
-// This prevents duplicate API calls within the same render pass
-const getCachedHome = cache(async (adult: boolean): Promise<HomepageData> => {
-    return fetchFromApi<HomepageData>("/api/home", { adult });
-});
+export const movieApi = {
+    // Get homepage data — always fresh
+    getHome: async (adult = false): Promise<HomepageData> => {
+        return fetchFromApi<HomepageData>("/api/home", { adult });
+    },
 
-const getCachedDetails = cache(
-    async (path: string, adult: boolean): Promise<ItemDetails> => {
+    // Get details — always fresh
+    getDetails: async (path: string, adult = false): Promise<ItemDetails> => {
         return fetchFromApi<ItemDetails>("/api/details", { path, adult });
     },
-);
 
-export const movieApi = {
-    // Get homepage data - deduplicated per render, cached in browser for 5 min
-    getHome: async (adult = false): Promise<HomepageData> => {
-        if (!isBrowser) {
-            return getCachedHome(adult);
-        }
-        return fetchFromApi<HomepageData>(
-            "/api/home",
-            { adult },
-            undefined,
-            CACHE_TTL.HOME,
-        );
-    },
-
-    // Get details - deduplicated per render, cached in browser for 10 min
-    getDetails: async (path: string, adult = false): Promise<ItemDetails> => {
-        if (!isBrowser) {
-            return getCachedDetails(path, adult);
-        }
-        return fetchFromApi<ItemDetails>(
-            "/api/details",
-            { path, adult },
-            undefined,
-            CACHE_TTL.DETAILS,
-        );
-    },
-
-    // Get stream links and captions (NO CACHE — CDN URLs expire quickly)
+    // Get stream links and captions — always fresh
     getStream: async (
         path: string,
         season = 0,
         episode = 0,
         adult = false,
     ): Promise<StreamData> => {
-        const searchParams = new URLSearchParams();
-        searchParams.append("path", path);
-        if (season) searchParams.append("season", String(season));
-        if (episode) searchParams.append("episode", String(episode));
-        if (adult) searchParams.append("adult", String(adult));
-
-        const endpoint = `/api/stream?${searchParams.toString()}`;
-        const fetchUrl = isBrowser ? endpoint : `${API_BASE_URL}${endpoint}`;
-
-        const response = await fetch(fetchUrl, {
-            cache: "no-store", // NEVER cache stream URLs — they contain expiring CDN tokens
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to fetch stream: ${response.statusText}`);
-        }
-
-        return response.json() as Promise<StreamData>;
+        const params: Record<string, string | number | boolean> = { path };
+        if (season) params.season = season;
+        if (episode) params.episode = episode;
+        if (adult) params.adult = adult;
+        return fetchFromApi<StreamData>("/api/stream", params);
     },
 
-    // Search movies and series — cached in browser for 3 min
+    // Search movies and series — always fresh
     search: async (
         q: string,
         page = 1,
         type?: number,
         adult = false,
     ): Promise<{ items: Subject[] }> => {
-        return fetchFromApi<{ items: Subject[] }>(
-            "/api/search",
-            { q, page, type: type ?? "", adult },
-            undefined,
-            CACHE_TTL.SEARCH,
-        );
+        return fetchFromApi<{ items: Subject[] }>("/api/search", {
+            q,
+            page,
+            type: type ?? "",
+            adult,
+        });
     },
 
-    // Get category listing — cached in browser for 5 min
+    // Get category listing — always fresh
     getCategory: async (
         name: string,
         page = 1,
@@ -325,16 +260,11 @@ export const movieApi = {
         };
         items: Subject[];
     }> => {
-        return fetchFromApi(
-            "/api/category",
-            {
-                name,
-                page,
-                query: query ?? "",
-                adult,
-            },
-            undefined,
-            CACHE_TTL.CATEGORY,
-        );
+        return fetchFromApi("/api/category", {
+            name,
+            page,
+            query: query ?? "",
+            adult,
+        });
     },
 };

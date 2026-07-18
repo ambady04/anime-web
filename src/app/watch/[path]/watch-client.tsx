@@ -21,7 +21,7 @@ import {
     RotateCcw,
     Download,
 } from "lucide-react";
-import { ItemDetails, StreamData } from "@/lib/api";
+import { ItemDetails, StreamData, DubModel } from "@/lib/api";
 import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
@@ -198,15 +198,25 @@ export default function WatchClient({
             if (isSeries && !hasParams) {
                 const item = localStore.getWatchlistItem(subject.detailPath);
                 if (item?.bookmarkedSeason && item?.bookmarkedEpisode) {
-                    router.replace(
+                    window.location.replace(
                         `/watch/${path}?season=${item.bookmarkedSeason}&episode=${item.bookmarkedEpisode}`,
                     );
                 }
             }
         }
-    }, [isSeries, subject.detailPath, path, router]);
+    }, [isSeries, subject.detailPath, path]);
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
+
+    // Keep selectedSeason in sync with activeSeason prop — handles navigation
+    // from search results or external links that change the season.
+    useEffect(() => {
+        if (activeSeason && activeSeason !== selectedSeason) {
+            setSelectedSeason(activeSeason);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSeason]);
+
     const currentSeasonData = useMemo(
         () => resource?.seasons?.find((s) => s.se === selectedSeason),
         [resource?.seasons, selectedSeason],
@@ -281,7 +291,9 @@ export default function WatchClient({
         }
         setLoadingEpisode(epNum);
         setIsPageLoading(true);
-        router.push(`/watch/${path}?season=${selectedSeason}&episode=${epNum}`);
+        // Use hard navigation to bypass Next.js Router Cache — stream URLs
+        // contain expiring CDN tokens and must always be fetched fresh.
+        window.location.href = `/watch/${path}?season=${selectedSeason}&episode=${epNum}`;
     };
 
     const handleNextEpisode = () => {
@@ -311,15 +323,45 @@ export default function WatchClient({
     const handleAudioClick = (detailPath: string) => {
         setLoadingAudio(detailPath);
         setIsPageLoading(true);
-        router.push(
-            `/watch/${detailPath}${isSeries ? `?season=${selectedSeason}&episode=${activeEpisode}` : ""}`,
-        );
+        // Use hard navigation to bypass Router Cache — different audio track
+        // needs a completely fresh stream from the server.
+        window.location.href = `/watch/${detailPath}${isSeries ? `?season=${selectedSeason}&episode=${activeEpisode}` : ""}`;
     };
 
     const hasDubs = useMemo(
         () => subject.dubs && subject.dubs.length > 0,
         [subject.dubs],
     );
+
+    // Build a complete dubs list that always includes the current audio track.
+    // The API's subject.dubs may not include the currently-playing path's entry,
+    // or the path comparison may fail due to URL encoding differences.
+    const completeDubs = useMemo(() => {
+        if (!subject.dubs || subject.dubs.length === 0) return [];
+
+        // Normalize path comparison: decode both sides and compare
+        const decodedPath = decodeURIComponent(path);
+        const currentInList = subject.dubs.some(
+            (d) => decodeURIComponent(d.detailPath) === decodedPath,
+        );
+        if (currentInList) return subject.dubs;
+
+        // Current path isn't in the dubs list — add it as the base/original track.
+        const cornerVal = subject.corner?.trim();
+        const isValidLang =
+            cornerVal &&
+            cornerVal.length > 0 &&
+            !cornerVal.toLowerCase().includes("original");
+        const currentEntry: DubModel = {
+            subjectId: subject.subjectId,
+            lanName: isValidLang ? cornerVal : "English",
+            lanCode: "en",
+            original: true,
+            type: 0,
+            detailPath: path,
+        };
+        return [currentEntry, ...subject.dubs];
+    }, [subject.dubs, subject.subjectId, subject.corner, path]);
 
     // Track which episodes have been watched (loaded from localStorage per season)
     const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(
@@ -524,7 +566,7 @@ export default function WatchClient({
                             isSeries={isSeries}
                             season={isSeries ? activeSeason : undefined}
                             episode={isSeries ? activeEpisode : undefined}
-                            dubs={subject.dubs}
+                            dubs={completeDubs}
                             onNextEpisode={
                                 activeEpisode < totalEpisodes
                                     ? handleNextEpisode
@@ -1068,7 +1110,7 @@ export default function WatchClient({
                                 <span>Available Audio Tracks</span>
                             </h3>
                             <div className="flex flex-col gap-1.5">
-                                {subject.dubs!.map((dub, idx) => {
+                                {completeDubs.map((dub, idx) => {
                                     const isCurrent =
                                         decodeURIComponent(path) ===
                                         decodeURIComponent(dub.detailPath);
