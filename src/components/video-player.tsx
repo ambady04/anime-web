@@ -1211,29 +1211,28 @@ export default function VideoPlayer({
     // Double-tap left/right to seek, vertical swipe right side for volume,
     // vertical swipe left side for brightness (filter overlay)
     const handleGestureTouchStart = (e: React.TouchEvent) => {
-        // Ignore if touching controls panel, buttons, progress bar, or anywhere
-        // inside the controls HUD overlay — those touches should keep controls
-        // visible rather than toggle/hide them.
-        // Do NOT set lastInteractionWasTouchRef here — let button clicks pass through
         const target = e.target as HTMLElement;
+
+        // ALWAYS mark this as a touch interaction so the synthetic click event
+        // fired after touchend is always suppressed — prevents togglePlay() from
+        // accidentally firing on mobile.
+        lastInteractionWasTouchRef.current = true;
+
+        // If the touch is on an actual control element (button, slider, the
+        // controls panel row) just keep the controls visible and bail — we don't
+        // want to start gesture tracking or later toggle visibility.
         if (
             target.closest("button") ||
             target.closest("input") ||
             target.closest("[data-controls-panel]") ||
-            target.closest("[data-progress-bar]") ||
-            target.closest("[data-controls-hud]")
+            target.closest("[data-progress-bar]")
         ) {
-            // The user is interacting with the controls (button, seek bar, menu,
-            // or any part of the HUD overlay). Keep controls visible and restart
-            // the inactivity timer so they don't disappear mid-interaction.
             triggerControlsVisibility();
-            return;
+            return; // touchStartRef stays null → handleGestureTouchEnd no-ops
         }
 
-        // Mark that the last interaction was touch — used by handleScreenClick
-        // to suppress the synthetic click event on touch devices
-        lastInteractionWasTouchRef.current = true;
-
+        // For all other areas (video surface, title bar, middle dead zone) we
+        // track the touch so we can detect taps vs swipe gestures.
         const touch = e.touches[0];
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         const x = touch.clientX - rect.left;
@@ -1662,7 +1661,7 @@ export default function VideoPlayer({
 
     // How long the controls stay on screen with no interaction.
     // Touch devices get a longer window (interactions are slower on mobile).
-    const CONTROLS_HIDE_DELAY_TOUCH = 4000;
+    const CONTROLS_HIDE_DELAY_TOUCH = 3000;
     const CONTROLS_HIDE_DELAY_MOUSE = 2500;
 
     // Hide controls and close every open menu. Centralised so tap, timer and
@@ -2333,7 +2332,6 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                data-controls-hud
                 className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
