@@ -2157,7 +2157,9 @@ export default function VideoPlayer({
                 </video>
             )}
 
-            {/* Click Catcher Overlay */}
+            {/* Click Catcher Overlay — desktop only; touch is handled by the
+                 container's onTouchStart/onTouchEnd. Using pointer-events-none
+                 on mobile prevents double-firing of click/dblclick handlers. */}
             {!playerError && (
                 <div
                     className={`absolute inset-0 z-10 ${
@@ -2165,8 +2167,6 @@ export default function VideoPlayer({
                             ? "cursor-none"
                             : "cursor-pointer"
                     }`}
-                    onClick={handleScreenClick}
-                    onDoubleClick={handleScreenDoubleClick}
                 />
             )}
 
@@ -2339,8 +2339,6 @@ export default function VideoPlayer({
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                 } ${isPlaying && !showControls ? "cursor-none" : ""}`}
-                onClick={handleScreenClick}
-                onDoubleClick={handleScreenDoubleClick}
             >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
