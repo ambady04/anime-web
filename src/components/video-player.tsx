@@ -1211,18 +1211,21 @@ export default function VideoPlayer({
     // Double-tap left/right to seek, vertical swipe right side for volume,
     // vertical swipe left side for brightness (filter overlay)
     const handleGestureTouchStart = (e: React.TouchEvent) => {
-        // Ignore if touching controls panel, buttons, or progress bar
+        // Ignore if touching controls panel, buttons, progress bar, or anywhere
+        // inside the controls HUD overlay — those touches should keep controls
+        // visible rather than toggle/hide them.
         // Do NOT set lastInteractionWasTouchRef here — let button clicks pass through
         const target = e.target as HTMLElement;
         if (
             target.closest("button") ||
             target.closest("input") ||
             target.closest("[data-controls-panel]") ||
-            target.closest("[data-progress-bar]")
+            target.closest("[data-progress-bar]") ||
+            target.closest("[data-controls-hud]")
         ) {
-            // The user is interacting with the controls (button, seek bar, menu).
-            // Keep the controls visible and restart the inactivity timer so they
-            // don't disappear mid-interaction.
+            // The user is interacting with the controls (button, seek bar, menu,
+            // or any part of the HUD overlay). Keep controls visible and restart
+            // the inactivity timer so they don't disappear mid-interaction.
             triggerControlsVisibility();
             return;
         }
@@ -2330,6 +2333,7 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
+                data-controls-hud
                 className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
