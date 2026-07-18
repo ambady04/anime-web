@@ -1386,44 +1386,60 @@ export default function VideoPlayer({
                 clearTimeout(singleTapTimeoutRef.current);
                 singleTapTimeoutRef.current = null;
             }
+            // On a swipe gesture, always keep/show controls and restart timer
+            triggerControlsVisibility();
             return;
         }
 
         const now = Date.now();
 
-        // ─── Left / right zones: support double-tap-to-seek ───
-        // We wait briefly on the first tap to see whether a second tap arrives.
-        // If it does → seek. If it doesn't → toggle controls. This prevents the
-        // controls from flashing every time the user double-taps to skip.
+        // ─── Left / right zones: double-tap-to-seek, single-tap shows HUD ───
+        // Design rule: side zones are for seek gestures only. A single tap on a
+        // side zone SHOWS the controls (never hides them — only center-tap hides).
+        // A double-tap seeks ±10 s WITHOUT touching controls visibility at all.
         if (side === "left" || side === "right") {
             if (
                 doubleTapRef.current &&
                 doubleTapRef.current.side === side &&
-                now - doubleTapRef.current.time < 300
+                now - doubleTapRef.current.time < 350
             ) {
-                // Second tap → confirmed double-tap → seek
+                // ── Double-tap confirmed: seek silently ──
+                // Cancel the pending single-tap "show" action so we don't
+                // flash the controls, then seek without changing HUD state.
                 if (singleTapTimeoutRef.current) {
                     clearTimeout(singleTapTimeoutRef.current);
                     singleTapTimeoutRef.current = null;
                 }
                 doubleTapRef.current = null;
                 doubleTapSeek(side);
+                // If controls are already visible, restart their timer.
+                if (showControlsRef.current) {
+                    scheduleControlsHide();
+                }
                 return;
             }
 
-            // First tap on a side zone — defer the toggle to disambiguate.
+            // ── First tap on a side zone ──
+            // Record it for double-tap detection but don't show/hide yet.
             doubleTapRef.current = { time: now, side };
             if (singleTapTimeoutRef.current)
                 clearTimeout(singleTapTimeoutRef.current);
+            // After the double-tap window, treat it as a single tap → show controls.
             singleTapTimeoutRef.current = setTimeout(() => {
                 singleTapTimeoutRef.current = null;
                 doubleTapRef.current = null;
-                toggleControlsMobile();
-            }, 280);
+                // Side-zone single tap: always SHOW controls (never hide).
+                // Center tap is the only gesture that hides them.
+                if (!showControlsRef.current) {
+                    triggerControlsVisibility();
+                } else {
+                    scheduleControlsHide(); // already visible — just restart timer
+                }
+            }, 320);
             return;
         }
 
-        // ─── Center zone: single tap toggles controls immediately ───
+        // ─── Center zone: single tap TOGGLES controls (show ↔ hide) ───
         doubleTapRef.current = null;
         if (singleTapTimeoutRef.current) {
             clearTimeout(singleTapTimeoutRef.current);
@@ -2332,7 +2348,7 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+                className={`absolute inset-0 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
@@ -2340,425 +2356,403 @@ export default function VideoPlayer({
                 onClick={handleScreenClick}
                 onDoubleClick={handleScreenDoubleClick}
             >
-                {/* Top bar info */}
-                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
-                    <div className="text-white drop-shadow-md">
-                        <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
-                            {title}
-                        </h2>
-                        {isSeries && season && episode && (
-                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                                Season {season} • Episode {episode}
-                            </p>
+                {/* ══════════════════════════════════════════════════════
+                    MOBILE LAYOUT (hidden on sm+)
+                    Mimics YouTube fullscreen: top bar, big center row, bottom seek
+                    ══════════════════════════════════════════════════════ */}
+                <div className="sm:hidden flex flex-col h-full" data-controls-panel>
+                    {/* ── Mobile Top Bar ── */}
+                    <div className="flex items-center justify-between px-3 pt-3 pb-2 bg-gradient-to-b from-black/80 to-transparent">
+                        <div className="flex-1 min-w-0 pr-2">
+                            <h2 className="font-bold text-white text-sm line-clamp-1 drop-shadow">{title}</h2>
+                            {isSeries && season && episode && (
+                                <p className="text-[11px] text-white/60 font-medium mt-0.5">
+                                    S{season} · EP{episode}
+                                </p>
+                            )}
+                        </div>
+                        {/* Fullscreen button — top-right, large tap target */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+                            className="w-10 h-10 flex items-center justify-center rounded-xl text-white/80 active:bg-white/15 active:scale-90 transition-all"
+                        >
+                            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                        </button>
+                    </div>
+
+                    {/* ── Mobile Center Row: Prev · Play/Pause · Next ── */}
+                    <div className="flex-1 flex items-center justify-center space-x-6">
+                        {isSeries && onPrevEpisode ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onPrevEpisode(); }}
+                                className="w-12 h-12 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm active:scale-90 transition-all"
+                            >
+                                <SkipBack className="w-6 h-6 fill-white text-white" />
+                            </button>
+                        ) : (
+                            <div className="w-12 h-12" />
+                        )}
+
+                        {/* Big Play/Pause — always visible on mobile */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                            className="w-16 h-16 flex items-center justify-center rounded-full bg-primary/90 shadow-2xl active:scale-90 transition-transform"
+                        >
+                            {isPlaying
+                                ? <Pause className="w-7 h-7 fill-white text-white" />
+                                : <Play  className="w-7 h-7 fill-white text-white translate-x-0.5" />
+                            }
+                        </button>
+
+                        {isSeries && onNextEpisode ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); handleNextEpisodeClick(); }}
+                                className="w-12 h-12 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm active:scale-90 transition-all"
+                            >
+                                <SkipForward className="w-6 h-6 fill-white text-white" />
+                            </button>
+                        ) : (
+                            <div className="w-12 h-12" />
                         )}
                     </div>
-                </div>
 
-                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-                {!isPlaying &&
-                    !isLoading &&
-                    !showSubtitleMenu &&
-                    !showAudioMenu &&
-                    !showQualityMenu &&
-                    !showSpeedMenu &&
-                    !showRatioMenu && (
-                        <button
-                            onClick={togglePlay}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
-                        >
-                            <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-white translate-x-0.5" />
-                        </button>
-                    )}
+                    {/* ── Mobile Bottom: Settings Row + Seek Bar + Time ── */}
+                    <div className="bg-gradient-to-t from-black/80 to-transparent px-3 pb-4 space-y-1.5">
+                        {/* Settings / utility row */}
+                        <div className="flex items-center justify-between">
+                            {/* Left: Mute */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                                className="w-10 h-10 flex items-center justify-center rounded-xl text-white/70 active:bg-white/15 active:scale-90 transition-all"
+                            >
+                                {isMuted || volume === 0
+                                    ? <VolumeX className="w-5 h-5 text-primary" />
+                                    : <Volume2 className="w-5 h-5" />
+                                }
+                            </button>
 
-                {/* Bottom controls panel wrapped in a premium floating glass panel */}
-                <div
-                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6"
-                    data-controls-panel
-                >
-                    <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">
-                        {/* Timeline Seek Scrubber Track */}
-                        <div className="flex items-center space-x-2 sm:space-x-3">
-                            <span className="text-white/80 font-mono text-[10px] sm:text-xs select-none min-w-[38px] sm:min-w-[45px] text-right">
-                                {formatTime(currentTime)}
-                            </span>
+                            {/* Right: Sub, Audio, Quality, Ratio */}
+                            <div className="flex items-center space-x-0.5">
+                                {captions.length > 0 && (
+                                    <div className="relative">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setShowSubtitleMenu(!showSubtitleMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowAudioMenu(false); setShowRatioMenu(false); }}
+                                            className={`w-10 h-10 flex items-center justify-center rounded-xl active:scale-90 transition-all ${showSubtitleMenu || showSubtitles ? "text-primary bg-primary/10" : "text-white/60"}`}
+                                        >
+                                            <Subtitles className="w-5 h-5" />
+                                        </button>
+                                        {showSubtitleMenu && (
+                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Subtitles</p>
+                                                <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                    <button onClick={() => handleSubtitleChange(null)} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}>Off</button>
+                                                    {captions.map((caption) => (
+                                                        <button key={caption.id || caption.url} onClick={() => handleSubtitleChange(caption)} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id ? "text-primary bg-primary/10" : "text-white/80"}`}>{caption.lanName}</button>
+                                                    ))}
+                                                </div>
+                                                <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">Size</p>
+                                                <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                                                    {["16px","22px","28px","36px"].map((size, i) => (
+                                                        <button key={size} onClick={() => setSubtitleSize(size)} className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}>
+                                                            {["SM","MD","LG","XL"][i]}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
-                            {/* Custom progress bar with buffer indicator */}
+                                {dubs && dubs.length > 0 && (
+                                    <div className="relative">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setShowAudioMenu(!showAudioMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowSubtitleMenu(false); setShowRatioMenu(false); }}
+                                            className={`w-10 h-10 flex items-center justify-center rounded-xl active:scale-90 transition-all ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/60"}`}
+                                        >
+                                            <Headphones className="w-5 h-5" />
+                                        </button>
+                                        {showAudioMenu && (
+                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Audio</p>
+                                                <div className="max-h-[160px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                    {dubs.map((dub, idx) => (
+                                                        <button key={idx} onClick={() => { setShowAudioMenu(false); const ep = isSeries && season && episode ? `?season=${season}&episode=${episode}` : ""; window.location.href = `/watch/${dub.detailPath}${ep}`; }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${detailPath === dub.detailPath ? "text-primary bg-primary/10" : "text-white/80"}`}>{dub.lanName}{dub.original ? " (Orig)" : ""}</button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Quality badge */}
+                                <div className="relative" ref={qualityMenuMobileRef}>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowQualityMenu(!showQualityMenu); setShowSpeedMenu(false); setShowAudioMenu(false); setShowSubtitleMenu(false); setShowRatioMenu(false); }}
+                                        className={`h-10 px-2.5 flex items-center font-bold text-[11px] rounded-xl border transition-all active:scale-90 ${showQualityMenu ? "bg-primary/20 text-primary-light border-primary/30" : "bg-white/5 border-white/10 text-white/70"}`}
+                                    >
+                                        {activeDownload ? `${activeDownload.resolution}p` : "Auto"}
+                                    </button>
+                                    {showQualityMenu && sortedDownloads.length > 0 && (
+                                        <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
+                                            <div className="max-h-[150px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                <button onClick={() => { setIsAutoQuality(true); setShowQualityMenu(false); const dq = sortedDownloads.find(d=>d.resolution===720)||sortedDownloads[0]; if(dq&&activeDownload?.id!==dq.id) handleQualityChange(dq,true); }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}>Auto</button>
+                                                {sortedDownloads.map((link, idx) => (
+                                                    <button key={`${link.id||"q"}-${idx}`} onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id===link.id ? "text-primary bg-primary/10" : "text-white/80"}`}>{link.resolution}p</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Aspect Ratio */}
+                                <div className="relative">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowRatioMenu(!showRatioMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowAudioMenu(false); setShowSubtitleMenu(false); }}
+                                        className={`w-10 h-10 flex items-center justify-center rounded-xl active:scale-90 transition-all ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/60"}`}
+                                    >
+                                        <Scan className="w-5 h-5" />
+                                    </button>
+                                    {showRatioMenu && (
+                                        <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[120px] flex flex-col space-y-0.5 z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                            <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen</p>
+                                            {[{value:"contain" as const,label:"Fit"},{value:"fill" as const,label:"Stretch"},{value:"cover" as const,label:"Zoom"}].map(({value,label})=>(
+                                                <button key={value} onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }} className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio===value?"text-primary bg-primary/10":"text-white/80"}`}>{label}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Seek bar row */}
+                        <div className="flex items-center space-x-2">
+                            <span className="text-white/70 font-mono text-[11px] select-none min-w-[36px] text-right">{formatTime(currentTime)}</span>
+
+                            {/* Seek track */}
                             <div
-                                className="grow relative h-7 sm:h-5 flex items-center cursor-pointer group/scrub select-none"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!videoRef.current || !duration) return;
-                                    const rect =
-                                        e.currentTarget.getBoundingClientRect();
-                                    const x = e.clientX - rect.left;
-                                    const percent = Math.max(
-                                        0,
-                                        Math.min(x / rect.width, 1),
-                                    );
-                                    const seekTime = percent * duration;
-                                    videoRef.current.currentTime = seekTime;
-                                    setCurrentTime(seekTime);
-                                    triggerControlsVisibility();
-                                    // Ensure video keeps playing after seek
-                                    if (!videoRef.current.paused) {
-                                        videoRef.current.play().catch(() => {});
-                                    }
-                                }}
-                                onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setIsScrubbing(true);
-                                    const track = e.currentTarget;
-                                    if (videoRef.current) {
-                                        scrubbingTimeRef.current =
-                                            videoRef.current.currentTime;
-                                    }
-                                    const seek = (ev: MouseEvent) => {
-                                        if (!videoRef.current || !duration)
-                                            return;
-                                        const rect =
-                                            track.getBoundingClientRect();
-                                        const x = Math.max(
-                                            0,
-                                            Math.min(
-                                                ev.clientX - rect.left,
-                                                rect.width,
-                                            ),
-                                        );
-                                        const percent = x / rect.width;
-                                        const seekTime = percent * duration;
-                                        scrubbingTimeRef.current = seekTime;
-                                        setCurrentTime(seekTime);
-                                    };
-                                    const onUp = () => {
-                                        document.removeEventListener(
-                                            "mousemove",
-                                            seek,
-                                        );
-                                        document.removeEventListener(
-                                            "mouseup",
-                                            onUp,
-                                        );
-                                        setIsScrubbing(false);
-                                        if (videoRef.current) {
-                                            videoRef.current.currentTime =
-                                                scrubbingTimeRef.current;
-                                            // Resume playback after drag seek
-                                            if (!videoRef.current.paused) {
-                                                videoRef.current
-                                                    .play()
-                                                    .catch(() => {});
-                                            }
-                                        }
-                                        // Give the controls a fresh visibility
-                                        // window after the drag finishes.
-                                        triggerControlsVisibility();
-                                    };
-                                    document.addEventListener(
-                                        "mousemove",
-                                        seek,
-                                    );
-                                    document.addEventListener("mouseup", onUp);
-                                }}
+                                className="flex-1 relative h-8 flex items-center cursor-pointer"
+                                data-progress-bar
                                 onTouchStart={(e) => {
                                     e.stopPropagation();
                                     setIsScrubbing(true);
                                     const track = e.currentTarget;
-                                    if (videoRef.current) {
-                                        scrubbingTimeRef.current =
-                                            videoRef.current.currentTime;
-                                    }
+                                    if (videoRef.current) scrubbingTimeRef.current = videoRef.current.currentTime;
                                     const seek = (ev: TouchEvent) => {
-                                        if (
-                                            !videoRef.current ||
-                                            !duration ||
-                                            !ev.touches[0]
-                                        )
-                                            return;
-                                        const rect =
-                                            track.getBoundingClientRect();
-                                        const x = Math.max(
-                                            0,
-                                            Math.min(
-                                                ev.touches[0].clientX -
-                                                    rect.left,
-                                                rect.width,
-                                            ),
-                                        );
-                                        const percent = x / rect.width;
-                                        const seekTime = percent * duration;
+                                        if (!videoRef.current || !duration || !ev.touches[0]) return;
+                                        const rect = track.getBoundingClientRect();
+                                        const x = Math.max(0, Math.min(ev.touches[0].clientX - rect.left, rect.width));
+                                        const seekTime = (x / rect.width) * duration;
                                         scrubbingTimeRef.current = seekTime;
                                         setCurrentTime(seekTime);
                                     };
                                     const onEnd = () => {
-                                        document.removeEventListener(
-                                            "touchmove",
-                                            seek,
-                                        );
-                                        document.removeEventListener(
-                                            "touchend",
-                                            onEnd,
-                                        );
+                                        document.removeEventListener("touchmove", seek);
+                                        document.removeEventListener("touchend", onEnd);
                                         setIsScrubbing(false);
                                         if (videoRef.current) {
-                                            videoRef.current.currentTime =
-                                                scrubbingTimeRef.current;
-                                            // Resume playback after touch seek
-                                            if (!videoRef.current.paused) {
-                                                videoRef.current
-                                                    .play()
-                                                    .catch(() => {});
-                                            }
+                                            videoRef.current.currentTime = scrubbingTimeRef.current;
+                                            if (!videoRef.current.paused) videoRef.current.play().catch(()=>{});
                                         }
-                                        // Give the controls a fresh visibility
-                                        // window after the drag finishes.
                                         triggerControlsVisibility();
                                     };
-                                    document.addEventListener(
-                                        "touchmove",
-                                        seek,
-                                    );
-                                    document.addEventListener(
-                                        "touchend",
-                                        onEnd,
-                                    );
+                                    document.addEventListener("touchmove", seek);
+                                    document.addEventListener("touchend", onEnd);
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!videoRef.current || !duration) return;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const seekTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration;
+                                    videoRef.current.currentTime = seekTime;
+                                    setCurrentTime(seekTime);
+                                    triggerControlsVisibility();
                                 }}
                             >
-                                {/* Visual track */}
-                                <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
-                                    {/* Buffered range (light grey) */}
-                                    <div
-                                        className="absolute top-0 left-0 h-full bg-white/40 rounded-full"
-                                        style={{
-                                            width: `${bufferedPercent}%`,
-                                        }}
-                                    />
-                                    {/* Played range (primary red) */}
-                                    <div
-                                        className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]"
-                                        style={{
-                                            width:
-                                                duration > 0
-                                                    ? `${(currentTime / duration) * 100}%`
-                                                    : "0%",
-                                        }}
-                                    />
+                                <div className="relative w-full h-1.5 rounded-full bg-white/20">
+                                    <div className="absolute top-0 left-0 h-full bg-white/35 rounded-full" style={{width:`${bufferedPercent}%`}} />
+                                    <div className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]" style={{width: duration>0 ? `${(currentTime/duration)*100}%` : "0%"}} />
+                                    {/* Thumb */}
+                                    <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg border-2 border-primary pointer-events-none" style={{left: duration>0 ? `calc(${(currentTime/duration)*100}% - 8px)` : "0px"}} />
                                 </div>
-                                {/* Scrub thumb indicator */}
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-primary rounded-full shadow-lg opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
-                                    style={{
-                                        left:
-                                            duration > 0
-                                                ? `calc(${(currentTime / duration) * 100}% - 7px)`
-                                                : "0px",
-                                    }}
-                                />
                             </div>
 
                             <span
-                                onClick={() =>
-                                    setShowRemaining((prev) => !prev)
-                                }
-                                className="text-white/60 font-mono text-[10px] sm:text-xs select-none min-w-[38px] sm:min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
-                                title={
-                                    showRemaining
-                                        ? "Click to show duration"
-                                        : "Click to show remaining time"
-                                }
+                                onClick={() => setShowRemaining(prev => !prev)}
+                                className="text-white/50 font-mono text-[11px] select-none min-w-[36px] text-left cursor-pointer"
                             >
-                                {showRemaining
-                                    ? `-${formatTime(Math.max(0, duration - currentTime))}`
-                                    : formatTime(duration)}
+                                {showRemaining ? `-${formatTime(Math.max(0, duration - currentTime))}` : formatTime(duration)}
                             </span>
                         </div>
+                    </div>
+                </div>
 
-                        {/* Controls Bar Row */}
-                        <div className="flex items-center justify-between">
-                            {/* Left Controls: Prev, Play, Next, Volume */}
-                            <div className="flex items-center space-x-1 sm:space-x-3">
-                                {/* Prev Episode */}
-                                {isSeries && onPrevEpisode && (
-                                    <button
-                                        onClick={onPrevEpisode}
-                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
-                                        title="Previous Episode"
-                                    >
-                                        <SkipBack className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
-                                    </button>
-                                )}
+                {/* ══════════════════════════════════════════════════════
+                    DESKTOP LAYOUT (hidden on mobile, shown sm+)
+                    ══════════════════════════════════════════════════════ */}
+                <div className="hidden sm:flex flex-col h-full from-black/50 via-transparent to-black/20">
+                    {/* Top bar info */}
+                    <div className="flex items-center justify-between p-8 w-full bg-gradient-to-b from-black/85 to-transparent">
+                        <div className="text-white drop-shadow-md">
+                            <h2 className="font-extrabold text-base line-clamp-1">{title}</h2>
+                            {isSeries && season && episode && (
+                                <p className="text-xs text-white/70 font-semibold mt-0.5">Season {season} • Episode {episode}</p>
+                            )}
+                        </div>
+                    </div>
 
-                                {/* Play Pause */}
-                                <button
-                                    onClick={togglePlay}
-                                    className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+                    {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+                    {!isPlaying && !isLoading && !showSubtitleMenu && !showAudioMenu && !showQualityMenu && !showSpeedMenu && !showRatioMenu && (
+                        <button
+                            onClick={togglePlay}
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
+                        >
+                            <Play className="w-7 h-7 fill-white translate-x-0.5" />
+                        </button>
+                    )}
+
+                    {/* Bottom controls panel wrapped in a premium floating glass panel */}
+                    <div className="w-full max-w-6xl mx-auto px-6 pb-6" data-controls-panel>
+                        <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-2xl p-4 md:p-5 shadow-2xl space-y-4 transition-all duration-300 hover:border-white/15">
+                            {/* Timeline Seek Scrubber Track */}
+                            <div className="flex items-center space-x-3">
+                                <span className="text-white/80 font-mono text-xs select-none min-w-[45px] text-right">{formatTime(currentTime)}</span>
+
+                                {/* Custom progress bar with buffer indicator */}
+                                <div
+                                    className="grow relative h-5 flex items-center cursor-pointer group/scrub select-none"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!videoRef.current || !duration) return;
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const x = e.clientX - rect.left;
+                                        const seekTime = Math.max(0, Math.min(x / rect.width, 1)) * duration;
+                                        videoRef.current.currentTime = seekTime;
+                                        setCurrentTime(seekTime);
+                                        triggerControlsVisibility();
+                                        if (!videoRef.current.paused) videoRef.current.play().catch(()=>{});
+                                    }}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault(); e.stopPropagation();
+                                        setIsScrubbing(true);
+                                        const track = e.currentTarget;
+                                        if (videoRef.current) scrubbingTimeRef.current = videoRef.current.currentTime;
+                                        const seek = (ev: MouseEvent) => {
+                                            if (!videoRef.current || !duration) return;
+                                            const rect = track.getBoundingClientRect();
+                                            const x = Math.max(0, Math.min(ev.clientX - rect.left, rect.width));
+                                            const seekTime = (x / rect.width) * duration;
+                                            scrubbingTimeRef.current = seekTime;
+                                            setCurrentTime(seekTime);
+                                        };
+                                        const onUp = () => {
+                                            document.removeEventListener("mousemove", seek);
+                                            document.removeEventListener("mouseup", onUp);
+                                            setIsScrubbing(false);
+                                            if (videoRef.current) {
+                                                videoRef.current.currentTime = scrubbingTimeRef.current;
+                                                if (!videoRef.current.paused) videoRef.current.play().catch(()=>{});
+                                            }
+                                            triggerControlsVisibility();
+                                        };
+                                        document.addEventListener("mousemove", seek);
+                                        document.addEventListener("mouseup", onUp);
+                                    }}
+                                    onTouchStart={(e) => {
+                                        e.stopPropagation();
+                                        setIsScrubbing(true);
+                                        const track = e.currentTarget;
+                                        if (videoRef.current) scrubbingTimeRef.current = videoRef.current.currentTime;
+                                        const seek = (ev: TouchEvent) => {
+                                            if (!videoRef.current || !duration || !ev.touches[0]) return;
+                                            const rect = track.getBoundingClientRect();
+                                            const x = Math.max(0, Math.min(ev.touches[0].clientX - rect.left, rect.width));
+                                            scrubbingTimeRef.current = (x / rect.width) * duration;
+                                            setCurrentTime(scrubbingTimeRef.current);
+                                        };
+                                        const onEnd = () => {
+                                            document.removeEventListener("touchmove", seek);
+                                            document.removeEventListener("touchend", onEnd);
+                                            setIsScrubbing(false);
+                                            if (videoRef.current) {
+                                                videoRef.current.currentTime = scrubbingTimeRef.current;
+                                                if (!videoRef.current.paused) videoRef.current.play().catch(()=>{});
+                                            }
+                                            triggerControlsVisibility();
+                                        };
+                                        document.addEventListener("touchmove", seek);
+                                        document.addEventListener("touchend", onEnd);
+                                    }}
                                 >
-                                    {isPlaying ? (
-                                        <Pause className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
-                                    ) : (
-                                        <Play className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
-                                    )}
-                                </button>
-
-                                {/* Next Episode */}
-                                {isSeries && onNextEpisode && (
-                                    <button
-                                        onClick={handleNextEpisodeClick}
-                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
-                                        title="Next Episode"
-                                    >
-                                        <SkipForward className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
-                                    </button>
-                                )}
-
-                                {/* Volume Panel â€” hidden on mobile, shown sm+ */}
-                                <div className="hidden sm:flex items-center space-x-2">
-                                    <button
-                                        onClick={toggleMute}
-                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
-                                    >
-                                        {isMuted || volume === 0 ? (
-                                            <VolumeX className="w-4.5 h-4.5 text-primary" />
-                                        ) : volume < 0.5 ? (
-                                            <Volume1 className="w-4.5 h-4.5" />
-                                        ) : (
-                                            <Volume2 className="w-4.5 h-4.5" />
-                                        )}
-                                    </button>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.05"
-                                        value={isMuted ? 0 : volume}
-                                        onChange={handleVolumeChange}
-                                        className="w-16 sm:w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all"
+                                    {/* Visual track */}
+                                    <div className="relative w-full h-1 group-hover/scrub:h-2 transition-all rounded-full bg-white/20 overflow-hidden">
+                                        <div className="absolute top-0 left-0 h-full bg-white/40 rounded-full" style={{width:`${bufferedPercent}%`}} />
+                                        <div className="absolute top-0 left-0 h-full bg-primary rounded-full shadow-[0_0_6px_var(--primary-glow)]" style={{width: duration>0 ? `${(currentTime/duration)*100}%` : "0%"}} />
+                                    </div>
+                                    {/* Scrub thumb indicator */}
+                                    <div
+                                        className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-primary rounded-full shadow-lg opacity-0 group-hover/scrub:opacity-100 transition-opacity pointer-events-none border-2 border-white"
+                                        style={{left: duration>0 ? `calc(${(currentTime/duration)*100}% - 7px)` : "0px"}}
                                     />
                                 </div>
-                                {/* Mobile-only mute button */}
-                                <button
-                                    onClick={toggleMute}
-                                    className="sm:hidden p-2.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+
+                                <span
+                                    onClick={() => setShowRemaining(prev => !prev)}
+                                    className="text-white/60 font-mono text-xs select-none min-w-[45px] text-left cursor-pointer hover:text-white transition-colors"
+                                    title={showRemaining ? "Click to show duration" : "Click to show remaining time"}
                                 >
-                                    {isMuted || volume === 0 ? (
-                                        <VolumeX className="w-4.5 h-4.5 text-primary" />
-                                    ) : (
-                                        <Volume2 className="w-4.5 h-4.5" />
-                                    )}
-                                </button>
+                                    {showRemaining ? `-${formatTime(Math.max(0, duration - currentTime))}` : formatTime(duration)}
+                                </span>
                             </div>
 
-                            {/* Right Controls: Subtitle, Audio/Dub, Speed, Quality, Screen Size, Fullscreen */}
-                            <div className="flex items-center space-x-1 sm:space-x-2 relative">
-                                {/* â”€â”€ SECONDARY CONTROLS (hidden on mobile, visible sm+) â”€â”€ */}
-                                <div className="hidden sm:flex items-center space-x-2 relative">
-                                    {/* Subtitle Selector */}
+                            {/* Controls Bar Row */}
+                            <div className="flex items-center justify-between">
+                                {/* Left Controls: Prev, Play, Next, Volume */}
+                                <div className="flex items-center space-x-3">
+                                    {isSeries && onPrevEpisode && (
+                                        <button onClick={onPrevEpisode} className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90" title="Previous Episode">
+                                            <SkipBack className="w-4 h-4 fill-white text-white" />
+                                        </button>
+                                    )}
+                                    <button onClick={togglePlay} className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90">
+                                        {isPlaying ? <Pause className="w-4.5 h-4.5 fill-white" /> : <Play className="w-4.5 h-4.5 fill-white" />}
+                                    </button>
+                                    {isSeries && onNextEpisode && (
+                                        <button onClick={handleNextEpisodeClick} className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90" title="Next Episode">
+                                            <SkipForward className="w-4 h-4 fill-white text-white" />
+                                        </button>
+                                    )}
+                                    {/* Volume */}
+                                    <div className="flex items-center space-x-2">
+                                        <button onClick={toggleMute} className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center">
+                                            {isMuted || volume === 0 ? <VolumeX className="w-4.5 h-4.5 text-primary" /> : volume < 0.5 ? <Volume1 className="w-4.5 h-4.5" /> : <Volume2 className="w-4.5 h-4.5" />}
+                                        </button>
+                                        <input type="range" min="0" max="1" step="0.05" value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-20 accent-primary cursor-pointer h-1 bg-white/20 rounded-lg outline-none hover:bg-white/30 transition-all" />
+                                    </div>
+                                </div>
+
+                                {/* Right Controls: Subtitle, Audio, Quality, Speed, Ratio, PiP, Fullscreen */}
+                                <div className="flex items-center space-x-2 relative">
                                     {captions.length > 0 && (
-                                        <div
-                                            ref={subtitleMenuRef}
-                                            className="relative"
-                                        >
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(
-                                                        !showSubtitleMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                    showSubtitleMenu ||
-                                                    showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/70 hover:text-white"
-                                                }`}
-                                                title="Subtitles"
-                                            >
+                                        <div ref={subtitleMenuRef} className="relative">
+                                            <button onClick={() => { setShowSubtitleMenu(!showSubtitleMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowAudioMenu(false); setShowRatioMenu(false); }} className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu || showSubtitles ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"}`} title="Subtitles">
                                                 <Subtitles className="w-4.5 h-4.5" />
                                             </button>
-
                                             {showSubtitleMenu && (
                                                 <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Subtitles
-                                                    </p>
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Subtitles</p>
                                                     <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() =>
-                                                                handleSubtitleChange(
-                                                                    null,
-                                                                )
-                                                            }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                !activeCaption
-                                                                    ? "text-primary bg-primary/10"
-                                                                    : "text-white/80"
-                                                            }`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map(
-                                                            (caption) => (
-                                                                <button
-                                                                    key={
-                                                                        caption.id ||
-                                                                        caption.url
-                                                                    }
-                                                                    onClick={() =>
-                                                                        handleSubtitleChange(
-                                                                            caption,
-                                                                        )
-                                                                    }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        activeCaption?.id ===
-                                                                        caption.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        caption.lanName
-                                                                    }
-                                                                </button>
-                                                            ),
-                                                        )}
+                                                        <button onClick={() => handleSubtitleChange(null)} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}>Off</button>
+                                                        {captions.map((caption) => (
+                                                            <button key={caption.id || caption.url} onClick={() => handleSubtitleChange(caption)} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id === caption.id ? "text-primary bg-primary/10" : "text-white/80"}`}>{caption.lanName}</button>
+                                                        ))}
                                                     </div>
                                                     <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Size
-                                                    </p>
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Size</p>
                                                     <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {[
-                                                            "16px",
-                                                            "22px",
-                                                            "28px",
-                                                            "36px",
-                                                        ].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() =>
-                                                                    setSubtitleSize(
-                                                                        size,
-                                                                    )
-                                                                }
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                                    subtitleSize ===
-                                                                    size
-                                                                        ? "text-primary bg-primary/10"
-                                                                        : "text-white/60"
-                                                                }`}
-                                                            >
-                                                                {
-                                                                    [
-                                                                        "SM",
-                                                                        "MD",
-                                                                        "LG",
-                                                                        "XL",
-                                                                    ][i]
-                                                                }
-                                                            </button>
+                                                        {["16px","22px","28px","36px"].map((size, i) => (
+                                                            <button key={size} onClick={() => setSubtitleSize(size)} className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}>{["SM","MD","LG","XL"][i]}</button>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -2766,700 +2760,81 @@ export default function VideoPlayer({
                                         </div>
                                     )}
 
-                                    {/* Audio/Dub selector */}
                                     {dubs && dubs.length > 0 && (
-                                        <div
-                                            ref={audioMenuRef}
-                                            className="relative"
-                                        >
-                                            <button
-                                                onClick={() => {
-                                                    setShowAudioMenu(
-                                                        !showAudioMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowSubtitleMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                    showAudioMenu
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/70 hover:text-white"
-                                                }`}
-                                                title="Change Audio Track"
-                                            >
+                                        <div ref={audioMenuRef} className="relative">
+                                            <button onClick={() => { setShowAudioMenu(!showAudioMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowSubtitleMenu(false); setShowRatioMenu(false); }} className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showAudioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"}`} title="Change Audio Track">
                                                 <Headphones className="w-4.5 h-4.5" />
                                             </button>
-
                                             {showAudioMenu && (
                                                 <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Audio Track
-                                                    </p>
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Audio Track</p>
                                                     <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        {dubs.map(
-                                                            (dub, idx) => {
-                                                                const isCurrent =
-                                                                    detailPath ===
-                                                                    dub.detailPath;
-                                                                return (
-                                                                    <button
-                                                                        key={
-                                                                            idx
-                                                                        }
-                                                                        onClick={() => {
-                                                                            setShowAudioMenu(
-                                                                                false,
-                                                                            );
-                                                                            const epParams =
-                                                                                isSeries &&
-                                                                                season &&
-                                                                                episode
-                                                                                    ? `?season=${season}&episode=${episode}`
-                                                                                    : "";
-                                                                            window.location.href = `/watch/${dub.detailPath}${epParams}`;
-                                                                        }}
-                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                            isCurrent
-                                                                                ? "text-primary bg-primary/10"
-                                                                                : "text-white/80"
-                                                                        }`}
-                                                                    >
-                                                                        {
-                                                                            dub.lanName
-                                                                        }{" "}
-                                                                        {dub.original
-                                                                            ? "(Original)"
-                                                                            : ""}
-                                                                    </button>
-                                                                );
-                                                            },
-                                                        )}
+                                                        {dubs.map((dub, idx) => {
+                                                            const isCurrent = detailPath === dub.detailPath;
+                                                            return (
+                                                                <button key={idx} onClick={() => { setShowAudioMenu(false); const ep = isSeries && season && episode ? `?season=${season}&episode=${episode}` : ""; window.location.href = `/watch/${dub.detailPath}${ep}`; }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isCurrent ? "text-primary bg-primary/10" : "text-white/80"}`}>{dub.lanName}{dub.original ? " (Original)" : ""}</button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     )}
 
-                                    {/* Quality (desktop full pill) */}
-                                    <div
-                                        ref={qualityMenuRef}
-                                        className="relative"
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowQualityMenu(
-                                                    !showQualityMenu,
-                                                );
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                                                showQualityMenu
-                                                    ? "bg-primary/20 text-primary-light border-primary/30"
-                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
-                                            }`}
-                                        >
-                                            <span>
-                                                {activeDownload
-                                                    ? isAutoQuality
-                                                        ? `Auto (${activeDownload.resolution}p)`
-                                                        : `${activeDownload.resolution}p`
-                                                    : "Auto"}
-                                            </span>
+                                    <div ref={qualityMenuRef} className="relative">
+                                        <button onClick={() => { setShowQualityMenu(!showQualityMenu); setShowSpeedMenu(false); setShowAudioMenu(false); setShowSubtitleMenu(false); setShowRatioMenu(false); }} className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${showQualityMenu ? "bg-primary/20 text-primary-light border-primary/30" : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"}`}>
+                                            <span>{activeDownload ? isAutoQuality ? `Auto (${activeDownload.resolution}p)` : `${activeDownload.resolution}p` : "Auto"}</span>
                                             <Settings className="w-3.5 h-3.5" />
                                         </button>
-
-                                        {showQualityMenu &&
-                                            sortedDownloads.length > 0 && (
-                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Quality
-                                                    </p>
-                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() => {
-                                                                setIsAutoQuality(
-                                                                    true,
-                                                                );
-                                                                setShowQualityMenu(
-                                                                    false,
-                                                                );
-                                                                const defaultQuality =
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            720,
-                                                                    ) ||
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            1080,
-                                                                    ) ||
-                                                                    sortedDownloads[0];
-                                                                if (
-                                                                    defaultQuality &&
-                                                                    activeDownload?.id !==
-                                                                        defaultQuality.id
-                                                                ) {
-                                                                    handleQualityChange(
-                                                                        defaultQuality,
-                                                                        true,
-                                                                    );
-                                                                }
-                                                            }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Auto
-                                                        </button>
-                                                        {sortedDownloads.map(
-                                                            (link, idx) => (
-                                                                <button
-                                                                    key={`${link.id || "quality"}-${idx}`}
-                                                                    onClick={() => {
-                                                                        handleQualityChange(
-                                                                            link,
-                                                                        );
-                                                                        setShowQualityMenu(
-                                                                            false,
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        !isAutoQuality &&
-                                                                        activeDownload?.id ===
-                                                                            link.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        link.resolution
-                                                                    }
-                                                                    p
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
+                                        {showQualityMenu && sortedDownloads.length > 0 && (
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">Quality</p>
+                                                <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                    <button onClick={() => { setIsAutoQuality(true); setShowQualityMenu(false); const dq = sortedDownloads.find(d=>d.resolution===720)||sortedDownloads.find(d=>d.resolution===1080)||sortedDownloads[0]; if(dq&&activeDownload?.id!==dq.id) handleQualityChange(dq,true); }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}>Auto</button>
+                                                    {sortedDownloads.map((link, idx) => (
+                                                        <button key={`${link.id||"quality"}-${idx}`} onClick={() => { handleQualityChange(link); setShowQualityMenu(false); }} className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality && activeDownload?.id===link.id ? "text-primary bg-primary/10" : "text-white/80"}`}>{link.resolution}p</button>
+                                                    ))}
                                                 </div>
-                                            )}
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {/* Speed */}
-                                    <div
-                                        ref={speedMenuRef}
-                                        className="relative"
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowSpeedMenu(
-                                                    !showSpeedMenu,
-                                                );
-                                                setShowQualityMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
-                                                showSpeedMenu
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/80 hover:text-white"
-                                            }`}
-                                        >
-                                            {playbackRate}x
-                                        </button>
-
+                                    <div ref={speedMenuRef} className="relative">
+                                        <button onClick={() => { setShowSpeedMenu(!showSpeedMenu); setShowQualityMenu(false); setShowAudioMenu(false); setShowSubtitleMenu(false); setShowRatioMenu(false); }} className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${showSpeedMenu ? "text-primary bg-primary/10" : "text-white/80 hover:text-white"}`}>{playbackRate}x</button>
                                         {showSpeedMenu && (
                                             <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[100px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                    Speed
-                                                </p>
-                                                {[
-                                                    0.5, 0.75, 1.0, 1.25, 1.5,
-                                                    2.0,
-                                                ].map((rate) => (
-                                                    <button
-                                                        key={rate}
-                                                        onClick={() =>
-                                                            handleSpeedChange(
-                                                                rate,
-                                                            )
-                                                        }
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            playbackRate ===
-                                                            rate
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/80"
-                                                        }`}
-                                                    >
-                                                        {rate.toFixed(1)}x
-                                                    </button>
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Speed</p>
+                                                {[0.5,0.75,1.0,1.25,1.5,2.0].map((rate) => (
+                                                    <button key={rate} onClick={() => handleSpeedChange(rate)} className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${playbackRate===rate ? "text-primary bg-primary/10" : "text-white/80"}`}>{rate.toFixed(1)}x</button>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Aspect Ratio */}
-                                    <div
-                                        ref={ratioMenuRef}
-                                        className="relative"
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowRatioMenu(
-                                                    !showRatioMenu,
-                                                );
-                                                setShowQualityMenu(false);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                            }}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                showRatioMenu
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/70 hover:text-white"
-                                            }`}
-                                            title="Aspect Ratio"
-                                        >
-                                            <svg
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                className="w-4.5 h-4.5"
-                                            >
-                                                <rect
-                                                    x="3"
-                                                    y="5"
-                                                    width="18"
-                                                    height="14"
-                                                    rx="2"
-                                                />
-                                                <path d="M 9 15 L 15 9" />
-                                                <path d="M 12 9 L 15 9 L 15 12" />
-                                                <path d="M 12 15 L 9 15 L 9 12" />
-                                            </svg>
+                                    <div ref={ratioMenuRef} className="relative">
+                                        <button onClick={() => { setShowRatioMenu(!showRatioMenu); setShowQualityMenu(false); setShowSpeedMenu(false); setShowAudioMenu(false); setShowSubtitleMenu(false); }} className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showRatioMenu ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"}`} title="Aspect Ratio">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M 9 15 L 15 9"/><path d="M 12 9 L 15 9 L 15 12"/><path d="M 12 15 L 9 15 L 9 12"/></svg>
                                         </button>
-
                                         {showRatioMenu && (
                                             <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col space-y-1 z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                    Screen Size
-                                                </p>
-                                                {[
-                                                    {
-                                                        value: "contain" as const,
-                                                        label: "Fit Screen",
-                                                    },
-                                                    {
-                                                        value: "fill" as const,
-                                                        label: "Stretch Screen",
-                                                    },
-                                                    {
-                                                        value: "cover" as const,
-                                                        label: "Zoom / Fill",
-                                                    },
-                                                ].map(({ value, label }) => (
-                                                    <button
-                                                        key={value}
-                                                        onClick={() => {
-                                                            setAspectRatio(
-                                                                value,
-                                                            );
-                                                            setShowRatioMenu(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            aspectRatio ===
-                                                            value
-                                                                ? "text-primary bg-primary/10"
-                                                                : "text-white/80"
-                                                        }`}
-                                                    >
-                                                        {label}
-                                                    </button>
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">Screen Size</p>
+                                                {[{value:"contain" as const,label:"Fit Screen"},{value:"fill" as const,label:"Stretch Screen"},{value:"cover" as const,label:"Zoom / Fill"}].map(({value,label})=>(
+                                                    <button key={value} onClick={() => { setAspectRatio(value); setShowRatioMenu(false); }} className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio===value ? "text-primary bg-primary/10" : "text-white/80"}`}>{label}</button>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* PiP (desktop only) */}
                                     {isPiPSupported && (
-                                        <button
-                                            onClick={togglePiP}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                isPiPActive
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/70 hover:text-white"
-                                            }`}
-                                            title="Picture-in-Picture"
-                                        >
+                                        <button onClick={togglePiP} className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${isPiPActive ? "text-primary bg-primary/10" : "text-white/70 hover:text-white"}`} title="Picture-in-Picture">
                                             <PictureInPicture2 className="w-4.5 h-4.5" />
                                         </button>
                                     )}
+
+                                    <button onClick={toggleFullscreen} className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+                                        {isFullscreen ? <Minimize className="w-4.5 h-4.5" /> : <Maximize className="w-4.5 h-4.5" />}
+                                    </button>
                                 </div>
-                                {/* ── MOBILE-ONLY: compact icon controls ── */}
-                                <div className="sm:hidden flex items-center space-x-0">
-                                    {/* Subtitle (mobile icon) */}
-                                    {captions.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(
-                                                        !showSubtitleMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                    showSubtitleMenu ||
-                                                    showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/60 hover:text-white hover:bg-white/10"
-                                                }`}
-                                                title="Subtitles"
-                                            >
-                                                <Subtitles className="w-4.5 h-4.5" />
-                                            </button>
-                                            {showSubtitleMenu && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Subtitles
-                                                    </p>
-                                                    <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() =>
-                                                                handleSubtitleChange(
-                                                                    null,
-                                                                )
-                                                            }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map(
-                                                            (caption) => (
-                                                                <button
-                                                                    key={
-                                                                        caption.id ||
-                                                                        caption.url
-                                                                    }
-                                                                    onClick={() =>
-                                                                        handleSubtitleChange(
-                                                                            caption,
-                                                                        )
-                                                                    }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        activeCaption?.id ===
-                                                                        caption.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        caption.lanName
-                                                                    }
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">
-                                                        Size
-                                                    </p>
-                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {[
-                                                            "16px",
-                                                            "22px",
-                                                            "28px",
-                                                            "36px",
-                                                        ].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() =>
-                                                                    setSubtitleSize(
-                                                                        size,
-                                                                    )
-                                                                }
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
-                                                            >
-                                                                {
-                                                                    [
-                                                                        "SM",
-                                                                        "MD",
-                                                                        "LG",
-                                                                        "XL",
-                                                                    ][i]
-                                                                }
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Audio/Dub (mobile icon) */}
-                                    {dubs && dubs.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowAudioMenu(
-                                                        !showAudioMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowSubtitleMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                    showAudioMenu
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/60 hover:text-white hover:bg-white/10"
-                                                }`}
-                                                title="Audio Track"
-                                            >
-                                                <Headphones className="w-4.5 h-4.5" />
-                                            </button>
-                                            {showAudioMenu && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Audio Track
-                                                    </p>
-                                                    <div className="max-h-[160px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        {dubs.map(
-                                                            (dub, idx) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => {
-                                                                        setShowAudioMenu(
-                                                                            false,
-                                                                        );
-                                                                        const epParams =
-                                                                            isSeries &&
-                                                                            season &&
-                                                                            episode
-                                                                                ? `?season=${season}&episode=${episode}`
-                                                                                : "";
-                                                                        window.location.href = `/watch/${dub.detailPath}${epParams}`;
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        detailPath ===
-                                                                        dub.detailPath
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        dub.lanName
-                                                                    }
-                                                                    {dub.original
-                                                                        ? " (Orig)"
-                                                                        : ""}
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Aspect Ratio (mobile icon) */}
-                                    <div className="relative">
-                                        <button
-                                            onClick={() => {
-                                                setShowRatioMenu(
-                                                    !showRatioMenu,
-                                                );
-                                                setShowQualityMenu(false);
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                            }}
-                                            className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                showRatioMenu
-                                                    ? "text-primary bg-primary/10"
-                                                    : "text-white/60 hover:text-white hover:bg-white/10"
-                                            }`}
-                                            title="Aspect Ratio"
-                                        >
-                                            <svg
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                className="w-4.5 h-4.5"
-                                            >
-                                                <rect
-                                                    x="3"
-                                                    y="5"
-                                                    width="18"
-                                                    height="14"
-                                                    rx="2"
-                                                />
-                                                <path d="M 9 15 L 15 9" />
-                                                <path d="M 12 9 L 15 9 L 15 12" />
-                                                <path d="M 12 15 L 9 15 L 9 12" />
-                                            </svg>
-                                        </button>
-                                        {showRatioMenu && (
-                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[120px] flex flex-col space-y-0.5 z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold">
-                                                    Screen Size
-                                                </p>
-                                                {[
-                                                    {
-                                                        value: "contain" as const,
-                                                        label: "Fit Screen",
-                                                    },
-                                                    {
-                                                        value: "fill" as const,
-                                                        label: "Stretch",
-                                                    },
-                                                    {
-                                                        value: "cover" as const,
-                                                        label: "Zoom / Fill",
-                                                    },
-                                                ].map(({ value, label }) => (
-                                                    <button
-                                                        key={value}
-                                                        onClick={() => {
-                                                            setAspectRatio(
-                                                                value,
-                                                            );
-                                                            setShowRatioMenu(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio === value ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                    >
-                                                        {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Quality compact badge (mobile) */}
-                                    <div
-                                        className="relative"
-                                        ref={qualityMenuMobileRef}
-                                    >
-                                        <button
-                                            onClick={() => {
-                                                setShowQualityMenu(
-                                                    !showQualityMenu,
-                                                );
-                                                setShowSpeedMenu(false);
-                                                setShowAudioMenu(false);
-                                                setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                                                showQualityMenu
-                                                    ? "bg-primary/20 text-primary-light border-primary/30"
-                                                    : "bg-white/5 border-white/10 text-white/80"
-                                            }`}
-                                        >
-                                            {activeDownload
-                                                ? `${activeDownload.resolution}p`
-                                                : "Auto"}
-                                        </button>
-                                        {showQualityMenu &&
-                                            sortedDownloads.length > 0 && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Quality
-                                                    </p>
-                                                    <div className="max-h-[150px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() => {
-                                                                setIsAutoQuality(
-                                                                    true,
-                                                                );
-                                                                setShowQualityMenu(
-                                                                    false,
-                                                                );
-                                                                const defaultQuality =
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            720,
-                                                                    ) ||
-                                                                    sortedDownloads[0];
-                                                                if (
-                                                                    defaultQuality &&
-                                                                    activeDownload?.id !==
-                                                                        defaultQuality.id
-                                                                )
-                                                                    handleQualityChange(
-                                                                        defaultQuality,
-                                                                        true,
-                                                                    );
-                                                            }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Auto
-                                                        </button>
-                                                        {sortedDownloads.map(
-                                                            (link, idx) => (
-                                                                <button
-                                                                    key={`${link.id || "quality"}-${idx}`}
-                                                                    onClick={() => {
-                                                                        handleQualityChange(
-                                                                            link,
-                                                                        );
-                                                                        setShowQualityMenu(
-                                                                            false,
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        !isAutoQuality &&
-                                                                        activeDownload?.id ===
-                                                                            link.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        link.resolution
-                                                                    }
-                                                                    p
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                    </div>
-                                </div>
-
-                                {/* Fullscreen (always visible) */}
-                                <button
-                                    onClick={toggleFullscreen}
-                                    className="p-2.5 sm:p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
-                                    title={
-                                        isFullscreen
-                                            ? "Exit Fullscreen"
-                                            : "Fullscreen"
-                                    }
-                                >
-                                    {isFullscreen ? (
-                                        <Minimize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
-                                    ) : (
-                                        <Maximize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
-                                    )}
-                                </button>
                             </div>
                         </div>
                     </div>
