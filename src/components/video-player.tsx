@@ -1973,7 +1973,7 @@ export default function VideoPlayer({
         <div
             ref={containerRef}
             onMouseMove={triggerControlsVisibility}
-            onMouseLeave={() => isPlaying && setShowControls(false)}
+            onMouseLeave={() => isPlaying && !isTouchDeviceRef.current && setShowControls(false)}
             onClick={handleScreenClick}
             onDoubleClick={handleScreenDoubleClick}
             onClickCapture={handlePlayerClickCapture}
