@@ -12,11 +12,11 @@ const UPSTREAM_BASE = "https://api.abisolutions.online";
 // Per-endpoint Cloudflare edge cache TTLs (seconds).
 // Stream URLs have expiring CDN tokens — must never be cached.
 const CF_CACHE_TTLS: Record<string, number> = {
-    home:     3600,   // 1 hour
-    details:  3600,   // 1 hour
-    search:   1800,   // 30 minutes
-    category: 1800,   // 30 minutes
-    fillers:  86400,  // 24 hours (filler episode data changes rarely)
+    home: 3600, // 1 hour
+    details: 3600, // 1 hour
+    search: 1800, // 30 minutes
+    category: 1800, // 30 minutes
+    fillers: 86400, // 24 hours (filler episode data changes rarely)
 };
 
 export async function GET(
@@ -25,6 +25,20 @@ export async function GET(
 ) {
     const { slug } = await params;
     const endpoint = slug[0]; // e.g. "home", "details", "stream"
+
+    // GUARD: Never proxy video requests to Vercel — video bytes must stay on
+    // Cloudflare Workers (free unlimited bandwidth). The dedicated /api/video
+    // route handles this, but this is a safety net.
+    if (endpoint === "video") {
+        return NextResponse.json(
+            {
+                error: "use_dedicated_route",
+                message: "Use /api/video directly",
+            },
+            { status: 400 },
+        );
+    }
+
     const path = "/api/" + slug.join("/");
 
     const { searchParams } = new URL(req.url);

@@ -397,12 +397,9 @@ export default function VideoPlayer({
 
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        // Video proxy — routes through a server that adds the required Referer header.
-        // Option 1 (current): Your existing API proxy (works but costs Vercel bandwidth)
-        // Option 2 (recommended): Deploy workers/video-proxy to Cloudflare Workers
-        //   for free unlimited bandwidth, then replace the URL below with:
-        //   const proxyBase = "https://video-proxy.<your-subdomain>.workers.dev";
-        const proxyBase = "https://api.abisolutions.online/api/video";
+        // Same-origin video proxy route — runs on Cloudflare Workers via OpenNext.
+        // CF Workers have unlimited free egress bandwidth, so no cost for streaming.
+        const proxyBase = "/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {

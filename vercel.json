@@ -1,9 +1,4 @@
 {
-    "functions": {
-        "src/app/api/video/route.ts": {
-            "maxDuration": 60
-        }
-    },
     "headers": [
         {
             "source": "/api/home",
