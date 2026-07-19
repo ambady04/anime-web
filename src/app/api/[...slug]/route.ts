@@ -26,14 +26,16 @@ export async function GET(
     const { slug } = await params;
     const endpoint = slug[0]; // e.g. "home", "details", "stream"
 
-    // GUARD: Never proxy video requests to Vercel — video bytes must stay on
-    // Cloudflare Workers (free unlimited bandwidth). The dedicated /api/video
-    // route handles this, but this is a safety net.
+    // GUARD: Never proxy video requests through this catch-all to Vercel.
+    // Video streaming is handled by calling api.abisolutions.online/api/video
+    // directly from the browser (cross-origin). This prevents accidental
+    // double-hop (CF Worker → Vercel → CDN) which would waste bandwidth.
     if (endpoint === "video") {
         return NextResponse.json(
             {
-                error: "use_dedicated_route",
-                message: "Use /api/video directly",
+                error: "use_direct_vercel",
+                message:
+                    "Video proxy must be called directly at api.abisolutions.online/api/video",
             },
             { status: 400 },
         );

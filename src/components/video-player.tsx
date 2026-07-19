@@ -397,9 +397,10 @@ export default function VideoPlayer({
 
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        // Same-origin video proxy route — runs on Cloudflare Workers via OpenNext.
-        // CF Workers have unlimited free egress bandwidth, so no cost for streaming.
-        const proxyBase = "/api/video";
+        // Video proxy MUST run on Vercel (AWS IPs) because the upstream CDN
+        // blocks Cloudflare IPs. The frontend CF Worker /api/video route cannot
+        // reach the CDN, so we call the Vercel API endpoint directly.
+        const proxyBase = "https://api.abisolutions.online/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
@@ -670,9 +671,9 @@ export default function VideoPlayer({
     }, [shouldPause]);
 
     // Note: referrerPolicy is no longer forced here. All playback now routes
-    // through /api/video (same-origin proxy), which is the only path that can
-    // satisfy the CDN's Referer requirement — the browser's own Referer to our
-    // proxy endpoint doesn't matter.
+    // through the Vercel API video proxy (api.abisolutions.online/api/video),
+    // which adds the correct Referer header server-side. The CDN blocks
+    // Cloudflare IPs, so the video proxy must run on Vercel (AWS IPs).
 
     // Check for Picture-in-Picture support
     useEffect(() => {
