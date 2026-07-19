@@ -367,8 +367,6 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
-    // Track which URLs are using the proxy fallback
-    const proxiedUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // True only during initial source load — prevents watchdog from firing on normal seek buffering
@@ -391,21 +389,19 @@ export default function VideoPlayer({
     const autoUpgradeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // ─── Source loading effect ───
-    // Mirrors native VideoPlayer.js: just loads the source and stops.
-    // Seek + play are handled by the initial-seek effect once canplay fires.
-    // If direct play fails, the proxy fallback URL will be used on retry.
+    // Plays video through a Cloudflare Worker proxy (free unlimited bandwidth).
+    // The CDN requires a specific Referer header that browsers can't set on
+    // <video> requests, so we route through a lightweight CF Worker that adds it.
     useEffect(() => {
         if (!isHistoryChecked || !activeDownload) return;
 
-        // The CDN behind activeDownload.url requires a specific Referer header
-        // that browsers cannot attach to a direct <video src> request.
-        // Cloudflare Workers strip the Referer header on outbound fetch even with
-        // explicit Request objects, so we route through the backend proxy which can
-        // set Referer freely. The frontend edge route (/api/video) is kept as a
-        // fast-path attempt — if CF ever stops stripping Referer, it'll just work.
-        proxiedUrlsRef.current.add(activeDownload.url);
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
+        // Video proxy — routes through a server that adds the required Referer header.
+        // Option 1 (current): Your existing API proxy (works but costs Vercel bandwidth)
+        // Option 2 (recommended): Deploy workers/video-proxy to Cloudflare Workers
+        //   for free unlimited bandwidth, then replace the URL below with:
+        //   const proxyBase = "https://video-proxy.<your-subdomain>.workers.dev";
         const proxyBase = "https://api.abisolutions.online/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
@@ -458,7 +454,6 @@ export default function VideoPlayer({
                         hlsRef.current = hls;
                         hls.attachMedia(video);
                         hls.loadSource(src);
-                        // canplay on the video element fires after HLS buffers first fragment
 
                         hls.on(Hls.Events.ERROR, (_event, data) => {
                             if (data.fatal) {
@@ -572,7 +567,6 @@ export default function VideoPlayer({
     // Mirrors native: reset seek flags, look up history, set initialSeekTime BEFORE load
     useEffect(() => {
         failedUrlsRef.current = new Set();
-        proxiedUrlsRef.current = new Set();
         setRetryTrigger(0);
         refreshCountRef.current = 0;
         isRecoveringRef.current = false;
@@ -813,9 +807,7 @@ export default function VideoPlayer({
             return;
         }
 
-        // All playback goes through the /api/video proxy (see source-loading
-        // effect), so a real onError here means the proxy itself failed for
-        // this quality — not a "direct CDN" failure. Mark it failed and move on.
+        // Direct CDN playback failed for this quality. Mark it and try next.
         failedUrlsRef.current.add(activeDownload.url);
 
         // Step 1: Try next available quality (only if in Auto Quality mode)
@@ -861,9 +853,8 @@ export default function VideoPlayer({
             );
 
             if (freshStream.downloads && freshStream.downloads.length > 0) {
-                // Reset failed and proxied URLs and resume with fresh direct links
+                // Reset failed URLs and resume with fresh direct links
                 failedUrlsRef.current = new Set();
-                proxiedUrlsRef.current = new Set();
                 setRetryTrigger(0);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 

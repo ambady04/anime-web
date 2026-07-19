@@ -204,15 +204,50 @@ async function fetchFromApi<T>(
     return (await response.json()) as T;
 }
 
+// CAM releases are low-quality camcorder rips flagged via the `corner` label
+// (e.g. "CAM", "CAMRip", "HDCAM"). We hide them from every listing and search
+// result so users only ever see proper-quality titles.
+const isCamSubject = (subject: Subject): boolean => {
+    const corner = subject.corner?.toUpperCase() ?? "";
+    return corner.includes("CAM");
+};
+
+const stripCamSubjects = (subjects: Subject[] | undefined | null): Subject[] =>
+    (subjects ?? []).filter((s) => !isCamSubject(s));
+
 export const movieApi = {
     // Get homepage data — always fresh
     getHome: async (adult = false): Promise<HomepageData> => {
-        return fetchFromApi<HomepageData>("/api/home", { adult });
+        const data = await fetchFromApi<HomepageData>("/api/home", { adult });
+        // Drop CAM titles from every shelf and banner carousel.
+        if (data.operatingList) {
+            data.operatingList = data.operatingList.map((op) => ({
+                ...op,
+                subjects: stripCamSubjects(op.subjects),
+                banner: op.banner
+                    ? {
+                          ...op.banner,
+                          items: (op.banner.items ?? []).filter(
+                              (b) => !(b.subject && isCamSubject(b.subject)),
+                          ),
+                      }
+                    : op.banner,
+            }));
+        }
+        return data;
     },
 
     // Get details — always fresh
     getDetails: async (path: string, adult = false): Promise<ItemDetails> => {
-        return fetchFromApi<ItemDetails>("/api/details", { path, adult });
+        const data = await fetchFromApi<ItemDetails>("/api/details", {
+            path,
+            adult,
+        });
+        // Hide CAM titles from the "related" recommendations.
+        if (data.related) {
+            data.related = stripCamSubjects(data.related);
+        }
+        return data;
     },
 
     // Get stream links and captions — always fresh
@@ -236,12 +271,14 @@ export const movieApi = {
         type?: number,
         adult = false,
     ): Promise<{ items: Subject[] }> => {
-        return fetchFromApi<{ items: Subject[] }>("/api/search", {
+        const data = await fetchFromApi<{ items: Subject[] }>("/api/search", {
             q,
             page,
             type: type ?? "",
             adult,
         });
+        // Never surface CAM titles in search results.
+        return { ...data, items: stripCamSubjects(data.items) };
     },
 
     // Get category listing — always fresh
@@ -260,11 +297,22 @@ export const movieApi = {
         };
         items: Subject[];
     }> => {
-        return fetchFromApi("/api/category", {
+        const data = await fetchFromApi<{
+            pager: {
+                hasMore: boolean;
+                nextPage: number;
+                page: number;
+                perPage: number;
+                totalCount: number;
+            };
+            items: Subject[];
+        }>("/api/category", {
             name,
             page,
             query: query ?? "",
             adult,
         });
+        // Hide CAM titles from category / genre browsing.
+        return { ...data, items: stripCamSubjects(data.items) };
     },
 };

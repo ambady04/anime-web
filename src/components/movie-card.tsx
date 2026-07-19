@@ -126,13 +126,6 @@ function MovieCard({
                     </p>
                 )}
             </div>
-
-            {/* Corner Label Overlay (e.g. Hindi, CAM, etc.) */}
-            {subject.corner && (
-                <div className="absolute top-2.5 left-2.5 bg-primary text-white text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-md z-20 border border-white/10">
-                    {subject.corner}
-                </div>
-            )}
         </Link>
     );
 }

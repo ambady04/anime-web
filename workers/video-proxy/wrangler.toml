@@ -1,0 +1,6 @@
+name = "video-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Free plan: 100k requests/day, UNLIMITED bandwidth (no egress cost).
+# Video bytes stream through Cloudflare edge → user at zero cost.
