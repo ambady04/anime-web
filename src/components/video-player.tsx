@@ -816,7 +816,8 @@ export default function VideoPlayer({
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
-            setRetryTrigger((prev) => prev + 1);
+            // Delay before retry to avoid CDN rate-limiting (429)
+            setTimeout(() => setRetryTrigger((prev) => prev + 1), 2000);
             return;
         }
 
@@ -836,7 +837,8 @@ export default function VideoPlayer({
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
-            setActiveDownload(nextQuality);
+            // Delay before trying next quality to avoid CDN rate-limiting (429)
+            setTimeout(() => setActiveDownload(nextQuality), 2000);
         } else if (refreshCountRef.current < 2) {
             // Step 2: All qualities failed — fetch fresh stream URLs from API
             refreshCountRef.current += 1;
