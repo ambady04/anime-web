@@ -59,20 +59,35 @@ export async function GET(req: NextRequest) {
         const clientReferer = searchParams.get("referer");
         const range = req.headers.get("range");
 
-        const referersToTry: (string | null)[] = [
-            null, // No referer FIRST — bcdn.hakunaymatata.com returns 429 if Referer is set
-            ...(clientReferer
-                ? [
-                      clientReferer,
-                      ...REFERER_POOL.filter((r) => r !== clientReferer),
-                  ]
-                : REFERER_POOL),
-        ];
+        const referersToTry: { referer: string | null; ua: string }[] = [];
+
+        if (clientReferer) {
+            referersToTry.push({
+                referer: clientReferer,
+                ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            });
+        }
+
+        for (const ref of REFERER_POOL) {
+            if (ref !== clientReferer) {
+                referersToTry.push({
+                    referer: ref,
+                    ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                });
+            }
+        }
+
+        // Fallbacks
+        referersToTry.push({ referer: null, ua: "Lavf/58.29.100" });
+        referersToTry.push({
+            referer: null,
+            ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        });
 
         let lastStatus = 0;
         let lastError = "";
 
-        for (const referer of referersToTry) {
+        for (const { referer, ua } of referersToTry) {
             try {
                 // Safely extract origin to prevent TypeError: Invalid URL
                 let origin = "https://videodownloader.site";
@@ -98,9 +113,7 @@ export async function GET(req: NextRequest) {
                     headers.set("Referer", referer);
                     headers.set("Origin", origin);
                 }
-                // Lavf UA works for this CDN when no Referer is set;
-                // browser UA with Referer triggers 429 on bcdn.hakunaymatata.com
-                headers.set("User-Agent", "Lavf/58.29.100");
+                headers.set("User-Agent", ua);
                 headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
                 headers.set("Accept-Encoding", "identity");
                 if (range) {
@@ -119,7 +132,7 @@ export async function GET(req: NextRequest) {
                 const upstream = await fetch(upstreamReq);
                 lastStatus = upstream.status;
 
-                if ([403, 404, 410].includes(upstream.status)) {
+                if ([403, 404, 410, 429].includes(upstream.status)) {
                     continue;
                 }
                 if (upstream.status >= 500) {

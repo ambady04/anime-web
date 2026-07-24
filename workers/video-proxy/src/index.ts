@@ -57,18 +57,37 @@ export default {
     const clientReferer = url.searchParams.get("referer");
     const range = request.headers.get("range");
 
-    // Build referer list: no-referer FIRST (for bcdn.hakunaymatata.com), then client referer, then pool
-    const referersToTry: (string | null)[] = [
-      null, // No referer FIRST — bcdn.hakunaymatata.com returns 429 if Referer is set
-      ...(clientReferer
-        ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
-        : REFERER_POOL),
-    ];
+    // Build referer list: try client referer / pool referers FIRST with browser UA,
+    // then fall back to no-referer with Lavf UA for older CDNs.
+    const referersToTry: { referer: string | null; ua: string }[] = [];
+
+    if (clientReferer) {
+      referersToTry.push({
+        referer: clientReferer,
+        ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      });
+    }
+
+    for (const ref of REFERER_POOL) {
+      if (ref !== clientReferer) {
+        referersToTry.push({
+          referer: ref,
+          ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        });
+      }
+    }
+
+    // Fallbacks
+    referersToTry.push({ referer: null, ua: "Lavf/58.29.100" });
+    referersToTry.push({
+      referer: null,
+      ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    });
 
     let lastStatus = 0;
     let lastError = "";
 
-    for (const referer of referersToTry) {
+    for (const { referer, ua } of referersToTry) {
       try {
         let origin = "https://videodownloader.site";
         if (referer) {
@@ -85,27 +104,24 @@ export default {
           }
         }
 
-        const headers = new Headers();
+        const reqHeaders: Record<string, string> = {
+          "User-Agent": ua,
+          "Accept": "video/mp4,video/*;q=0.9,*/*;q=0.8",
+          "Accept-Encoding": "identity",
+        };
         if (referer) {
-          headers.set("Referer", referer);
-          headers.set("Origin", origin);
+          reqHeaders["Referer"] = referer;
+          reqHeaders["Origin"] = origin;
         }
-        // Lavf UA works for this CDN when no Referer is set;
-        // browser UA with Referer triggers 429 on bcdn.hakunaymatata.com
-        headers.set("User-Agent", "Lavf/58.29.100");
-        headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
-        headers.set("Accept-Encoding", "identity");
         if (range) {
-          headers.set("Range", range);
+          reqHeaders["Range"] = range;
         }
 
-        const upstreamReq = new Request(targetUrl, {
+        const upstream = await fetch(targetUrl, {
           method: "GET",
-          headers,
+          headers: reqHeaders,
           redirect: "follow",
         });
-
-        const upstream = await fetch(upstreamReq);
         lastStatus = upstream.status;
 
         // Skip to next referer on auth/gone/rate-limit failures

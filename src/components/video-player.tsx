@@ -368,6 +368,7 @@ export default function VideoPlayer({
     const rightSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
+    const directFallbackUrlsRef = useRef<Set<string>>(new Set());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // True only during initial source load — prevents watchdog from firing on normal seek buffering
@@ -398,13 +399,11 @@ export default function VideoPlayer({
 
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        // Route video through an external proxy server.
-        // On Cloudflare Workers (production), /api/video runs as a CF subrequest
-        // which has a 10s timeout — too short for video. Instead we use a
-        // standalone CF Worker (NEXT_PUBLIC_VIDEO_PROXY_URL) which runs as a
-        // top-level request with no timeout issues. Falls back to /api/video locally.
         const proxyBase = getVideoProxyBase();
-        const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+        const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
+        const src = useDirect
+            ? activeDownload.url
+            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
             const video = videoRef.current;
@@ -568,6 +567,7 @@ export default function VideoPlayer({
     // Mirrors native: reset seek flags, look up history, set initialSeekTime BEFORE load
     useEffect(() => {
         failedUrlsRef.current = new Set();
+        directFallbackUrlsRef.current = new Set();
         setRetryTrigger(0);
         refreshCountRef.current = 0;
         isRecoveringRef.current = false;
@@ -802,6 +802,18 @@ export default function VideoPlayer({
             setIsLoading(true);
 
             setInitialSeekTime(restoreTime);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            setRetryTrigger((prev) => prev + 1);
+            return;
+        }
+
+        // Step 0: If proxy failed for this URL, try direct CDN URL fallback before abandoning this quality
+        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+            directFallbackUrlsRef.current.add(activeDownload.url);
+            setAutoRetryLabel("Retrying with direct stream link...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
             setRetryTrigger((prev) => prev + 1);

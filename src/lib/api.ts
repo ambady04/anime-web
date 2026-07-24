@@ -10,13 +10,6 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    if (
-        isBrowser &&
-        window.location.hostname !== "localhost" &&
-        window.location.hostname !== "127.0.0.1"
-    ) {
-        return DEFAULT_WORKER_PROXY;
-    }
     return "/api/video";
 }
 
