@@ -59,12 +59,15 @@ export async function GET(req: NextRequest) {
         const clientReferer = searchParams.get("referer");
         const range = req.headers.get("range");
 
-        const referersToTry = clientReferer
-            ? [
-                  clientReferer,
-                  ...REFERER_POOL.filter((r) => r !== clientReferer),
-              ]
-            : REFERER_POOL;
+        const referersToTry: (string | null)[] = [
+            null, // Try with no referer first to bypass CDN hotlink block (HTTP 429)
+            ...(clientReferer
+                ? [
+                      clientReferer,
+                      ...REFERER_POOL.filter((r) => r !== clientReferer),
+                  ]
+                : REFERER_POOL),
+        ];
 
         let lastStatus = 0;
         let lastError = "";
@@ -91,14 +94,13 @@ export async function GET(req: NextRequest) {
                 }
 
                 const headers = new Headers();
-                headers.set(
-                    "Referer",
-                    referer || "https://videodownloader.site/",
-                );
-                headers.set("Origin", origin);
+                if (referer) {
+                    headers.set("Referer", referer);
+                    headers.set("Origin", origin);
+                }
                 headers.set(
                     "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "Lavf/58.29.100",
                 );
                 headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
                 headers.set("Accept-Encoding", "identity");
