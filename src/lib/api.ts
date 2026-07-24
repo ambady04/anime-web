@@ -3,9 +3,8 @@ export const API_BASE_URL = isBrowser
     ? ""
     : process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
 
-// The upstream video CDN blocks Cloudflare IPs, so the video proxy routes
-// through the CF Worker's /api/video which forwards to Vercel (AWS IPs).
-// This keeps requests same-origin (no CORS issues with <video> elements).
+// The CDN requires a specific Referer header that browsers can't set on <video>
+// requests. The CF Worker's /api/video route proxies the request and adds it.
 
 export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
