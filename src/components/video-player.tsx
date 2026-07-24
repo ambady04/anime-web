@@ -393,7 +393,9 @@ export default function VideoPlayer({
     // ─── Source loading effect ───
     // Plays video through a Cloudflare Worker proxy (free unlimited bandwidth).
     // The CDN requires a specific Referer header that browsers can't set on
-    // <video> requests, so we route through a lightweight CF Worker that adds it.
+    // Video source setup: The CDN requires a specific Referer header that browsers
+    // can't override on <video> requests. We try the direct URL first (signed URLs
+    // may not need referer). If that fails, we fall back to the proxy which adds it.
     useEffect(() => {
         if (!isHistoryChecked || !activeDownload) return;
 
@@ -401,9 +403,14 @@ export default function VideoPlayer({
             streamData.stream_domain || "https://videodownloader.site/";
         const proxyBase = getVideoProxyBase();
         const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
-        const src = useDirect
-            ? activeDownload.url
-            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+        // Try direct CDN URL first for signed URLs (bypasses proxy issues on CF/Vercel).
+        // Fall back to proxy only if direct was already tried and failed.
+        const useProxy =
+            !useDirect &&
+            failedUrlsRef.current.has(`direct:${activeDownload.url}`);
+        const src = useProxy
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`
+            : activeDownload.url;
 
         const setup = () => {
             const video = videoRef.current;
@@ -808,10 +815,26 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: If proxy failed for this URL, try direct CDN URL fallback before abandoning this quality
+        // Step 0: Try direct → proxy → next quality progression.
+        // If direct URL failed, try through proxy (adds Referer header).
+        // If proxy already tried, mark as fully failed and move to next quality.
+        if (!failedUrlsRef.current.has(`direct:${activeDownload.url}`)) {
+            // Direct CDN URL failed — mark it and try via proxy
+            failedUrlsRef.current.add(`direct:${activeDownload.url}`);
+            setAutoRetryLabel("Trying proxy stream...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            // Delay before retry to avoid CDN rate-limiting (429)
+            setTimeout(() => setRetryTrigger((prev) => prev + 1), 2000);
+            return;
+        }
+
         if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+            // Proxy also failed — try direct one more time as final fallback
             directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Retrying with direct stream link...");
+            setAutoRetryLabel("Retrying direct stream...");
             setIsLoading(true);
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
