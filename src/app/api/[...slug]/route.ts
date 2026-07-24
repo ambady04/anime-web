@@ -26,16 +26,15 @@ export async function GET(
     const { slug } = await params;
     const endpoint = slug[0]; // e.g. "home", "details", "stream"
 
-    // GUARD: Never proxy video requests through this catch-all to Vercel.
-    // Video streaming is handled by calling api.abisolutions.online/api/video
-    // directly from the browser (cross-origin). This prevents accidental
-    // double-hop (CF Worker → Vercel → CDN) which would waste bandwidth.
+    // GUARD: Never proxy video requests through this catch-all.
+    // Video streaming is handled by the dedicated /api/video route which
+    // forwards to the Vercel backend (CF Worker → Vercel → CDN).
+    // This guard is a safety net in case the dedicated route is removed.
     if (endpoint === "video") {
         return NextResponse.json(
             {
-                error: "use_direct_vercel",
-                message:
-                    "Video proxy must be called directly at api.abisolutions.online/api/video",
+                error: "use_dedicated_route",
+                message: "Video proxy is handled by /api/video route",
             },
             { status: 400 },
         );

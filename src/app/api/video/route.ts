@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 // The upstream video CDN blocks Cloudflare Worker IPs (returns 502/403).
 // Video proxying MUST run on Vercel (AWS IPs) at api.abisolutions.online.
 //
-// This route only exists as a safety net: if any client accidentally hits
-// /api/video on the CF Worker, redirect them to the Vercel-hosted proxy.
+// This route acts as a same-origin reverse proxy: the browser hits /api/video
+// on the CF Worker (same origin = no CORS issues), and we forward the request
+// to the Vercel-hosted video proxy which has AWS IPs the CDN accepts.
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +26,86 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-    // Preserve all query params and redirect to Vercel
-    const { searchParams } = req.nextUrl;
-    const qs = searchParams.toString();
-    const redirectUrl = `${VERCEL_VIDEO_PROXY}${qs ? `?${qs}` : ""}`;
+    try {
+        const { searchParams } = req.nextUrl;
+        const qs = searchParams.toString();
+        const upstreamUrl = `${VERCEL_VIDEO_PROXY}${qs ? `?${qs}` : ""}`;
 
-    return NextResponse.redirect(redirectUrl, {
-        status: 302,
-        headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-store",
-        },
-    });
+        // Forward Range header for seek support
+        const reqHeaders: Record<string, string> = {
+            "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            Accept: "video/mp4,video/*;q=0.9,*/*;q=0.8",
+        };
+        const range = req.headers.get("range");
+        if (range) {
+            reqHeaders["Range"] = range;
+        }
+
+        const upstream = await fetch(upstreamUrl, {
+            headers: reqHeaders,
+            redirect: "follow",
+        });
+
+        if (!upstream.ok && upstream.status !== 206) {
+            // Pass through error status from Vercel
+            const errorBody = await upstream.text();
+            return new NextResponse(errorBody, {
+                status: upstream.status,
+                headers: {
+                    "Content-Type":
+                        upstream.headers.get("content-type") ||
+                        "application/json",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            });
+        }
+
+        // Stream the response body through
+        const resHeaders = new Headers();
+
+        const forwardHeaders = [
+            "content-type",
+            "content-length",
+            "content-range",
+            "accept-ranges",
+            "etag",
+            "last-modified",
+        ];
+        for (const h of forwardHeaders) {
+            const v = upstream.headers.get(h);
+            if (v) resHeaders.set(h, v);
+        }
+
+        if (!resHeaders.has("accept-ranges")) {
+            resHeaders.set("accept-ranges", "bytes");
+        }
+        if (!resHeaders.has("content-type")) {
+            resHeaders.set("content-type", "video/mp4");
+        }
+
+        resHeaders.set("Access-Control-Allow-Origin", "*");
+        resHeaders.set(
+            "Access-Control-Expose-Headers",
+            "Content-Range, Content-Length, Accept-Ranges, Content-Type",
+        );
+        resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+
+        return new NextResponse(upstream.body, {
+            status: upstream.status,
+            headers: resHeaders,
+        });
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Internal proxy error";
+        return new NextResponse(
+            JSON.stringify({ error: "internal_error", message: msg }),
+            {
+                status: 502,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*",
+                },
+            },
+        );
+    }
 }
