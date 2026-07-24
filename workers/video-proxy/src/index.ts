@@ -57,10 +57,13 @@ export default {
     const clientReferer = url.searchParams.get("referer");
     const range = request.headers.get("range");
 
-    // Build referer list: client-provided first, then fallback pool
-    const referersToTry = clientReferer
-      ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
-      : REFERER_POOL;
+    // Build referer list: no-referer FIRST (for bcdn.hakunaymatata.com), then client referer, then pool
+    const referersToTry: (string | null)[] = [
+      null, // No referer FIRST — bcdn.hakunaymatata.com returns 429 if Referer is set
+      ...(clientReferer
+        ? [clientReferer, ...REFERER_POOL.filter((r) => r !== clientReferer)]
+        : REFERER_POOL),
+    ];
 
     let lastStatus = 0;
     let lastError = "";
@@ -68,25 +71,28 @@ export default {
     for (const referer of referersToTry) {
       try {
         let origin = "https://videodownloader.site";
-        try {
-          origin = new URL(referer).origin;
-        } catch {
+        if (referer) {
           try {
-            origin = new URL(
-              referer.includes("://") ? referer : `https://${referer}`
-            ).origin;
+            origin = new URL(referer).origin;
           } catch {
-            // Use default
+            try {
+              origin = new URL(
+                referer.includes("://") ? referer : `https://${referer}`
+              ).origin;
+            } catch {
+              // Use default
+            }
           }
         }
 
         const headers = new Headers();
-        headers.set("Referer", referer);
-        headers.set("Origin", origin);
-        headers.set(
-          "User-Agent",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-        );
+        if (referer) {
+          headers.set("Referer", referer);
+          headers.set("Origin", origin);
+        }
+        // Lavf UA works for this CDN when no Referer is set;
+        // browser UA with Referer triggers 429 on bcdn.hakunaymatata.com
+        headers.set("User-Agent", "Lavf/58.29.100");
         headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
         headers.set("Accept-Encoding", "identity");
         if (range) {
@@ -102,8 +108,8 @@ export default {
         const upstream = await fetch(upstreamReq);
         lastStatus = upstream.status;
 
-        // Skip to next referer on auth/gone failures
-        if ([403, 404, 410].includes(upstream.status)) {
+        // Skip to next referer on auth/gone/rate-limit failures
+        if ([403, 404, 410, 429].includes(upstream.status)) {
           continue;
         }
         if (upstream.status >= 500) {
