@@ -1,8 +1,6 @@
-import { Caption } from "@/lib/api";
+import { Caption, getVideoProxyBase } from "@/lib/api";
 
-// Video proxy runs on Cloudflare edge (/api/video edge route) — no bandwidth
-// limits or rate limiting, served from the nearest CF POP to the user.
-const VIDEO_PROXY_BASE = "/api/video";
+const getProxyBase = () => getVideoProxyBase();
 
 export interface DownloadTask {
     id: string;
@@ -253,7 +251,7 @@ export const downloadStore = {
         captions?: Caption[],
     ) {
         const id = `${url}-${Date.now()}`;
-        const dlUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
+        const dlUrl = `${getProxyBase()}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream&download=true&filename=${encodeURIComponent(filename)}`;
 
         // Trigger standard browser download
         const a = document.createElement("a");
@@ -285,7 +283,7 @@ export const downloadStore = {
             // Fetch subtitles content parallelly
             const fetchPromises = captions.map(async (caption) => {
                 try {
-                    const proxyUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                    const proxyUrl = `${getProxyBase()}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
                     const res = await fetch(proxyUrl);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -366,7 +364,7 @@ export const downloadStore = {
             try {
                 const fetchPromises = captions.map(async (caption) => {
                     try {
-                        const proxyUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                        const proxyUrl = `${getProxyBase()}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
                         const res = await fetch(proxyUrl, {
                             signal: controller.signal,
                         });
@@ -395,7 +393,7 @@ export const downloadStore = {
         }
 
         try {
-            const dlUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+            const dlUrl = `${getProxyBase()}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
             const response = await fetch(dlUrl, {
                 signal: controller.signal,
             });
@@ -555,7 +553,7 @@ export const downloadStore = {
                         const fetchPromises = item.captions.map(
                             async (caption) => {
                                 try {
-                                    const proxyUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
+                                    const proxyUrl = `${getProxyBase()}?url=${encodeURIComponent(caption.url)}&referer=${encodeURIComponent("https://videodownloader.site/")}&mode=stream`;
                                     const res = await fetch(proxyUrl, {
                                         signal: controller.signal,
                                     });
@@ -585,7 +583,7 @@ export const downloadStore = {
                 }
 
                 // 2. Fetch video file chunks
-                const dlUrl = `${VIDEO_PROXY_BASE}?url=${encodeURIComponent(item.url)}&referer=${encodeURIComponent(item.referer)}&mode=stream`;
+                const dlUrl = `${getProxyBase()}?url=${encodeURIComponent(item.url)}&referer=${encodeURIComponent(item.referer)}&mode=stream`;
                 const response = await fetch(dlUrl, {
                     signal: controller.signal,
                 });

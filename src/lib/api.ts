@@ -3,6 +3,23 @@ export const API_BASE_URL = isBrowser
     ? ""
     : process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
 
+const DEFAULT_WORKER_PROXY =
+    "https://video-proxy.abhijithabhijith1999.workers.dev";
+
+export function getVideoProxyBase(): string {
+    if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
+        return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
+    }
+    if (
+        isBrowser &&
+        window.location.hostname !== "localhost" &&
+        window.location.hostname !== "127.0.0.1"
+    ) {
+        return DEFAULT_WORKER_PROXY;
+    }
+    return "/api/video";
+}
+
 export interface ImageModel {
     url: string;
     width?: number;

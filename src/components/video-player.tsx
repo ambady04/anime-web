@@ -28,6 +28,7 @@ import {
     Caption,
     DubModel,
     movieApi,
+    getVideoProxyBase,
 } from "@/lib/api";
 import { localStore } from "@/lib/storage";
 
@@ -402,8 +403,7 @@ export default function VideoPlayer({
         // which has a 10s timeout — too short for video. Instead we use a
         // standalone CF Worker (NEXT_PUBLIC_VIDEO_PROXY_URL) which runs as a
         // top-level request with no timeout issues. Falls back to /api/video locally.
-        const proxyBase =
-            process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "/api/video";
+        const proxyBase = getVideoProxyBase();
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
