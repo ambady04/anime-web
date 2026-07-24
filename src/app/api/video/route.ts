@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 // Run at the Cloudflare edge (V8 isolate) — no Node.js overhead, fastest possible
 // streaming response. This is the optimal runtime for a video proxy on Workers.
 // Video bytes are served from the nearest CF edge POP to the user.
-export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 // Handle CORS preflight — instant response avoids an extra round-trip before video fetch
@@ -108,28 +107,24 @@ export async function GET(req: NextRequest) {
                     }
                 }
 
-                const headers = new Headers();
+                const reqHeaders: Record<string, string> = {
+                    "User-Agent": ua,
+                    "Accept": "video/mp4,video/*;q=0.9,*/*;q=0.8",
+                    "Accept-Encoding": "identity",
+                };
                 if (referer) {
-                    headers.set("Referer", referer);
-                    headers.set("Origin", origin);
+                    reqHeaders["Referer"] = referer;
+                    reqHeaders["Origin"] = origin;
                 }
-                headers.set("User-Agent", ua);
-                headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
-                headers.set("Accept-Encoding", "identity");
                 if (range) {
-                    headers.set("Range", range);
+                    reqHeaders["Range"] = range;
                 }
 
-                // Construct an explicit Request object with the target URL and headers.
-                // This ensures Cloudflare Workers preserves the Referer header on the
-                // outbound fetch (plain headers object can get stripped by the runtime).
-                const upstreamReq = new Request(targetUrl, {
+                const upstream = await fetch(targetUrl, {
                     method: "GET",
-                    headers,
+                    headers: reqHeaders,
                     redirect: "follow",
                 });
-
-                const upstream = await fetch(upstreamReq);
                 lastStatus = upstream.status;
 
                 if ([403, 404, 410, 429].includes(upstream.status)) {
