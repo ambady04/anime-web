@@ -397,12 +397,13 @@ export default function VideoPlayer({
 
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        // Route video through the Next.js /api/video edge route which runs on
-        // Cloudflare Workers — no bandwidth limits, no rate limiting, served
-        // from the nearest CF edge POP to the user.
-        // Do NOT use api.abisolutions.online/api/video (Vercel) for video bytes
-        // — Vercel rate-limits streaming responses with 429.
-        const proxyBase = "/api/video";
+        // Route video through an external proxy server.
+        // On Cloudflare Workers (production), /api/video runs as a CF subrequest
+        // which has a 10s timeout — too short for video. Instead we use a
+        // standalone CF Worker (NEXT_PUBLIC_VIDEO_PROXY_URL) which runs as a
+        // top-level request with no timeout issues. Falls back to /api/video locally.
+        const proxyBase =
+            process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
