@@ -4,15 +4,14 @@ export const API_BASE_URL = isBrowser
     : process.env.NEXT_PUBLIC_API_URL || "https://api.abisolutions.online";
 
 // The CDN requires a specific Referer header that browsers can't set on <video>
-// requests. The CF Worker's /api/video route forwards to Vercel which proxies
-// the video with the correct headers. CF IPs are blocked by the CDN, but
-// Vercel's AWS IPs are accepted.
+// requests. The Vercel backend proxies video with the correct headers.
+// CF Worker IPs are blocked by the CDN, so we call Vercel directly from the browser.
 
 export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    return "/api/video";
+    return "https://api.abisolutions.online/api/video";
 }
 
 export interface ImageModel {

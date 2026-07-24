@@ -405,7 +405,7 @@ export default function VideoPlayer({
         const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
         const src = useDirect
             ? activeDownload.url
-            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&_t=${Date.now()}`;
 
         const setup = () => {
             const video = videoRef.current;

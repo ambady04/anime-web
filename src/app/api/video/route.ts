@@ -44,9 +44,11 @@ export async function GET(req: NextRequest) {
         const upstream = await fetch(upstreamUrl, {
             headers: reqHeaders,
             redirect: "follow",
+            // @ts-ignore — CF-specific: bypass edge cache to avoid stale cached errors
+            cf: { cacheTtl: 0, cacheEverything: false },
         });
 
-        // If upstream returned an error, pass it through
+        // If upstream returned an error, pass it through with no-cache
         if (!upstream.ok && upstream.status !== 206) {
             const errorBody = await upstream.text();
             return new NextResponse(errorBody, {
@@ -56,6 +58,8 @@ export async function GET(req: NextRequest) {
                         upstream.headers.get("content-type") ||
                         "application/json",
                     "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                    "CDN-Cache-Control": "no-store",
                 },
             });
         }
