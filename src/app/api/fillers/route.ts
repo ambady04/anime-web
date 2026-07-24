@@ -59,7 +59,7 @@ async function getMalIdFromAniList(title: string): Promise<number> {
         signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return 0;
-    const json = await res.json();
+    const json = (await res.json()) as any;
     return json?.data?.Media?.idMal || 0;
 }
 

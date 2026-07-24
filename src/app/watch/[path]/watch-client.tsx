@@ -252,7 +252,7 @@ export default function WatchClient({
                     `/api/fillers?title=${encodeURIComponent(query)}`,
                 );
                 if (!res.ok) return;
-                const json = await res.json();
+                const json = (await res.json()) as any;
                 const fillers: number[] = json.fillers || [];
 
                 if (isMounted) {

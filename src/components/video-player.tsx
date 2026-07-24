@@ -297,7 +297,7 @@ export default function VideoPlayer({
                     `/api/fillers?title=${encodeURIComponent(title)}`,
                 );
                 if (!searchRes.ok) return; // Silently skip if API unavailable
-                const searchData = await searchRes.json();
+                const searchData = (await searchRes.json()) as any;
                 const malId = searchData.malId;
                 if (!malId) return; // No MAL ID found — skip times unavailable for this title
 
@@ -305,7 +305,7 @@ export default function VideoPlayer({
                 const skipUrl = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=${duration || 0}`;
                 const skipRes = await fetch(skipUrl);
                 if (!skipRes.ok) return; // AniSkip unavailable for this episode - skip silently
-                const skipData = await skipRes.json();
+                const skipData = (await skipRes.json()) as any;
 
                 if (skipData.found) {
                     let opStart: number | null = null;
