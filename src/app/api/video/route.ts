@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         const range = req.headers.get("range");
 
         const referersToTry: (string | null)[] = [
-            null, // Try with no referer first to bypass CDN hotlink block (HTTP 429)
+            null, // No referer FIRST — bcdn.hakunaymatata.com returns 429 if Referer is set
             ...(clientReferer
                 ? [
                       clientReferer,
@@ -98,10 +98,9 @@ export async function GET(req: NextRequest) {
                     headers.set("Referer", referer);
                     headers.set("Origin", origin);
                 }
-                headers.set(
-                    "User-Agent",
-                    "Lavf/58.29.100",
-                );
+                // Lavf UA works for this CDN when no Referer is set;
+                // browser UA with Referer triggers 429 on bcdn.hakunaymatata.com
+                headers.set("User-Agent", "Lavf/58.29.100");
                 headers.set("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
                 headers.set("Accept-Encoding", "identity");
                 if (range) {
@@ -166,14 +165,10 @@ export async function GET(req: NextRequest) {
                     "Access-Control-Expose-Headers",
                     "Content-Range, Content-Length, Accept-Ranges, Content-Type",
                 );
-                // Edge route currently unused in production (CDN blocks CF IPs).
-                // Keep no-store to avoid caching error responses.
-                resHeaders.set(
-                    "Cache-Control",
-                    "no-store, no-cache, must-revalidate, max-age=0",
-                );
-                resHeaders.set("CDN-Cache-Control", "no-store");
-                resHeaders.set("Cloudflare-CDN-Cache-Control", "no-store");
+                // Cache successful responses at CF edge for 1 hour.
+                // This reduces upstream CDN hits on repeated seeks/reloads.
+                resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+                resHeaders.set("CDN-Cache-Control", "public, max-age=3600");
 
                 return new NextResponse(upstream.body, {
                     status: upstream.status,

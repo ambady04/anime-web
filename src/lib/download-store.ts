@@ -1,7 +1,8 @@
 import { Caption } from "@/lib/api";
 
-// Video proxy runs on Vercel (AWS IPs) because the upstream CDN blocks Cloudflare IPs.
-const VIDEO_PROXY_BASE = "https://api.abisolutions.online/api/video";
+// Video proxy runs on Cloudflare edge (/api/video edge route) — no bandwidth
+// limits or rate limiting, served from the nearest CF POP to the user.
+const VIDEO_PROXY_BASE = "/api/video";
 
 export interface DownloadTask {
     id: string;

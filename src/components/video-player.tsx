@@ -397,10 +397,12 @@ export default function VideoPlayer({
 
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
-        // Video proxy MUST run on Vercel (AWS IPs) because the upstream CDN
-        // blocks Cloudflare IPs. The frontend CF Worker /api/video route cannot
-        // reach the CDN, so we call the Vercel API endpoint directly.
-        const proxyBase = "https://api.abisolutions.online/api/video";
+        // Route video through the Next.js /api/video edge route which runs on
+        // Cloudflare Workers — no bandwidth limits, no rate limiting, served
+        // from the nearest CF edge POP to the user.
+        // Do NOT use api.abisolutions.online/api/video (Vercel) for video bytes
+        // — Vercel rate-limits streaming responses with 429.
+        const proxyBase = "/api/video";
         const src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
 
         const setup = () => {
