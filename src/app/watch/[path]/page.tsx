@@ -24,16 +24,11 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
         const parsedEpisode = episode ? Number(episode) : 0;
 
         // Fetch details and stream in PARALLEL to eliminate waterfall.
-        // For series: if season/episode provided in URL, use them directly.
-        // If not provided, default to S1E1 (will be corrected after details load).
-        // For movies (no season/episode params), pass 0 so the backend uses its
-        // movie-specific attempt order [(0,0), (1,1)].
-        const streamSeason = parsedSeason || (season !== undefined ? 1 : 0);
-        const streamEpisode = parsedEpisode || (episode !== undefined ? 1 : 0);
-
+        // If season/episode are in URL params, use them; if not (0), the backend
+        // will automatically select (1, 1) for series/anime or (0, 0) for movies.
         const [detailsResult, streamResult] = await Promise.allSettled([
             movieApi.getDetails(path),
-            movieApi.getStream(path, streamSeason || 1, streamEpisode || 1),
+            movieApi.getStream(path, parsedSeason, parsedEpisode),
         ]);
 
         if (detailsResult.status === "fulfilled") {
@@ -45,7 +40,8 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
         // Determine actual season/episode from details
         const isSeries =
             details.subject.subjectType === 2 ||
-            details.subject.subjectType === 7;
+            details.subject.subjectType === 7 ||
+            details.subject.subjectType === 10;
         if (isSeries) {
             activeSeason = parsedSeason || 1;
             activeEpisode = parsedEpisode || 1;
