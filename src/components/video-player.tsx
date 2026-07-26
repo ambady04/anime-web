@@ -905,7 +905,8 @@ export default function VideoPlayer({
             if (freshStream.downloads && freshStream.downloads.length > 0) {
                 // Reset failed URLs and resume with fresh direct links
                 failedUrlsRef.current = new Set();
-                setRetryTrigger(0);
+                directFallbackUrlsRef.current = new Set();
+                setRetryTrigger((prev) => prev + 1);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
                 // Notify parent if callback provided
