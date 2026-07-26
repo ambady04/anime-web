@@ -631,6 +631,11 @@ export default function VideoPlayer({
             setAutoRetryLabel("");
         } else {
             setActiveDownload(null);
+            if (videoRef.current) {
+                videoRef.current.pause();
+                videoRef.current.removeAttribute("src");
+                videoRef.current.load();
+            }
             if (refreshCountRef.current < 2) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
