@@ -264,7 +264,8 @@ export async function syncWatchlistItemToCloud(
         if (isDelete) {
             await deleteDoc(docRef);
         } else {
-            await setDoc(docRef, item);
+            const cleanData = JSON.parse(JSON.stringify(item));
+            await setDoc(docRef, cleanData);
         }
     } catch (e) {
         console.error("[sync] Failed to sync watchlist item to cloud", e);
@@ -285,7 +286,8 @@ export async function syncHistoryItemToCloud(uid: string, item: HistoryItem) {
             "history",
             escapeKey(item.detailPath),
         );
-        await setDoc(docRef, item);
+        const cleanData = JSON.parse(JSON.stringify(item));
+        await setDoc(docRef, cleanData);
     } catch (e) {
         console.error("[sync] Failed to sync history item to cloud", e);
     }

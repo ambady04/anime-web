@@ -88,7 +88,6 @@ export async function GET(req: NextRequest) {
         const resHeaders = new Headers();
         const forwardHeaders = [
             "content-type",
-            "content-length",
             "content-range",
             "accept-ranges",
             "etag",
@@ -113,6 +112,19 @@ export async function GET(req: NextRequest) {
         );
         resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
         resHeaders.set("X-Accel-Buffering", "no");
+
+        // Attach abort signal listener to cleanly cancel upstream body on client disconnect
+        if (req.signal && upstream.body) {
+            req.signal.addEventListener(
+                "abort",
+                () => {
+                    try {
+                        upstream.body?.cancel();
+                    } catch {}
+                },
+                { once: true },
+            );
+        }
 
         return new NextResponse(upstream.body, {
             status: upstream.status,
