@@ -1,4 +1,4 @@
-import { movieApi } from "@/lib/api";
+import { movieApi, isSeriesType } from "@/lib/api";
 import WatchClient from "./watch-client";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
@@ -38,10 +38,7 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
         }
 
         // Determine actual season/episode from details
-        const isSeries =
-            details.subject.subjectType === 2 ||
-            details.subject.subjectType === 7 ||
-            details.subject.subjectType === 10;
+        const isSeries = isSeriesType(details.subject.subjectType);
         if (isSeries) {
             activeSeason = parsedSeason || 1;
             activeEpisode = parsedEpisode || 1;

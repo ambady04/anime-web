@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
         const upstream = await fetch(upstreamUrl, {
             headers: reqHeaders,
             redirect: "follow",
+            signal: req.signal,
             // @ts-ignore — CF-specific: bypass edge cache to avoid stale cached errors
             cf: { cacheTtl: 0, cacheEverything: false },
         });
@@ -103,6 +104,19 @@ export async function GET(req: NextRequest) {
             headers: resHeaders,
         });
     } catch (err: unknown) {
+        // Handle client aborts (e.g. user seeking or closing video tab) gracefully
+        const isAbort =
+            req.signal.aborted ||
+            (err instanceof Error &&
+                (err.name === "AbortError" ||
+                    err.message.includes("terminated") ||
+                    err.message.includes("closed") ||
+                    err.message.includes("UND_ERR_SOCKET")));
+
+        if (isAbort) {
+            return new NextResponse(null, { status: 499 });
+        }
+
         const msg = err instanceof Error ? err.message : "Internal proxy error";
         return new NextResponse(
             JSON.stringify({ error: "internal_error", message: msg }),

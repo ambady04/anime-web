@@ -10,7 +10,7 @@ import {
     Calendar,
     Film,
 } from "lucide-react";
-import { BannerItem } from "@/lib/api";
+import { BannerItem, isSeriesType } from "@/lib/api";
 
 interface HeroSliderProps {
     banners: BannerItem[];
@@ -113,7 +113,7 @@ export default function HeroSlider({ banners }: HeroSliderProps) {
                         <div className="flex items-center space-x-1 text-foreground/60 text-[10px] font-bold uppercase tracking-wider bg-foreground/5 border border-glass-border px-2.5 py-0.5 rounded-full">
                             <Film className="w-3 h-3 text-primary" />
                             <span>
-                                {subject?.subjectType === 2
+                                {isSeriesType(subject?.subjectType)
                                     ? "TV Series"
                                     : "Movie"}
                             </span>

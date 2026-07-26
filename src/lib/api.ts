@@ -215,6 +215,20 @@ async function fetchFromApi<T>(
     return (await response.json()) as T;
 }
 
+// Helper to determine if a subjectType represents an episodic show (TV Series = 2, ShortTV = 7, Anime = 10)
+export const isSeriesType = (subjectType?: number | null): boolean => {
+    if (!subjectType) return false;
+    return subjectType === 2 || subjectType === 7 || subjectType === 10;
+};
+
+// Helper to safely parse numeric resolution from number or string (e.g. "1080P", "720p", 1080)
+export const parseResolution = (res?: string | number | null): number => {
+    if (typeof res === "number") return isNaN(res) ? 0 : res;
+    if (!res) return 0;
+    const num = parseInt(String(res).replace(/\D/g, ""), 10);
+    return isNaN(num) ? 0 : num;
+};
+
 // CAM releases are low-quality camcorder rips flagged via the `corner` label
 // (e.g. "CAM", "CAMRip", "HDCAM"). We hide them from every listing and search
 // result so users only ever see proper-quality titles.

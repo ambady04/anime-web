@@ -29,6 +29,7 @@ import {
     DubModel,
     movieApi,
     getVideoProxyBase,
+    parseResolution,
 } from "@/lib/api";
 import { localStore } from "@/lib/storage";
 
@@ -98,7 +99,9 @@ export default function VideoPlayer({
 
     // Sort qualities from highest to lowest
     const sortedDownloads = useMemo(() => {
-        return [...downloads].sort((a, b) => b.resolution - a.resolution);
+        return [...downloads].sort(
+            (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
+        );
     }, [downloads]);
 
     // States
@@ -414,6 +417,7 @@ export default function VideoPlayer({
             isInitialLoadRef.current = true;
             isRecoveringRef.current = false;
             setIsVideoLoaded(false);
+            setIsInitialSeekDone(false);
 
             if (hlsRef.current) {
                 hlsRef.current.destroy();
@@ -480,17 +484,36 @@ export default function VideoPlayer({
                 // Progressive MP4 / WebM
                 video.src = src;
                 video.load();
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            setIsPlaying(true);
+                            setIsLoading(false);
+                            isInitialLoadRef.current = false;
+                        })
+                        .catch(() => {
+                            // Playback pending user click or browser autoplay policy
+                            if (video.readyState >= 1) {
+                                setIsLoading(false);
+                            }
+                        });
+                }
             }
         };
 
-        if (videoRef.current) {
-            setup();
-        } else {
-            const raf = requestAnimationFrame(() => setup());
-            return () => cancelAnimationFrame(raf);
-        }
+        let rafId: number | null = null;
+        const checkAndSetup = () => {
+            if (videoRef.current) {
+                setup();
+            } else {
+                rafId = requestAnimationFrame(checkAndSetup);
+            }
+        };
+        checkAndSetup();
 
         return () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
             if (hlsRef.current) {
                 hlsRef.current.destroy();
                 hlsRef.current = null;
@@ -623,7 +646,7 @@ export default function VideoPlayer({
             // Start at 1080p directly for high quality playback.
             // If 1080p isn't available, fall back to the highest available.
             const defaultQuality =
-                sortedDownloads.find((d) => d.resolution === 1080) ||
+                sortedDownloads.find((d) => parseResolution(d.resolution) === 1080) ||
                 sortedDownloads[0]; // sortedDownloads is sorted highest-first
             setActiveDownload(defaultQuality);
             setIsLoading(true);
@@ -755,6 +778,8 @@ export default function VideoPlayer({
         setDuration(isFinite(videoDur) ? videoDur : 0);
         setPlayerError(false);
         setAutoRetryLabel("");
+        setIsVideoLoaded(true);
+        setIsLoading(false);
     };
 
     const handlePlayerError = (e: unknown) => {
@@ -884,15 +909,15 @@ export default function VideoPlayer({
 
                 // Pick best available quality from fresh data (respecting user's choice if manual)
                 const freshSorted = [...freshStream.downloads].sort(
-                    (a, b) => b.resolution - a.resolution,
+                    (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
                 );
-                const currentResolution = activeDownload?.resolution;
+                const currentResolution = activeDownload ? parseResolution(activeDownload.resolution) : 0;
                 const pick =
                     !isAutoQuality && currentResolution
                         ? freshSorted.find(
-                              (d) => d.resolution === currentResolution,
+                              (d) => parseResolution(d.resolution) === currentResolution,
                           ) || freshSorted[0]
-                        : freshSorted.find((d) => d.resolution === 1080) ||
+                        : freshSorted.find((d) => parseResolution(d.resolution) === 1080) ||
                           freshSorted[0]; // highest available
 
                 setActiveDownload(null);
@@ -919,15 +944,18 @@ export default function VideoPlayer({
         if (stallTimerRef.current) clearTimeout(stallTimerRef.current);
 
         if (isLoading && activeDownload && !playerError) {
-            // Use a shorter timeout for initial load vs mid-playback stalls
-            const timeoutMs = isInitialLoadRef.current ? 12_000 : 15_000;
+            // Allow 25s for initial CDN proxy setup and 20s for mid-playback buffer stalls
+            const timeoutMs = isInitialLoadRef.current ? 25_000 : 20_000;
             stallTimerRef.current = setTimeout(() => {
                 const video = videoRef.current;
-                // Only escalate if the video is genuinely stalled (not just buffering briefly)
-                if (!video || video.readyState < 3) {
+                // Only escalate if the video is genuinely stalled (not loading/playing)
+                if (video && (video.readyState >= 2 || video.currentTime > 0 || !video.paused)) {
+                    // Video has data or is playing — clear spinner
+                    setIsLoading(false);
+                    isInitialLoadRef.current = false;
+                } else if (!video || video.readyState < 2) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 } else {
-                    // readyState is fine — just clear the loading spinner
                     setIsLoading(false);
                 }
             }, timeoutMs);
@@ -945,6 +973,11 @@ export default function VideoPlayer({
         const current = videoRef.current.currentTime;
         const videoDuration = videoRef.current.duration;
         setCurrentTime(current);
+
+        if (isLoading && current > 0) {
+            setIsLoading(false);
+            isInitialLoadRef.current = false;
+        }
 
         // Update buffered percentage
         if (
@@ -2138,6 +2171,12 @@ export default function VideoPlayer({
                         // Always clear loading after seek completes — video has the frame ready
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
+                        setIsLoading(false);
+                    }}
+                    onLoadedData={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsVideoLoaded(true);
                         setIsLoading(false);
                     }}
                     onCanPlay={() => {

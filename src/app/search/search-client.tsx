@@ -26,7 +26,7 @@ import {
     Zap,
     ChevronRight,
 } from "lucide-react";
-import { movieApi, Subject } from "@/lib/api";
+import { movieApi, Subject, isSeriesType } from "@/lib/api";
 import MovieCard from "@/components/movie-card";
 
 interface SearchClientProps {
@@ -260,8 +260,7 @@ export default function SearchClient({
                 }
                 if (filterType !== undefined) {
                     list = list.filter((item) => {
-                        const isSeries =
-                            item.subjectType === 2 || item.subjectType === 7;
+                        const isSeries = isSeriesType(item.subjectType);
                         return filterType === 2 ? isSeries : !isSeries;
                     });
                 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, memo } from "react";
 import Link from "next/link";
 import { Star, Play, Tv, Film } from "lucide-react";
-import { Subject } from "@/lib/api";
+import { Subject, isSeriesType } from "@/lib/api";
 import { localStore } from "@/lib/storage";
 
 interface MovieCardProps {
@@ -20,7 +20,7 @@ function MovieCard({
     // If the cover URL is relative or missing, we can fallback, but we should make sure we support it.
     const imageUrl = subject.cover?.url || "/placeholder.jpg";
 
-    const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
+    const isSeries = isSeriesType(subject.subjectType);
 
     const [bookmarkedSeason, setBookmarkedSeason] = useState<
         number | undefined

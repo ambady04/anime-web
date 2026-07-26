@@ -140,9 +140,10 @@ export async function GET(req: NextRequest) {
             if (ep.filler === true) fillerSet.add(ep.mal_id);
         }
 
-        // ── 3. Fetch remaining pages sequentially with rate-limiting delay ──
+        // ── 3. Fetch up to 3 pages max to ensure fast response times ──
         if (totalPages > 1) {
-            for (let p = 2; p <= totalPages; p++) {
+            const maxPages = Math.min(totalPages, 3);
+            for (let p = 2; p <= maxPages; p++) {
                 try {
                     const pageData = await jikanGet(
                         `https://api.jikan.moe/v4/anime/${malId}/episodes?page=${p}`,
@@ -155,8 +156,7 @@ export async function GET(req: NextRequest) {
                 } catch {
                     // Page unavailable — skip silently, we have partial data
                 }
-                // Jikan rate limit: max 3 requests per second. 350ms ensures we stay safe.
-                await new Promise((r) => setTimeout(r, 350));
+                await new Promise((r) => setTimeout(r, 100));
             }
         }
 

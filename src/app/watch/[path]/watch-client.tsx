@@ -19,22 +19,14 @@ import {
     Bookmark,
     Check,
     RotateCcw,
-    Download,
 } from "lucide-react";
-import { ItemDetails, StreamData, DubModel } from "@/lib/api";
+import { ItemDetails, StreamData, DubModel, isSeriesType, parseResolution } from "@/lib/api";
 import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
 import Link from "next/link";
 import { syncSeasonWatchedEpisodes } from "@/lib/sync";
 import { useAuth } from "@/lib/auth-context";
-import dynamic from "next/dynamic";
-import { downloadStore } from "@/lib/download-store";
-
-const DownloadModal = dynamic(() => import("@/components/download-modal"), {
-    ssr: false,
-    loading: () => null,
-});
 
 const cleanTitle = (title: string): string => {
     return title
@@ -80,25 +72,7 @@ export default function WatchClient({
     const [loadingEpisode, setLoadingEpisode] = useState<number | null>(null);
     const [loadingAudio, setLoadingAudio] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
-    const [isDownloadOpen, setIsDownloadOpen] = useState(false);
-    const [showDownloadMenu, setShowDownloadMenu] = useState(false);
     const [showSeasonDropdown, setShowSeasonDropdown] = useState(false);
-
-    useEffect(() => {
-        if (!showDownloadMenu) return;
-        const handleOutsideClick = (event: MouseEvent) => {
-            const container = document.getElementById(
-                "download-menu-container",
-            );
-            if (container && !container.contains(event.target as Node)) {
-                setShowDownloadMenu(false);
-            }
-        };
-        document.addEventListener("click", handleOutsideClick);
-        return () => {
-            document.removeEventListener("click", handleOutsideClick);
-        };
-    }, [showDownloadMenu]);
 
     useEffect(() => {
         if (!showSeasonDropdown) return;
@@ -160,7 +134,7 @@ export default function WatchClient({
         }
     };
 
-    const isSeries = subject.subjectType === 2 || subject.subjectType === 7;
+    const isSeries = isSeriesType(subject.subjectType);
 
     const isEpisodeBookmarked =
         bookmarkedSeason === activeSeason &&
@@ -694,90 +668,7 @@ export default function WatchClient({
                                     </span>
                                 </button>
                             )}
-                            <div
-                                className="relative inline-block text-left"
-                                id="download-menu-container"
-                            >
-                                <button
-                                    onClick={() =>
-                                        setShowDownloadMenu(!showDownloadMenu)
-                                    }
-                                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel hover:text-white hover:border-glass-border-hover text-foreground/70 transition-all cursor-pointer text-xs font-bold uppercase tracking-wider"
-                                    title="Download Options"
-                                >
-                                    <Download className="w-3 h-3 text-primary" />
-                                    <span>Download</span>
-                                    <ChevronDown className="w-3.5 h-3.5 ml-0.5 text-foreground/45" />
-                                </button>
-
-                                {showDownloadMenu && (
-                                    <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-glass-border bg-zinc-950/95 backdrop-blur-md shadow-2xl z-50 py-1.5 overflow-hidden">
-                                        <div className="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-foreground/45 border-b border-glass-border/50 mb-1">
-                                            Select Resolution (S{activeSeason} E
-                                            {activeEpisode})
-                                        </div>
-                                        {stream.downloads &&
-                                        stream.downloads.length > 0 ? (
-                                            [...stream.downloads]
-                                                .sort(
-                                                    (a, b) =>
-                                                        b.resolution -
-                                                        a.resolution,
-                                                )
-                                                .map((link, idx) => {
-                                                    const folder = `${cleanFilename(subject.title)}_Season_${activeSeason}`;
-                                                    const filename = `${folder}/${cleanFilename(subject.title)}_S${activeSeason}E${activeEpisode}_${link.resolution}p.mp4`;
-                                                    return (
-                                                        <button
-                                                            key={`${link.id || "download"}-${idx}`}
-                                                            onClick={() => {
-                                                                setShowDownloadMenu(
-                                                                    false,
-                                                                );
-                                                                downloadStore.startDownload(
-                                                                    link.url,
-                                                                    stream.stream_domain ||
-                                                                        "https://videodownloader.site/",
-                                                                    filename,
-                                                                    link.size,
-                                                                    stream.captions,
-                                                                );
-                                                            }}
-                                                            className="w-full flex items-center justify-between px-3 py-2 text-xs text-foreground/80 hover:text-white hover:bg-white/5 transition-colors cursor-pointer text-left font-bold"
-                                                        >
-                                                            <span>
-                                                                {
-                                                                    link.resolution
-                                                                }
-                                                                p
-                                                            </span>
-                                                            <span className="text-[10px] text-foreground/45 font-medium">
-                                                                {formatBytes(
-                                                                    link.size,
-                                                                )}
-                                                            </span>
-                                                        </button>
-                                                    );
-                                                })
-                                        ) : (
-                                            <div className="px-3 py-2 text-xs text-foreground/40 italic">
-                                                No direct links found
-                                            </div>
-                                        )}
-                                        <div className="border-t border-glass-border/50 my-1"></div>
-                                        <button
-                                            onClick={() => {
-                                                setIsDownloadOpen(true);
-                                                setShowDownloadMenu(false);
-                                            }}
-                                            className="w-full text-left px-3 py-2 text-xs text-primary font-bold hover:bg-white/5 transition-colors cursor-pointer flex items-center space-x-1.5"
-                                        >
-                                            <span>Open Download Hub</span>
-                                        </button>
-                                    </div>
-                                )}
                             </div>
-                        </div>
 
                         {/* Genres */}
                         {subject.genre && subject.genre.length > 0 && (
@@ -1188,16 +1079,6 @@ export default function WatchClient({
                 </div>
             )}
 
-            <DownloadModal
-                isOpen={isDownloadOpen}
-                onClose={() => setIsDownloadOpen(false)}
-                path={path}
-                subject={subject}
-                resource={resource}
-                activeSeason={activeSeason}
-                activeEpisode={activeEpisode}
-                currentEpisodeStream={stream}
-            />
         </div>
     );
 }

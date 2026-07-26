@@ -11,20 +11,12 @@ import {
     User,
     Sun,
     Moon,
-    Download,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import dynamic from "next/dynamic";
-import { downloadStore } from "@/lib/download-store";
 
 // Lazy load the heavy profile modal (includes firebase imports)
 const ProfileModal = dynamic(() => import("./profile-modal"), {
-    ssr: false,
-    loading: () => null,
-});
-
-// Lazy load the download manager (includes indexeddb/storage imports)
-const DownloadManager = dynamic(() => import("./download-manager"), {
     ssr: false,
     loading: () => null,
 });
@@ -36,36 +28,6 @@ export default function Navbar() {
     const [searchQuery, setSearchQuery] = useState("");
     const [theme, setTheme] = useState<"dark" | "light">("dark");
     const [showProfileModal, setShowProfileModal] = useState(false);
-    const [showDownloadManager, setShowDownloadManager] = useState(false);
-    const [activeDownloadsCount, setActiveDownloadsCount] = useState(0);
-
-    // Subscribe to download store updates to show active count badge
-    useEffect(() => {
-        const unsubscribe = downloadStore.subscribe((tasks) => {
-            const active = tasks.filter(
-                (t) => t.status === "downloading",
-            ).length;
-            setActiveDownloadsCount(active);
-        });
-        return unsubscribe;
-    }, []);
-
-    // Close download manager dropdown on outside clicks
-    useEffect(() => {
-        if (!showDownloadManager) return;
-        const handleOutsideClick = (event: MouseEvent) => {
-            const container = document.getElementById(
-                "navbar-download-container",
-            );
-            if (container && !container.contains(event.target as Node)) {
-                setShowDownloadManager(false);
-            }
-        };
-        document.addEventListener("click", handleOutsideClick);
-        return () => {
-            document.removeEventListener("click", handleOutsideClick);
-        };
-    }, [showDownloadManager]);
 
     // Load initial theme from DOM/localStorage
     useEffect(() => {
@@ -212,31 +174,6 @@ export default function Navbar() {
                             <Moon className="w-4 h-4" />
                         )}
                     </button>
-
-                    {/* Downloads Button & Manager */}
-                    <div
-                        className="relative flex"
-                        id="navbar-download-container"
-                    >
-                        <button
-                            onClick={() =>
-                                setShowDownloadManager(!showDownloadManager)
-                            }
-                            className="p-2 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-foreground/70 hover:text-primary transition-all duration-300 select-none cursor-pointer relative"
-                            aria-label="Downloads Manager"
-                        >
-                            <Download className="w-4 h-4" />
-                            {activeDownloadsCount > 0 && (
-                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary text-white rounded-full text-[8px] font-black flex items-center justify-center animate-pulse">
-                                    {activeDownloadsCount}
-                                </span>
-                            )}
-                        </button>
-                        <DownloadManager
-                            isOpen={showDownloadManager}
-                            onClose={() => setShowDownloadManager(false)}
-                        />
-                    </div>
 
                     {/* Profile Circle Icon */}
                     <button
