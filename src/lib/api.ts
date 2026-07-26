@@ -11,7 +11,11 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    return "/api/video";
+    // In production hosted environments (e.g. Cloudflare Pages), call Vercel directly
+    // to bypass Cloudflare Worker response body size limits and connection timeouts
+    return typeof window !== "undefined" && window.location.hostname !== "localhost"
+        ? "https://api.abisolutions.online/api/video"
+        : "/api/video";
 }
 
 export interface ImageModel {
