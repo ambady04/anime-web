@@ -119,7 +119,9 @@ export async function GET(req: NextRequest) {
                 "abort",
                 () => {
                     try {
-                        upstream.body?.cancel();
+                        if (upstream.body && !upstream.body.locked) {
+                            upstream.body.cancel();
+                        }
                     } catch {}
                 },
                 { once: true },
