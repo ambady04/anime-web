@@ -1,21 +1,12 @@
-// ─── KIXO Service Worker v5 ───────────────────────────────────────────────────
-// Fixed: v4 had stale-while-revalidate for all images which caused a constant
-// background refetch loop, flooding the network and competing with video streams.
-//
+// ─── KIXO Service Worker v6 ───────────────────────────────────────────────────
 // Strategy:
+//   /api/*                    → Network-Only (video & data must bypass SW completely)
 //   /_next/static/*           → Cache-First (hashed filenames, immutable)
-//   /api/video*               → Video Cache (cache range responses for replay/seek)
-//   /api/*                    → Network-Only (data must be fresh)
 //   External CDN images       → Cache-First (poster URLs are static, never change)
 //   Page navigations          → Network-First (fresh HTML, offline fallback)
-//   Same-origin other assets  → Cache-First (fonts, icons — rarely change)
 
-const STATIC_CACHE = "kixo-static-v5";
+const STATIC_CACHE = "kixo-static-v6";
 const IMAGE_CACHE = "kixo-images-v1";
-const VIDEO_CACHE = "kixo-video-v1";
-const OFFLINE_PAGE = "/";
-
-const VIDEO_CACHE_MAX_ENTRIES = 150;
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 
 self.addEventListener("install", (event) => {
@@ -23,7 +14,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-    const keep = [STATIC_CACHE, IMAGE_CACHE, VIDEO_CACHE];
+    const keep = [STATIC_CACHE, IMAGE_CACHE];
     event.waitUntil(
         caches
             .keys()
@@ -53,38 +44,7 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
     const isSameOrigin = url.origin === self.location.origin;
 
-    // ── VIDEO PROXY CACHING ───────────────────────────────────────────────────
-    // Cache video range responses for instant seek-back and replay.
-    const isVideoRequest =
-        (isSameOrigin && url.pathname === "/api/video") ||
-        (url.hostname === "api.abisolutions.online" &&
-            url.pathname === "/api/video");
-
-    if (isVideoRequest) {
-        event.respondWith(
-            (async () => {
-                const cache = await caches.open(VIDEO_CACHE);
-                const range = event.request.headers.get("range") || "";
-                const cacheKey = new Request(
-                    url.href + "&_r=" + encodeURIComponent(range),
-                );
-
-                const cached = await cache.match(cacheKey);
-                if (cached) return cached;
-
-                const response = await fetch(event.request);
-                if (response.status === 200 || response.status === 206) {
-                    cache
-                        .put(cacheKey, response.clone())
-                        .then(() =>
-                            trimCache(VIDEO_CACHE, VIDEO_CACHE_MAX_ENTRIES),
-                        );
-                }
-                return response;
-            })(),
-        );
-        return;
-    }
+    // ── Network-Only: All API routes (including /api/video) pass through directly ──
 
     // ── EXTERNAL CDN IMAGES (poster artwork) ──────────────────────────────────
     // Movie posters from pbcdnw.aoneroom.com etc. are static URLs that never
