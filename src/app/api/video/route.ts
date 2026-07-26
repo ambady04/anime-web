@@ -10,7 +10,12 @@ import { NextRequest, NextResponse } from "next/server";
 // Flow: Browser → /api/video (CF Worker) → api.abisolutions.online/api/video (Vercel) → CDN
 export const dynamic = "force-dynamic";
 
-const VERCEL_VIDEO_PROXY = "https://api.abisolutions.online/api/video";
+const VERCEL_VIDEO_PROXY =
+    process.env.VIDEO_PROXY_URL ||
+    process.env.NEXT_PUBLIC_VIDEO_PROXY_URL ||
+    (process.env.NODE_ENV === "development"
+        ? "http://localhost:8000/api/video"
+        : "https://api.abisolutions.online/api/video");
 
 export async function OPTIONS() {
     return new NextResponse(null, {

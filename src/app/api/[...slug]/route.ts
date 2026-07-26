@@ -7,7 +7,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const UPSTREAM_BASE = "https://api.abisolutions.online";
+const UPSTREAM_BASE =
+    process.env.API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === "development"
+        ? "http://localhost:8000"
+        : "https://api.abisolutions.online");
 
 // Per-endpoint Cloudflare edge cache TTLs (seconds).
 // Stream URLs have expiring CDN tokens — must never be cached.

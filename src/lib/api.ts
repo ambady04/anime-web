@@ -11,7 +11,7 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    return "https://api.abisolutions.online/api/video";
+    return "/api/video";
 }
 
 export interface ImageModel {
