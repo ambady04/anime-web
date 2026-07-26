@@ -34,8 +34,17 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
     try {
         const { searchParams } = req.nextUrl;
-        const qs = searchParams.toString();
-        const upstreamUrl = `${VERCEL_VIDEO_PROXY}${qs ? `?${qs}` : ""}`;
+        const targetUrl = searchParams.get("url");
+        const referer = searchParams.get("referer") || "https://videodownloader.site/";
+        const mode = searchParams.get("mode") || "stream";
+
+        let upstreamUrl: string;
+        if (targetUrl) {
+            upstreamUrl = `${VERCEL_VIDEO_PROXY}?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}`;
+        } else {
+            const qs = searchParams.toString();
+            upstreamUrl = `${VERCEL_VIDEO_PROXY}${qs ? `?${qs}` : ""}`;
+        }
 
         // Forward Range header for seek support
         const reqHeaders: Record<string, string> = {

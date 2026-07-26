@@ -848,7 +848,7 @@ export default function VideoPlayer({
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
-            setTimeout(() => setRetryTrigger((prev) => prev + 1), 2000);
+            setTimeout(() => setRetryTrigger((prev) => prev + 1), 200);
             return;
         }
 
