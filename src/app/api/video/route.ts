@@ -66,8 +66,13 @@ export async function GET(req: NextRequest) {
         // If upstream returned an error, pass it through with no-cache
         if (!upstream.ok && upstream.status !== 206) {
             const errorBody = await upstream.text();
+            // Map 422 or 403 to 502 so browser HTML5 video element triggers immediate recovery
+            const returnStatus =
+                upstream.status === 422 || upstream.status === 403
+                    ? 502
+                    : upstream.status;
             return new NextResponse(errorBody, {
-                status: upstream.status,
+                status: returnStatus,
                 headers: {
                     "Content-Type":
                         upstream.headers.get("content-type") ||

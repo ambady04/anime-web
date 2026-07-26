@@ -802,9 +802,11 @@ export default function VideoPlayer({
             errorMsg = String(e);
         }
 
-        // GUARD: If we're already in recovery mode (switching to proxy/next quality),
-        // ignore duplicate onError events from the dying previous source.
+        // GUARD: If we're already in recovery mode, ensure we clear it after a short delay so error recovery never locks up
         if (isRecoveringRef.current) {
+            setTimeout(() => {
+                isRecoveringRef.current = false;
+            }, 800);
             return;
         }
 
@@ -836,6 +838,9 @@ export default function VideoPlayer({
             setInitialSeekTime(restoreTime);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
+            setTimeout(() => {
+                isRecoveringRef.current = false;
+            }, 1000);
             setRetryTrigger((prev) => prev + 1);
             return;
         }
@@ -868,8 +873,7 @@ export default function VideoPlayer({
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
-            // Delay before trying next quality to avoid CDN rate-limiting (429)
-            setTimeout(() => setActiveDownload(nextQuality), 1500);
+            setTimeout(() => setActiveDownload(nextQuality), 200);
         } else if (refreshCountRef.current < 2) {
             // Step 2: All qualities failed — fetch fresh stream URLs from API
             refreshCountRef.current += 1;
