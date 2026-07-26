@@ -2152,7 +2152,7 @@ export default function VideoPlayer({
                             ) {
                                 setIsLoading(true);
                             }
-                        }, 300);
+                        }, 600);
                     }}
                     onSeeking={() => {
                         // Don't show spinner immediately — brief seeks clear fast
@@ -2161,11 +2161,11 @@ export default function VideoPlayer({
                         waitingTimeoutRef.current = setTimeout(() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.readyState < 3
+                                videoRef.current.readyState < 2
                             ) {
                                 setIsLoading(true);
                             }
-                        }, 200);
+                        }, 800);
                     }}
                     onSeeked={() => {
                         // Always clear loading after seek completes — video has the frame ready

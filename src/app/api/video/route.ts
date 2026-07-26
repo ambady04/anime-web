@@ -98,6 +98,7 @@ export async function GET(req: NextRequest) {
             "Content-Range, Content-Length, Accept-Ranges, Content-Type",
         );
         resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+        resHeaders.set("X-Accel-Buffering", "no");
 
         return new NextResponse(upstream.body, {
             status: upstream.status,
