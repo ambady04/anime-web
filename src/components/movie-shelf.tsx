@@ -35,19 +35,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
         };
     }, [subjects, checkScroll]);
 
-    // Mouse-wheel → horizontal scroll
-    useEffect(() => {
-        const el = rowRef.current;
-        if (!el) return;
-        const onWheel = (e: WheelEvent) => {
-            if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-            if (e.deltaY === 0) return;
-            e.preventDefault();
-            el.scrollBy({ left: e.deltaY * 2, behavior: "smooth" });
-        };
-        el.addEventListener("wheel", onWheel, { passive: false });
-        return () => el.removeEventListener("wheel", onWheel);
-    }, []);
+
 
     const scroll = useCallback((dir: "left" | "right") => {
         if (!rowRef.current) return;
