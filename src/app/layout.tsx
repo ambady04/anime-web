@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/navbar";
 import BottomNav from "@/components/bottom-nav";
 import ScrollHandler from "@/components/scroll-handler";
 import PageTransition from "@/components/page-transition";
-import InspectGuard from "@/components/inspect-guard";
 import { AuthProvider } from "@/lib/auth-context";
 import PWARegister from "@/components/pwa-register";
+import dynamic from "next/dynamic";
 
-const inter = Inter({
-    variable: "--font-inter",
+// Dynamically import client-only components
+const LenisProvider = dynamic(() => import("@/components/lenis-provider"), { ssr: false });
+const AmbientOrbs = dynamic(() => import("@/components/ambient-orbs"), { ssr: false });
+
+const geist = Geist({
+    variable: "--font-geist",
     subsets: ["latin"],
     display: "swap",
+    weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
@@ -80,8 +85,8 @@ export default function RootLayout({
         <html
             lang="en"
             suppressHydrationWarning
-            data-scroll-behavior="smooth"
-            className={`${inter.variable} h-full antialiased`}
+            className={`${geist.variable} h-full antialiased`}
+            style={{ fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
         >
             <head>
                 <script
@@ -101,26 +106,31 @@ export default function RootLayout({
                     }}
                 />
             </head>
-            <body className="min-h-full bg-background text-foreground flex flex-col relative transition-colors duration-300">
+            <body
+                className="min-h-full text-white flex flex-col relative"
+                style={{ backgroundColor: "#060606", fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
+            >
                 <AuthProvider>
+                    {/* Smooth scroll provider */}
+                    <LenisProvider />
+
                     {/* Register service worker */}
                     <PWARegister />
 
-                    {/* Global protection guard */}
-                    {/* <InspectGuard /> */}
-
-                    {/* Scroll handler updating global styles dynamically */}
+                    {/* Scroll handler */}
                     <ScrollHandler />
 
-                    {/* Glow backgrounds */}
-                    <div className="radial-glow" />
-                    <div className="radial-glow-secondary" />
+                    {/* CSS noise texture overlay for premium cinematic feel */}
+                    <div className="noise-overlay" aria-hidden="true" />
+
+                    {/* Ambient floating gradient orbs */}
+                    <AmbientOrbs />
 
                     {/* Global Navigation */}
                     <Navbar />
 
-                    {/* Main Content Area with transition */}
-                    <main className="grow z-10 pt-14 md:pt-20 pb-16 md:pb-0">
+                    {/* Main Content */}
+                    <main className="grow relative z-10 pt-0 pb-16 md:pb-0">
                         <PageTransition>{children}</PageTransition>
                     </main>
 
