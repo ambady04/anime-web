@@ -7,11 +7,7 @@ import ScrollHandler from "@/components/scroll-handler";
 import PageTransition from "@/components/page-transition";
 import { AuthProvider } from "@/lib/auth-context";
 import PWARegister from "@/components/pwa-register";
-import dynamic from "next/dynamic";
-
-// Dynamically import client-only components
-const LenisProvider = dynamic(() => import("@/components/lenis-provider"), { ssr: false });
-const AmbientOrbs = dynamic(() => import("@/components/ambient-orbs"), { ssr: false });
+import ClientProviders from "@/components/client-providers";
 
 const geist = Geist({
     variable: "--font-geist",
@@ -111,10 +107,8 @@ export default function RootLayout({
                 style={{ backgroundColor: "#060606", fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
             >
                 <AuthProvider>
-                    {/* Smooth scroll provider */}
-                    <LenisProvider />
-
-                    {/* Register service worker */}
+                    {/* Client-only providers: smooth scroll + ambient orbs */}
+                    <ClientProviders />
                     <PWARegister />
 
                     {/* Scroll handler */}
@@ -123,8 +117,7 @@ export default function RootLayout({
                     {/* CSS noise texture overlay for premium cinematic feel */}
                     <div className="noise-overlay" aria-hidden="true" />
 
-                    {/* Ambient floating gradient orbs */}
-                    <AmbientOrbs />
+
 
                     {/* Global Navigation */}
                     <Navbar />
