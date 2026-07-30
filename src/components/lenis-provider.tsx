@@ -30,14 +30,6 @@ export default function LenisProvider() {
             try {
                 const LenisClass = (await import("lenis")).default;
                 lenis = new LenisClass({
-                    duration: 1.2,
-                    easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-                    orientation: "vertical",
-                    gestureOrientation: "vertical",
-                    smoothWheel: true,
-                    wheelMultiplier: 0.9,
-                    touchMultiplier: 1.5,
-                    infinite: false,
                     autoResize: true,
                 });
 

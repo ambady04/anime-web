@@ -74,9 +74,6 @@ function MovieCard({
                 scale: isHovered ? 1.03 : 1,
             }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
         >
             <Link href={watchLink} className="absolute inset-0 block rounded-[20px] overflow-hidden">
                 {/* ── Poster image with blur-in loading ── */}
