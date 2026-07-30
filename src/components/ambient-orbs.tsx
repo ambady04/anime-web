@@ -38,28 +38,18 @@ export default function AmbientOrbs() {
             aria-hidden="true"
         >
             {orbs.map((orb, i) => (
-                <motion.div
+                <div
                     key={i}
                     className="absolute rounded-full"
                     style={{
                         width: orb.size,
                         height: orb.size,
-                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(255,45,85,0.02) 40%, transparent 80%)`,
-                        filter: "blur(24px)",
+                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(255,45,85,0) 70%)`,
+                        filter: "blur(40px)",
                         top: orb.top,
                         left: orb.left,
                         right: (orb as any).right,
-                    }}
-                    animate={{
-                        x: [0, i % 2 === 0 ? 60 : -80, i % 2 === 0 ? -30 : 40, 0],
-                        y: [0, i % 2 === 0 ? -80 : 60, i % 2 === 0 ? 40 : -30, 0],
-                        scale: [1, 1.15, 0.95, 1],
-                    }}
-                    transition={{
-                        duration: orb.duration,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: i * 3,
+                        opacity: 0.85,
                     }}
                 />
             ))}
