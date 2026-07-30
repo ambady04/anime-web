@@ -44,8 +44,7 @@ export default function AmbientOrbs() {
                     style={{
                         width: orb.size,
                         height: orb.size,
-                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(255,45,85,0) 70%)`,
-                        filter: "blur(40px)",
+                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(255,45,85,0) 65%)`,
                         top: orb.top,
                         left: orb.left,
                         right: (orb as any).right,
