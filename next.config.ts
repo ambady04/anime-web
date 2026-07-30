@@ -113,9 +113,9 @@ const nextConfig: NextConfig = {
                     },
                 ],
             },
-            // API: stream — never cache (expiring CDN tokens)
+            // API: stream + video proxy — never cache (expiring CDN tokens, Range byte-serving)
             {
-                source: "/api/stream",
+                source: "/api/(stream|video)",
                 headers: [
                     {
                         key: "Cache-Control",
