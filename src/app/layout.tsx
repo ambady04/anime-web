@@ -123,7 +123,7 @@ export default function RootLayout({
                     <Navbar />
 
                     {/* Main Content */}
-                    <main className="grow relative z-10 pt-0 pb-16 md:pb-0">
+                    <main className="grow relative z-10 pt-16 pb-16 md:pb-0">
                         <PageTransition>{children}</PageTransition>
                     </main>
 

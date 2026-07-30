@@ -66,7 +66,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
 
     return (
         <section
-            className="relative w-full overflow-hidden"
+            className="relative w-full overflow-hidden -mt-16"
             style={{ height: "100svh" }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}

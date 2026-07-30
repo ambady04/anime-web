@@ -1,13 +1,30 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 
 export default function LenisProvider() {
     const lenisRef = useRef<any>(null);
+    const rafIdRef = useRef<number>(0);
+    const pathname = usePathname();
+
+    // Disable Lenis on the watch/video page — Lenis intercepts wheel events
+    // which breaks the video player timeline scrubber and volume control.
+    const isWatchPage = pathname?.startsWith("/watch");
 
     useEffect(() => {
+        // If we're on the watch page, destroy any existing lenis instance and bail
+        if (isWatchPage) {
+            cancelAnimationFrame(rafIdRef.current);
+            if (lenisRef.current) {
+                lenisRef.current.destroy();
+                lenisRef.current = null;
+                document.documentElement.classList.remove("lenis");
+            }
+            return;
+        }
+
         let lenis: any;
-        let rafId: number;
 
         const initLenis = async () => {
             try {
@@ -25,30 +42,29 @@ export default function LenisProvider() {
                 });
 
                 lenisRef.current = lenis;
-
-                // Add lenis class for CSS targeting
                 document.documentElement.classList.add("lenis");
 
                 const raf = (time: number) => {
                     lenis.raf(time);
-                    rafId = requestAnimationFrame(raf);
+                    rafIdRef.current = requestAnimationFrame(raf);
                 };
-                rafId = requestAnimationFrame(raf);
+                rafIdRef.current = requestAnimationFrame(raf);
             } catch {
-                // Lenis failed to load — fallback to native scroll (SSR safe)
+                // Lenis unavailable — graceful fallback to native scroll
             }
         };
 
         initLenis();
 
         return () => {
-            cancelAnimationFrame(rafId);
+            cancelAnimationFrame(rafIdRef.current);
             if (lenisRef.current) {
                 lenisRef.current.destroy();
+                lenisRef.current = null;
                 document.documentElement.classList.remove("lenis");
             }
         };
-    }, []);
+    }, [isWatchPage]);
 
     return null;
 }
