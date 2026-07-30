@@ -3,7 +3,6 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/navbar";
 import BottomNav from "@/components/bottom-nav";
-import ScrollHandler from "@/components/scroll-handler";
 import PageTransition from "@/components/page-transition";
 import { AuthProvider } from "@/lib/auth-context";
 import PWARegister from "@/components/pwa-register";
@@ -111,8 +110,6 @@ export default function RootLayout({
                     <ClientProviders />
                     <PWARegister />
 
-                    {/* Scroll handler */}
-                    <ScrollHandler />
 
                     {/* CSS noise texture overlay for premium cinematic feel */}
                     <div className="noise-overlay" aria-hidden="true" />

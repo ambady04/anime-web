@@ -105,25 +105,25 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                 </motion.button>
 
                 {/* Card Row */}
-                <div
+                <motion.div
                     ref={rowRef}
                     className="flex overflow-x-auto gap-3 sm:gap-4 py-3 w-full"
                     style={{ scrollSnapType: "x mandatory", scrollbarWidth: "none" }}
+                    initial={{ opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-40px" }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                 >
                     {subjects.map((subject, index) => (
-                        <motion.div
+                        <div
                             key={`${subject.subjectId}-${index}`}
                             className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px] xl:w-[210px] 2xl:w-[235px] 3xl:w-[270px] 4xl:w-[320px]"
                             style={{ scrollSnapAlign: "start" }}
-                            initial={{ opacity: 0, y: 16 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true, margin: "-30px" }}
-                            transition={{ duration: 0.4, delay: Math.min(index * 0.05, 0.4), ease: [0.16, 1, 0.3, 1] }}
                         >
                             <MovieCard subject={subject} index={index} />
-                        </motion.div>
+                        </div>
                     ))}
-                </div>
+                </motion.div>
 
                 {/* Right Arrow */}
                 <motion.button

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useSpring } from "framer-motion";
 import { Star, Play, Tv, Film, Plus } from "lucide-react";
 import { Subject, isSeriesType } from "@/lib/api";
 import { localStore } from "@/lib/storage";
@@ -27,10 +27,12 @@ function MovieCard({
     const [bookmarkedEpisode, setBookmarkedEpisode] = useState<number | undefined>(propBookmarkedEpisode);
     const [imageLoaded, setImageLoaded] = useState(false);
 
-    // 3D tilt state
+    // 3D tilt Framer Motion Values (bypasses React renders on mousemove)
     const cardRef = useRef<HTMLDivElement>(null);
-    const [tilt, setTilt] = useState({ x: 0, y: 0 });
     const [isHovered, setIsHovered] = useState(false);
+    const rotateX = useSpring(0, { stiffness: 300, damping: 25 });
+    const rotateY = useSpring(0, { stiffness: 300, damping: 25 });
+    const scale = useSpring(1, { stiffness: 300, damping: 25 });
 
     useEffect(() => {
         if (propBookmarkedSeason !== undefined) setBookmarkedSeason(propBookmarkedSeason);
@@ -47,13 +49,21 @@ function MovieCard({
         const rect = cardRef.current.getBoundingClientRect();
         const x = (e.clientY - rect.top) / rect.height - 0.5;
         const y = (e.clientX - rect.left) / rect.width - 0.5;
-        setTilt({ x: x * 12, y: y * -12 });
-    }, []);
+        rotateX.set(x * 12);
+        rotateY.set(y * -12);
+    }, [rotateX, rotateY]);
+
+    const handleMouseEnter = useCallback(() => {
+        setIsHovered(true);
+        scale.set(1.03);
+    }, [scale]);
 
     const handleMouseLeave = useCallback(() => {
         setIsHovered(false);
-        setTilt({ x: 0, y: 0 });
-    }, []);
+        rotateX.set(0);
+        rotateY.set(0);
+        scale.set(1);
+    }, [rotateX, rotateY, scale]);
 
     const watchLink =
         bookmarkedSeason && bookmarkedEpisode
@@ -64,16 +74,16 @@ function MovieCard({
         <motion.div
             ref={cardRef}
             className="relative w-full aspect-[2/3] cursor-pointer select-none"
-            style={{ perspective: 800, transformStyle: "preserve-3d" }}
-            onMouseMove={handleMouseMove}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={handleMouseLeave}
-            animate={{
-                rotateX: tilt.x,
-                rotateY: tilt.y,
-                scale: isHovered ? 1.03 : 1,
+            style={{ 
+                perspective: 800, 
+                transformStyle: "preserve-3d",
+                rotateX,
+                rotateY,
+                scale
             }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
         >
             <Link href={watchLink} className="absolute inset-0 block rounded-[20px] overflow-hidden">
                 {/* ── Poster image with blur-in loading ── */}
