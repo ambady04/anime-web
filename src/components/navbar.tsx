@@ -70,7 +70,7 @@ export default function Navbar() {
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 style={{ borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "rgba(255,255,255,0)" }}
             >
-                <div className="max-w-tv px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-4 relative">
+                <div className="max-w-tv px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 relative">
 
                     {/* ── Logo ── */}
                     <Link href="/" className="flex items-center gap-2.5 group shrink-0 relative z-10">
@@ -97,7 +97,15 @@ export default function Navbar() {
                     </Link>
 
                     {/* ── Desktop Nav Links ── */}
-                    <nav className="hidden md:flex items-center gap-1 md:absolute md:left-1/2 md:-translate-x-1/2 md:top-1/2 md:-translate-y-1/2">
+                    <motion.nav
+                        className="hidden md:flex items-center gap-4 md:absolute md:left-1/2 md:-translate-x-1/2 md:top-1/2 md:-translate-y-1/2"
+                        animate={{
+                            opacity: searchOpen ? 0 : 1,
+                            scale: searchOpen ? 0.95 : 1,
+                            pointerEvents: searchOpen ? "none" : "auto",
+                        }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                    >
                         {navLinks.map((link) => {
                             const Icon = link.icon;
                             const isActive = pathname === link.href;
@@ -126,7 +134,7 @@ export default function Navbar() {
                                 </Link>
                             );
                         })}
-                    </nav>
+                    </motion.nav>
 
                     {/* ── Right Actions ── */}
                     <div className="flex items-center gap-2 sm:gap-3">
