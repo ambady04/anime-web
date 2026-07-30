@@ -152,6 +152,9 @@ html, body {
 }
 
 /* Smooth scroll via Lenis — prevent native behavior */
+html.lenis {
+    scroll-behavior: auto !important;
+}
 html.lenis, html.lenis body {
     height: auto;
 }
