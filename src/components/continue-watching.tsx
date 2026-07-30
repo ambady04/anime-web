@@ -41,7 +41,7 @@ export default function ContinueWatching() {
 
     return (
         <motion.section
-            className="relative my-6 sm:my-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-20"
+            className="relative my-6 sm:my-8 max-w-tv px-4 sm:px-6 lg:px-8 z-20"
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
@@ -78,7 +78,7 @@ export default function ContinueWatching() {
                         return (
                             <motion.div
                                 key={item.detailPath}
-                                className="shrink-0 w-[220px] sm:w-[260px] md:w-[290px] rounded-[20px] overflow-hidden relative group"
+                                className="shrink-0 w-[220px] sm:w-[260px] md:w-[290px] xl:w-[320px] 2xl:w-[360px] 3xl:w-[420px] 4xl:w-[480px] rounded-[20px] overflow-hidden relative group"
                                 style={{
                                     background: "#111111",
                                     border: "1px solid rgba(255,255,255,0.06)",

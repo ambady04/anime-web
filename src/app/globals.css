@@ -448,11 +448,46 @@ select option {
 }
 
 /* ============================================================
-   LARGE SCREEN SCALING
+   LARGE SCREEN & TV SCALING
    ============================================================ */
 
-@media (min-width: 2560px) { html { font-size: 18px; } }
-@media (min-width: 3840px) { html { font-size: 22px; } }
+/* Fluid rem base scaling based on viewport width for large screen TVs */
+@media (min-width: 1440px) { html { font-size: 16px; } }
+@media (min-width: 1920px) { html { font-size: 17.5px; } }
+@media (min-width: 2560px) { html { font-size: 19.5px; } }
+@media (min-width: 3840px) { html { font-size: 23px; } }
+
+/* Responsive TV-optimized container max-width wrapper class */
+.max-w-tv {
+    width: 100%;
+    max-width: 76rem; /* 1216px at 16px base */
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media (min-width: 1440px) {
+    .max-w-tv { max-width: 86rem; }
+}
+
+@media (min-width: 1920px) {
+    .max-w-tv { max-width: 108rem; } /* 1728px at 16px base, scales beautifully up to 55" TV */
+}
+
+@media (min-width: 2560px) {
+    .max-w-tv { max-width: 144rem; } /* 2304px at 16px base */
+}
+
+@media (min-width: 3840px) {
+    .max-w-tv { max-width: 216rem; } /* 3456px at 16px base */
+}
+
+/* Premium active remote focus outline */
+:focus-visible {
+    outline: 2.5px solid #FF2D55 !important;
+    outline-offset: 4px !important;
+    box-shadow: 0 0 20px rgba(255, 45, 85, 0.7) !important;
+    border-radius: 8px;
+}
 
 /* ============================================================
    iOS SAFE AREA

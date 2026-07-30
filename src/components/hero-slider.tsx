@@ -119,7 +119,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
 
             {/* ── Content ── */}
             <div className="absolute inset-0 z-20 flex items-end pb-[10vh] sm:pb-[12vh]">
-                <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 w-full">
+                <div className="max-w-tv px-6 sm:px-8 lg:px-12 w-full">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={`content-${current}`}

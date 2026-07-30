@@ -70,7 +70,7 @@ export default function Navbar() {
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 style={{ borderBottomWidth: 1, borderBottomStyle: "solid" }}
             >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-4">
+                <div className="max-w-tv px-4 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-4">
 
                     {/* ── Logo ── */}
                     <Link href="/" className="flex items-center gap-2.5 group shrink-0 relative z-10">

@@ -56,7 +56,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
     };
 
     return (
-        <section className="relative group/shelf my-6 sm:my-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-20">
+        <section className="relative group/shelf my-6 sm:my-8 max-w-tv px-4 sm:px-6 lg:px-8 z-20">
 
             {/* ── Section Title ── */}
             <div className="flex items-center justify-between mb-5">
@@ -113,7 +113,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                     {subjects.map((subject, index) => (
                         <motion.div
                             key={`${subject.subjectId}-${index}`}
-                            className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px] xl:w-[210px] 2xl:w-[235px]"
+                            className="shrink-0 w-[130px] sm:w-[155px] md:w-[175px] lg:w-[195px] xl:w-[210px] 2xl:w-[235px] 3xl:w-[270px] 4xl:w-[320px]"
                             style={{ scrollSnapAlign: "start" }}
                             initial={{ opacity: 0, y: 16 }}
                             whileInView={{ opacity: 1, y: 0 }}
