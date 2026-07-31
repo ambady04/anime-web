@@ -321,21 +321,55 @@ export default function WatchClient({
         if (currentInList) return subject.dubs;
 
         // Current path isn't in the dubs list — add it as the base/original track.
+        // Use corner first (it reflects the real audio language, e.g. "Hindi", "Korean").
+        // If corner is absent/generic, derive from countryName.
+        const COUNTRY_TO_LANG: Record<string, string> = {
+            japan: "Japanese",
+            korea: "Korean",
+            china: "Chinese",
+            india: "Hindi",
+            france: "French",
+            germany: "German",
+            spain: "Spanish",
+            italy: "Italian",
+            russia: "Russian",
+            thailand: "Thai",
+            turkey: "Turkish",
+            usa: "English",
+            "united states": "English",
+            uk: "English",
+        };
+
         const cornerVal = subject.corner?.trim();
-        const isValidLang =
+        const isValidCorner =
             cornerVal &&
             cornerVal.length > 0 &&
+            !cornerVal.toLowerCase().includes("cam") &&
             !cornerVal.toLowerCase().includes("original");
+
+        let derivedLang = "English";
+        if (isValidCorner) {
+            derivedLang = cornerVal;
+        } else {
+            const country = subject.countryName?.toLowerCase() ?? "";
+            for (const [key, lang] of Object.entries(COUNTRY_TO_LANG)) {
+                if (country.includes(key)) {
+                    derivedLang = lang;
+                    break;
+                }
+            }
+        }
+
         const currentEntry: DubModel = {
             subjectId: subject.subjectId,
-            lanName: isValidLang ? cornerVal : "English",
-            lanCode: "en",
+            lanName: derivedLang,
+            lanCode: derivedLang.toLowerCase().slice(0, 2),
             original: true,
             type: 0,
             detailPath: path,
         };
         return [currentEntry, ...subject.dubs];
-    }, [subject.dubs, subject.subjectId, subject.corner, path]);
+    }, [subject.dubs, subject.subjectId, subject.corner, subject.countryName, path]);
 
     // Track which episodes have been watched (loaded from localStorage per season)
     const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(

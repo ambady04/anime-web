@@ -165,10 +165,14 @@ export interface StreamData {
     stream_domain: string;
 }
 
-// Core fetch function — NO CACHING. Every request goes fresh to the API.
+// Core fetch function — retries up to 3 times on transient errors.
+// Transient errors include: network failures, 404, 502, 503, 504.
+// A 404 on the first/second attempt is treated as transient (upstream flakiness).
+// Only a 404 on the final attempt is thrown as a hard "not found" error.
 async function fetchFromApi<T>(
     endpoint: string,
     params: Record<string, string | number | boolean> = {},
+    maxRetries = 3,
 ): Promise<T> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -205,19 +209,53 @@ async function fetchFromApi<T>(
         }
     }
 
-    const response = await fetch(fetchUrl, {
-        headers: fetchHeaders,
-        cache: "no-store",
-    });
+    // Retry loop — handles transient upstream failures gracefully
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            const response = await fetch(fetchUrl, {
+                headers: fetchHeaders,
+                cache: "no-store",
+            });
 
-    if (!response.ok) {
-        throw new Error(
-            `Failed to fetch API endpoint ${endpoint}: ${response.statusText}`,
-        );
+            if (response.ok) {
+                return (await response.json()) as T;
+            }
+
+            // Transient status codes worth retrying: 404 (upstream flap), 502, 503, 504
+            const isTransient = [404, 502, 503, 504].includes(response.status);
+            if (isTransient && attempt < maxRetries - 1) {
+                // Exponential backoff: 300ms, 900ms, …
+                await new Promise((r) => setTimeout(r, 300 * 3 ** attempt));
+                continue;
+            }
+
+            throw new Error(
+                `Failed to fetch API endpoint ${endpoint}: ${response.statusText}`,
+            );
+        } catch (err: unknown) {
+            // Network-level errors (no response at all) — always retry
+            if (err instanceof Error && err.message.includes("Failed to fetch API endpoint")) {
+                // This is our own error thrown above — don't re-wrap it
+                lastError = err;
+                if (attempt < maxRetries - 1) {
+                    await new Promise((r) => setTimeout(r, 300 * 3 ** attempt));
+                    continue;
+                }
+                throw lastError;
+            }
+            // Raw network error (fetch itself failed)
+            lastError = err instanceof Error ? err : new Error(String(err));
+            if (attempt < maxRetries - 1) {
+                await new Promise((r) => setTimeout(r, 300 * 3 ** attempt));
+                continue;
+            }
+            throw lastError;
+        }
     }
-
-    return (await response.json()) as T;
+    throw lastError ?? new Error(`Failed to fetch API endpoint ${endpoint}`);
 }
+
 
 // Helper to determine if a subjectType represents an episodic show (TV Series = 2, ShortTV = 7, Anime = 10)
 export const isSeriesType = (subjectType?: number | null): boolean => {

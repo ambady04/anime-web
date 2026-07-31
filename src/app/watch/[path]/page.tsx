@@ -79,9 +79,16 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
                     </div>
                 )}
                 <div className="flex flex-col space-y-3">
+                    <a
+                        href={`/watch/${path}`}
+                        className="flex items-center justify-center space-x-2 bg-primary hover:opacity-90 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                        <span>Try Again</span>
+                    </a>
                     <Link
                         href="/"
-                        className="flex items-center justify-center space-x-2 bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                        className="flex items-center justify-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
                     >
                         <ArrowLeft className="w-4 h-4" />
                         <span>Return Home</span>
@@ -90,6 +97,7 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
             </div>
         );
     }
+
 
     return (
         <div className="min-h-screen">

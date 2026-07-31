@@ -672,14 +672,38 @@ export default function VideoPlayer({
             }
         }
 
-        // Subtitles
+        // Subtitles — pick the best match for the current audio language:
+        // 1. Caption whose lanName/lan matches the current dub's language
+        // 2. English caption as a universal fallback
+        // 3. First available caption
         if (captions.length > 0) {
-            const englishCaption = captions.find(
-                (c) =>
-                    c.lan === "en" ||
-                    c.lanName?.toLowerCase().includes("english"),
+            // Identify the language of the current audio track from the dubs list
+            const currentDub = dubs?.find(
+                (d) => decodeURIComponent(d.detailPath) === decodeURIComponent(detailPath)
             );
-            const defaultCaption = englishCaption || captions[0];
+            const currentLang = currentDub?.lanName?.toLowerCase() ?? "";
+            const currentLanCode = currentDub?.lanCode?.toLowerCase() ?? "";
+
+            // Try to match caption to current dub language
+            let defaultCaption: typeof captions[0] | undefined;
+            if (currentLang) {
+                defaultCaption = captions.find(
+                    (c) =>
+                        c.lanName?.toLowerCase().includes(currentLang) ||
+                        (currentLanCode && c.lan?.toLowerCase() === currentLanCode),
+                );
+            }
+            // Fall back to English
+            if (!defaultCaption) {
+                defaultCaption = captions.find(
+                    (c) =>
+                        c.lan === "en" ||
+                        c.lanName?.toLowerCase().includes("english"),
+                );
+            }
+            // Last resort: first available
+            if (!defaultCaption) defaultCaption = captions[0];
+
             setActiveCaption(defaultCaption);
             loadSubtitleTrack(defaultCaption.url);
             setShowSubtitles(true);
