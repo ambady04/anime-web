@@ -1,64 +1,22 @@
-import { movieApi, Subject } from "@/lib/api";
+import { movieApi } from "@/lib/api";
 import HeroSlider from "@/components/hero-slider";
 import MovieShelf from "@/components/movie-shelf";
 import ContinueWatching from "@/components/continue-watching";
+import CustomCollections from "@/components/custom-collections";
 import Link from "next/link";
 import { Film, RefreshCw } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// Custom curated collections to show on homepage
-const CUSTOM_COLLECTIONS = [
-    { title: "English Latest", fetchType: "category", query: "english" },
-    { title: "Malayalam Latest", fetchType: "category", query: "malayalam" },
-    { title: "DC Universe", fetchType: "search", query: "dc" },
-    { title: "Marvel", fetchType: "search", query: "marvel" },
-] as const;
-
-async function fetchCollection(
-    config: (typeof CUSTOM_COLLECTIONS)[number],
-): Promise<{ title: string; subjects: Subject[] }> {
-    try {
-        if (config.fetchType === "category") {
-            const data = await movieApi.getCategory(config.query, 1);
-            // Category API may return data in different shapes
-            const items =
-                (data as any)?.data?.items || (data as any)?.items || [];
-            return { title: config.title, subjects: items.slice(0, 20) };
-        } else {
-            const data = await movieApi.search(config.query, 1);
-            return {
-                title: config.title,
-                subjects: (data.items || []).slice(0, 20),
-            };
-        }
-    } catch {
-        return { title: config.title, subjects: [] };
-    }
-}
-
 export default async function HomePage() {
     let homeData = null;
     let errorMsg = "";
 
-    // Fetch homepage data AND custom collections in parallel (no waterfall)
-    const [homeResult, ...collectionResults] = await Promise.allSettled([
-        movieApi.getHome(false),
-        ...CUSTOM_COLLECTIONS.map(fetchCollection),
-    ]);
-
-    if (homeResult.status === "fulfilled") {
-        homeData = homeResult.value;
-    } else {
-        errorMsg =
-            homeResult.reason?.message || "Error loading live media catalog.";
+    try {
+        homeData = await movieApi.getHome(false);
+    } catch (err) {
+        errorMsg = err instanceof Error ? err.message : "Error loading live media catalog.";
     }
-
-    const customCollections = collectionResults.map((r) =>
-        r.status === "fulfilled"
-            ? r.value
-            : { title: "", subjects: [] as Subject[] },
-    );
 
     // Extract sections
     const bannerModule = homeData?.operatingList?.find(
@@ -128,20 +86,7 @@ export default async function HomePage() {
             )}
 
             {/* 4. Custom Curated Collections (at the end) */}
-            {customCollections.some((c) => c.subjects.length > 0) && (
-                <div className="space-y-4">
-                    {customCollections.map(
-                        (collection, idx) =>
-                            collection.subjects.length > 0 && (
-                                <MovieShelf
-                                    key={`${collection.title || "collection"}-${idx}`}
-                                    title={collection.title}
-                                    subjects={collection.subjects}
-                                />
-                            ),
-                    )}
-                </div>
-            )}
+            <CustomCollections />
         </div>
     );
 }

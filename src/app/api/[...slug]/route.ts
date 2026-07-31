@@ -55,11 +55,13 @@ export async function GET(
     const shouldCache = cacheTtl !== undefined && endpoint !== "stream";
 
     try {
+        const acceptLanguage = req.headers.get("accept-language") || "en-US,en;q=0.9";
         const upstream = await fetch(upstreamUrl, {
             headers: {
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 Accept: "application/json",
+                "Accept-Language": acceptLanguage,
             },
             // Cloudflare-specific fetch options: cache the response at the CF edge.
             // cf.cacheEverything overrides the upstream's own Cache-Control header.

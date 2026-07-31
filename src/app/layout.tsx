@@ -84,6 +84,9 @@ export default function RootLayout({
             style={{ fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
         >
             <head>
+                <link rel="preconnect" href="https://img.aoneroom.com" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://h5-api.aoneroom.com" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://api.abisolutions.online" crossOrigin="anonymous" />
                 <script
                     dangerouslySetInnerHTML={{
                         __html: `
