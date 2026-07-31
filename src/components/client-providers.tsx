@@ -4,13 +4,11 @@ import dynamic from "next/dynamic";
 
 // These components use browser APIs and must be dynamically imported with ssr:false.
 // This wrapper is a Client Component, so dynamic() with ssr:false is allowed here.
-const LenisProvider = dynamic(() => import("./lenis-provider"), { ssr: false });
 const AmbientOrbs = dynamic(() => import("./ambient-orbs"), { ssr: false });
 
 export default function ClientProviders() {
     return (
         <>
-            <LenisProvider />
             <AmbientOrbs />
         </>
     );

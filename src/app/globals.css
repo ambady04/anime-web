@@ -151,11 +151,11 @@ html, body {
     text-rendering: optimizeLegibility;
 }
 
-/* Smooth scroll via Lenis — prevent native behavior */
-html.lenis,
-html.lenis body {
-    scroll-behavior: auto !important;
-    height: auto;
+/* Optimize scroll containers for native smooth touch devices */
+.overflow-x-auto,
+.overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
 }
 
 /* Selection color */
