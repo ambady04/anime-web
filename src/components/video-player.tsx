@@ -2043,10 +2043,21 @@ export default function VideoPlayer({
             <style
                 dangerouslySetInnerHTML={{
                     __html: `
+                video {
+                    -webkit-text-size-adjust: 100% !important;
+                }
                 video::cue {
                     font-size: ${subtitleSize} !important;
                     background: rgba(0, 0, 0, 0.75) !important;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
+                }
+                video::-webkit-media-text-track-display {
+                    font-size: ${subtitleSize} !important;
+                    background: rgba(0, 0, 0, 0.75) !important;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
+                }
+                video::-webkit-media-text-track-container {
+                    font-size: ${subtitleSize} !important;
                 }
                 video.controls-visible::-webkit-media-text-track-display {
                     transform: translateY(-80px) !important;
