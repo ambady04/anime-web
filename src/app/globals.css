@@ -4,24 +4,24 @@
     --color-background: #060606;
     --color-foreground: #ffffff;
 
-    --color-primary: #FF2D55;
-    --color-primary-glow: rgba(255, 45, 85, 0.25);
-    --color-primary-light: #FF6B84;
-    --color-primary-dark: #CC1F40;
-    --color-accent: #FF2D55;
+    --color-primary: #FF0055;
+    --color-primary-glow: rgba(255, 0, 85, 0.35);
+    --color-primary-light: #FF3F7E;
+    --color-primary-dark: #C4003B;
+    --color-accent: #FF0055;
 
-    --color-card: #111111;
-    --color-card-hover: #181818;
-    --color-surface: #0E0E0E;
+    --color-card: #121214;
+    --color-card-hover: #1c1c1f;
+    --color-surface: #0a0a0c;
 
-    --color-glass-card: rgba(255, 255, 255, 0.04);
-    --color-glass-panel: rgba(255, 255, 255, 0.06);
-    --color-glass-border: rgba(255, 255, 255, 0.06);
-    --color-glass-border-hover: rgba(255, 45, 85, 0.5);
+    --color-glass-card: rgba(255, 255, 255, 0.05);
+    --color-glass-panel: rgba(255, 255, 255, 0.08);
+    --color-glass-border: rgba(255, 255, 255, 0.12);
+    --color-glass-border-hover: rgba(255, 0, 85, 0.75);
 
     --color-text-primary: #ffffff;
-    --color-text-secondary: #9CA3AF;
-    --color-text-muted: rgba(255, 255, 255, 0.35);
+    --color-text-secondary: #E5E7EB;
+    --color-text-muted: #9CA3AF;
 
     --animate-glow: glow 3s ease-in-out infinite alternate;
     --animate-fade-in: fadeIn 0.5s ease-out forwards;
@@ -38,32 +38,32 @@
 
 /* Dark theme variables */
 :root {
-    --primary: #FF2D55;
-    --primary-glow: rgba(255, 45, 85, 0.25);
-    --primary-light: #FF6B84;
-    --primary-dark: #CC1F40;
+    --primary: #FF0055;
+    --primary-glow: rgba(255, 0, 85, 0.35);
+    --primary-light: #FF3F7E;
+    --primary-dark: #C4003B;
 
     --bg-solid: #060606;
     --bg-gradient: #060606;
     --nav-bg: transparent;
-    --nav-bg-scrolled: rgba(6, 6, 6, 0.85);
+    --nav-bg-scrolled: rgba(6, 6, 6, 0.9);
 
     --text-primary: #ffffff;
-    --text-secondary: #9CA3AF;
-    --text-muted: rgba(255, 255, 255, 0.35);
+    --text-secondary: #E5E7EB;
+    --text-muted: #9CA3AF;
 
-    --glass-card: rgba(255, 255, 255, 0.04);
-    --glass-panel: rgba(255, 255, 255, 0.06);
-    --glass-border: rgba(255, 255, 255, 0.06);
-    --glass-border-hover: rgba(255, 45, 85, 0.45);
+    --glass-card: rgba(255, 255, 255, 0.05);
+    --glass-panel: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-border-hover: rgba(255, 0, 85, 0.75);
 
-    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.8);
-    --shadow-hover: 0 24px 64px rgba(255, 45, 85, 0.25), 0 0 0 1px rgba(255, 45, 85, 0.15);
-    --shadow-nav: 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 32px rgba(0, 0, 0, 0.9);
-    --shadow-glow: 0 0 40px rgba(255, 45, 85, 0.4), 0 0 80px rgba(255, 45, 85, 0.15);
+    --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.85);
+    --shadow-hover: 0 20px 48px rgba(255, 0, 85, 0.35), 0 0 0 1.5px rgba(255, 0, 85, 0.35);
+    --shadow-nav: 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 32px rgba(0, 0, 0, 0.95);
+    --shadow-glow: 0 0 40px rgba(255, 0, 85, 0.55), 0 0 80px rgba(255, 0, 85, 0.25);
 
-    --card-bg: #111111;
-    --surface: #0E0E0E;
+    --card-bg: #121214;
+    --surface: #0a0a0c;
 
     --scroll-blur: 20px;
     --scroll-y: 0;
@@ -238,16 +238,16 @@ html, body {
    ============================================================ */
 
 .gradient-primary {
-    background: linear-gradient(135deg, #FF2D55 0%, #CC1F40 100%);
+    background: linear-gradient(135deg, #FF0055 0%, #7E00FF 100%);
 }
 
 .gradient-primary-glow {
-    background: linear-gradient(135deg, #FF2D55 0%, #FF6B84 100%);
-    box-shadow: 0 8px 32px rgba(255, 45, 85, 0.4), 0 2px 8px rgba(255, 45, 85, 0.2);
+    background: linear-gradient(135deg, #FF0055 0%, #FF3F7E 100%);
+    box-shadow: 0 8px 32px rgba(255, 0, 85, 0.55), 0 2px 8px rgba(255, 0, 85, 0.3);
 }
 
 .text-gradient {
-    background: linear-gradient(135deg, #FF2D55 0%, #FF6B84 100%);
+    background: linear-gradient(135deg, #FF0055 0%, #FF3F7E 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -337,10 +337,10 @@ html, body {
     left: 0;
     width: 32px;
     height: 3px;
-    background: linear-gradient(90deg, #FF2D55, transparent);
+    background: linear-gradient(90deg, #FF0055, transparent);
     border-radius: 9999px;
     transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 0 10px rgba(255, 45, 85, 0.6);
+    box-shadow: 0 0 10px rgba(255, 0, 85, 0.7);
 }
 
 .group\/shelf:hover .section-title::after,
@@ -482,9 +482,9 @@ select option {
 
 /* Premium active remote focus outline */
 :focus-visible {
-    outline: 2.5px solid #FF2D55 !important;
+    outline: 2.5px solid #FF0055 !important;
     outline-offset: 4px !important;
-    box-shadow: 0 0 20px rgba(255, 45, 85, 0.7) !important;
+    box-shadow: 0 0 20px rgba(255, 0, 85, 0.8) !important;
     border-radius: 8px;
 }
 

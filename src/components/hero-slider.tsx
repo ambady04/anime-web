@@ -134,8 +134,8 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                     <span
                                         className="inline-flex items-center px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.15em] text-white"
                                         style={{
-                                            background: "linear-gradient(135deg, #FF2D55, #CC1F40)",
-                                            boxShadow: "0 4px 16px rgba(255,45,85,0.4)",
+                                            background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
+                                            boxShadow: "0 4px 16px rgba(255,0,85,0.4)",
                                         }}
                                     >
                                         {corner}
@@ -170,26 +170,26 @@ function HeroSlider({ banners }: HeroSliderProps) {
 
                                 {year && (
                                     <div
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#9CA3AF]"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-secondary"
                                         style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)" }}
                                     >
-                                        <Calendar className="w-3 h-3 text-[#FF2D55]" />
+                                        <Calendar className="w-3 h-3 text-primary" />
                                         {year}
                                     </div>
                                 )}
 
                                 <div
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-[#9CA3AF]"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-secondary"
                                     style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.08)" }}
                                 >
-                                    {isSeries ? <Tv className="w-3 h-3 text-[#FF2D55]" /> : <Film className="w-3 h-3 text-[#FF2D55]" />}
+                                    {isSeries ? <Tv className="w-3 h-3 text-primary" /> : <Film className="w-3 h-3 text-primary" />}
                                     {isSeries ? "Series" : "Movie"}
                                 </div>
 
                                 {genres.map((g) => (
                                     <div
                                         key={g}
-                                        className="px-3 py-1.5 rounded-full text-xs font-semibold text-[#9CA3AF]"
+                                        className="px-3 py-1.5 rounded-full text-xs font-semibold text-secondary"
                                         style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}
                                     >
                                         {g}
@@ -200,7 +200,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                             {/* Description */}
                             <motion.p
                                 variants={staggerItem}
-                                className="text-[#9CA3AF] text-sm sm:text-base leading-relaxed line-clamp-3 mb-8 max-w-xl"
+                                className="text-secondary text-sm sm:text-base leading-relaxed line-clamp-3 mb-8 max-w-xl"
                                 style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
                             >
                                 {desc}
@@ -213,10 +213,10 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                     <motion.div
                                         className="relative flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-bold text-white overflow-hidden cursor-pointer select-none"
                                         style={{
-                                            background: "linear-gradient(135deg, #FF2D55 0%, #CC1F40 100%)",
-                                            boxShadow: "0 8px 32px rgba(255,45,85,0.45), 0 2px 8px rgba(255,45,85,0.2)",
+                                            background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)",
+                                            boxShadow: "0 8px 32px rgba(255,0,85,0.45), 0 2px 8px rgba(255,0,85,0.2)",
                                         }}
-                                        whileHover={{ scale: 1.04, boxShadow: "0 12px 48px rgba(255,45,85,0.6), 0 4px 16px rgba(255,45,85,0.3)" }}
+                                        whileHover={{ scale: 1.04, boxShadow: "0 12px 48px rgba(255,0,85,0.6), 0 4px 16px rgba(255,0,85,0.3)" }}
                                         whileTap={{ scale: 0.97 }}
                                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
                                     >
@@ -265,8 +265,8 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                 style={{
                                     height: 3,
                                     width: idx === current ? 28 : 8,
-                                    background: idx === current ? "#FF2D55" : "rgba(255,255,255,0.2)",
-                                    boxShadow: idx === current ? "0 0 10px rgba(255,45,85,0.7)" : "none",
+                                    background: idx === current ? "var(--primary)" : "rgba(255,255,255,0.2)",
+                                    boxShadow: idx === current ? "0 0 10px rgba(255,0,85,0.7)" : "none",
                                     transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
                                 }}
                                 aria-label={`Slide ${idx + 1}`}

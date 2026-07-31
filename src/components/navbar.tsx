@@ -80,19 +80,19 @@ export default function Navbar() {
                             className="relative"
                         >
                             <svg className="w-7 h-7" viewBox="0 0 28 28" fill="none">
-                                <path d="M14 2L6 10L14 18L22 10L14 2Z" fill="#FF2D55" fillOpacity="0.95" />
+                                <path d="M14 2L6 10L14 18L22 10L14 2Z" fill="var(--primary)" fillOpacity="0.95" />
                                 <path d="M14 10L6 18L14 26L22 18L14 10Z" fill="#1A0008" fillOpacity="0.9" />
                             </svg>
                             {/* Logo ambient glow */}
                             <motion.div
                                 className="absolute inset-0 rounded-full"
-                                style={{ background: "radial-gradient(circle, rgba(255,45,85,0.3), transparent 70%)", filter: "blur(8px)" }}
+                                style={{ background: "radial-gradient(circle, rgba(255,0,85,0.4), transparent 70%)", filter: "blur(8px)" }}
                                 animate={{ opacity: [0.4, 0.8, 0.4] }}
                                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                             />
                         </motion.div>
                         <span className="text-xl font-black tracking-[0.12em] leading-none select-none">
-                            KI<span className="text-[#FF2D55]">XO</span>
+                            KI<span className="text-primary">XO</span>
                         </span>
                     </Link>
 

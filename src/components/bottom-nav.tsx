@@ -51,11 +51,11 @@ export default function BottomNav() {
                                         <motion.span
                                             layoutId="bottom-nav-indicator"
                                             className="absolute top-0 rounded-full"
-                                            style={{
+                                                                            style={{
                                                 width: 28,
                                                 height: 2.5,
-                                                background: "linear-gradient(90deg, #FF2D55, #FF6B84)",
-                                                boxShadow: "0 0 12px rgba(255,45,85,0.9), 0 0 24px rgba(255,45,85,0.4)",
+                                                background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
+                                                boxShadow: "0 0 12px rgba(255,0,85,0.95), 0 0 24px rgba(255,0,85,0.55)",
                                             }}
                                             transition={{ type: "spring", stiffness: 400, damping: 35 }}
                                         />
@@ -74,8 +74,8 @@ export default function BottomNav() {
                                     <Icon
                                         className="w-5 h-5 transition-colors duration-200"
                                         style={{
-                                            color: isActive ? "#FF2D55" : "rgba(255,255,255,0.4)",
-                                            filter: isActive ? "drop-shadow(0 0 6px rgba(255,45,85,0.5))" : "none",
+                                            color: isActive ? "var(--primary)" : "rgba(255,255,255,0.4)",
+                                            filter: isActive ? "drop-shadow(0 0 6px rgba(255,0,85,0.6))" : "none",
                                         }}
                                     />
                                 </motion.div>
@@ -83,7 +83,7 @@ export default function BottomNav() {
                                 {/* Label */}
                                 <span
                                     className="text-[9px] font-bold uppercase tracking-widest transition-colors duration-200"
-                                    style={{ color: isActive ? "#FF2D55" : "rgba(255,255,255,0.35)" }}
+                                    style={{ color: isActive ? "var(--primary)" : "rgba(255,255,255,0.5)" }}
                                 >
                                     {item.label}
                                 </span>

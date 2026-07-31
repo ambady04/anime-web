@@ -53,7 +53,7 @@ export default function ContinueWatching() {
                 </h2>
                 <motion.button
                     onClick={handleClearAll}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-[#9CA3AF] hover:text-[#FF2D55] transition-colors cursor-pointer uppercase tracking-widest"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-secondary hover:text-primary transition-colors cursor-pointer uppercase tracking-widest"
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                 >
@@ -115,8 +115,8 @@ export default function ContinueWatching() {
                                         <motion.div
                                             className="w-11 h-11 rounded-full flex items-center justify-center"
                                             style={{
-                                                background: "linear-gradient(135deg, #FF2D55, #CC1F40)",
-                                                boxShadow: "0 8px 32px rgba(255,45,85,0.6)",
+                                                background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
+                                                boxShadow: "0 8px 32px rgba(255,0,85,0.6)",
                                             }}
                                             initial={{ scale: 0.7, opacity: 0 }}
                                             whileInView={{ scale: 0 }}
@@ -148,8 +148,8 @@ export default function ContinueWatching() {
                                         <motion.div
                                             className="h-full rounded-full"
                                             style={{
-                                                background: "linear-gradient(90deg, #FF2D55, #FF6B84)",
-                                                boxShadow: "0 0 8px rgba(255,45,85,0.7)",
+                                                background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
+                                                boxShadow: "0 0 8px rgba(255,0,85,0.7)",
                                             }}
                                             initial={{ width: 0 }}
                                             animate={{ width: `${item.progress}%` }}
@@ -162,14 +162,14 @@ export default function ContinueWatching() {
                                 <div className="p-3.5 flex flex-col gap-1.5">
                                     <Link
                                         href={watchUrl}
-                                        className="font-bold text-xs sm:text-sm text-white leading-tight line-clamp-1 hover:text-[#FF6B84] transition-colors duration-200"
+                                        className="font-bold text-xs sm:text-sm text-white leading-tight line-clamp-1 hover:text-primary-light transition-colors duration-200"
                                     >
                                         {item.title}
                                     </Link>
 
-                                    <div className="flex items-center justify-between text-[10px] font-semibold tracking-wide uppercase text-[#9CA3AF]">
+                                    <div className="flex items-center justify-between text-[10px] font-semibold tracking-wide uppercase text-secondary">
                                         <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3 text-[#FF2D55]" />
+                                            <Clock className="w-3 h-3 text-primary" />
                                             {item.isSeries ? `S${item.season} E${item.episode}` : "Movie"}
                                         </span>
                                         <span>

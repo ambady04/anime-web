@@ -135,8 +135,8 @@ function MovieCard({
                     <motion.div
                         className="w-12 h-12 rounded-full flex items-center justify-center"
                         style={{
-                            background: "linear-gradient(135deg, #FF2D55, #CC1F40)",
-                            boxShadow: "0 8px 32px rgba(255,45,85,0.6)",
+                            background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
+                            boxShadow: "0 8px 32px rgba(255,0,85,0.6)",
                         }}
                         animate={{ scale: isHovered ? 1 : 0.7 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -199,13 +199,13 @@ function MovieCard({
                     {/* Title */}
                     <h3
                         className="font-bold text-[11px] sm:text-xs md:text-sm text-white leading-tight line-clamp-2 transition-colors duration-200"
-                        style={{ color: isHovered ? "#FF6B84" : "#ffffff", textShadow: "0 1px 8px rgba(0,0,0,0.8)" }}
+                        style={{ color: isHovered ? "var(--primary-light)" : "#ffffff", textShadow: "0 1px 8px rgba(0,0,0,0.8)" }}
                     >
                         {subject.title}
                     </h3>
 
                     {subject.releaseDate && (
-                        <p className="text-[10px] text-[#9CA3AF] mt-0.5 font-medium">
+                        <p className="text-[10px] text-secondary mt-0.5 font-medium">
                             {subject.releaseDate.split("-")[0]}
                         </p>
                     )}
