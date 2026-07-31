@@ -758,10 +758,14 @@ export default function VideoPlayer({
             if (!res.ok) throw new Error("Subtitles failed to load.");
             const srtText = await res.text();
 
-            // Simple SRT to WebVTT formatting conversion
-            let vttText = "WEBVTT\n\n";
-            // Replace SRT comma decimals with WebVTT periods
-            vttText += srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+            // Simple SRT to WebVTT formatting conversion if not already WebVTT
+            let vttText = "";
+            const trimmedText = srtText.trim();
+            if (trimmedText.startsWith("WEBVTT")) {
+                vttText = srtText;
+            } else {
+                vttText = "WEBVTT\n\n" + srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+            }
 
             const blob = new Blob([vttText], { type: "text/vtt" });
             const objectUrl = URL.createObjectURL(blob);
@@ -2053,8 +2057,7 @@ export default function VideoPlayer({
                 }
                 video::-webkit-media-text-track-display {
                     font-size: ${subtitleSize} !important;
-                    background: rgba(0, 0, 0, 0.75) !important;
-                    text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
+                    background: transparent !important;
                 }
                 video::-webkit-media-text-track-container {
                     font-size: ${subtitleSize} !important;
