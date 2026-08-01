@@ -87,7 +87,7 @@ function MovieCard({
         >
             <Link href={watchLink} className="absolute inset-0 block rounded-[20px] overflow-hidden">
                 {/* ── Poster image with blur-in loading ── */}
-                <div className="absolute inset-0" style={{ background: "#111111" }}>
+                <div className="absolute inset-0" style={{ background: "#000000" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         src={imageUrl}
@@ -109,7 +109,7 @@ function MovieCard({
                 <div
                     className="absolute inset-0 transition-opacity duration-400"
                     style={{
-                        background: "linear-gradient(180deg, transparent 40%, rgba(6,6,6,0.7) 70%, rgba(6,6,6,0.95) 100%)",
+                        background: "linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.7) 70%, rgba(0,0,0,0.95) 100%)",
                         opacity: isHovered ? 0.95 : 0.85,
                     }}
                 />
@@ -120,7 +120,7 @@ function MovieCard({
                     style={{ border: "1px solid rgba(255,255,255,0.06)" }}
                     animate={{
                         boxShadow: isHovered
-                            ? "0 0 0 1px rgba(255,45,85,0.2), 0 20px 60px rgba(255,45,85,0.2), 0 0 40px rgba(255,45,85,0.08)"
+                            ? "0 0 0 1px rgba(229,9,20,0.2), 0 20px 60px rgba(229,9,20,0.2), 0 0 40px rgba(229,9,20,0.08)"
                             : "0 8px 32px rgba(0,0,0,0.8)",
                     }}
                     transition={{ duration: 0.35 }}
@@ -136,7 +136,7 @@ function MovieCard({
                         className="w-12 h-12 rounded-full flex items-center justify-center"
                         style={{
                             background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
-                            boxShadow: "0 8px 32px rgba(255,0,85,0.6)",
+                            boxShadow: "0 8px 32px rgba(229,9,20,0.6)",
                         }}
                         animate={{ scale: isHovered ? 1 : 0.7 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -154,7 +154,7 @@ function MovieCard({
                     <motion.button
                         className="w-8 h-8 rounded-full flex items-center justify-center"
                         style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
-                        whileHover={{ scale: 1.15, borderColor: "rgba(255,45,85,0.5)" }}
+                        whileHover={{ scale: 1.15, borderColor: "rgba(229,9,20,0.5)" }}
                         whileTap={{ scale: 0.9 }}
                         onClick={(e) => e.preventDefault()}
                         aria-label="Add to watchlist"

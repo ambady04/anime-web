@@ -63,9 +63,9 @@ export default function Navbar() {
             <motion.header
             className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'backdrop-blur-2xl' : ''}`}
                 animate={{
-                    backgroundColor: scrolled ? "rgba(6,6,6,0.88)" : "rgba(6,6,6,0)",
+                    backgroundColor: scrolled ? "rgba(0,0,0,0.92)" : "rgba(0,0,0,0)",
                     borderBottomColor: scrolled ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0)",
-                    boxShadow: scrolled ? "0 1px 0 rgba(255,255,255,0.04), 0 4px 40px rgba(0,0,0,0.9)" : "none",
+                    boxShadow: scrolled ? "0 1px 0 rgba(255,255,255,0.04), 0 4px 40px rgba(0,0,0,0.95)" : "none",
                 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 style={{ borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "rgba(255,255,255,0)" }}
@@ -86,7 +86,7 @@ export default function Navbar() {
                             {/* Logo ambient glow */}
                             <motion.div
                                 className="absolute inset-0 rounded-full"
-                                style={{ background: "radial-gradient(circle, rgba(255,0,85,0.4), transparent 70%)", filter: "blur(8px)" }}
+                                style={{ background: "radial-gradient(circle, rgba(229,9,20,0.4), transparent 70%)", filter: "blur(8px)" }}
                                 animate={{ opacity: [0.4, 0.8, 0.4] }}
                                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
                             />
@@ -122,9 +122,9 @@ export default function Navbar() {
                                             layoutId="nav-pill"
                                             className="absolute inset-0 rounded-2xl"
                                             style={{
-                                                background: "rgba(255,45,85,0.12)",
-                                                border: "1px solid rgba(255,45,85,0.25)",
-                                                boxShadow: "0 0 16px rgba(255,45,85,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                                                background: "rgba(229,9,20,0.12)",
+                                                border: "1px solid rgba(229,9,20,0.25)",
+                                                boxShadow: "0 0 16px rgba(229,9,20,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
                                             }}
                                             transition={{ type: "spring", stiffness: 500, damping: 35 }}
                                         />
@@ -165,8 +165,8 @@ export default function Navbar() {
                                                 border: "1px solid rgba(255,255,255,0.08)",
                                             }}
                                             onFocus={(e) => {
-                                                e.target.style.borderColor = "rgba(255,45,85,0.4)";
-                                                e.target.style.boxShadow = "0 0 0 3px rgba(255,45,85,0.1), 0 0 20px rgba(255,45,85,0.06)";
+                                                e.target.style.borderColor = "rgba(229,9,20,0.4)";
+                                                e.target.style.boxShadow = "0 0 0 3px rgba(229,9,20,0.1), 0 0 20px rgba(229,9,20,0.06)";
                                             }}
                                             onBlur={(e) => {
                                                 e.target.style.borderColor = "rgba(255,255,255,0.08)";
@@ -217,12 +217,12 @@ export default function Navbar() {
                             onClick={() => setShowProfileModal(true)}
                             className="relative w-9 h-9 rounded-full overflow-hidden cursor-pointer focus:outline-none shrink-0"
                             style={{
-                                border: user ? "2px solid rgba(255,45,85,0.5)" : "2px solid rgba(255,255,255,0.1)",
+                                border: user ? "2px solid rgba(229,9,20,0.5)" : "2px solid rgba(255,255,255,0.1)",
                             }}
                             whileHover={{
                                 scale: 1.08,
-                                borderColor: "rgba(255,45,85,0.8)",
-                                boxShadow: "0 0 16px rgba(255,45,85,0.4)",
+                                borderColor: "rgba(229,9,20,0.8)",
+                                boxShadow: "0 0 16px rgba(229,9,20,0.4)",
                             }}
                             whileTap={{ scale: 0.94 }}
                             transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -237,7 +237,7 @@ export default function Navbar() {
                                         referrerPolicy="no-referrer"
                                     />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-white" style={{ background: "rgba(255,45,85,0.25)" }}>
+                                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-white" style={{ background: "rgba(229,9,20,0.25)" }}>
                                         {(user.displayName || "U")[0].toUpperCase()}
                                     </div>
                                 )

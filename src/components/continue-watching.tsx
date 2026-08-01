@@ -80,7 +80,7 @@ export default function ContinueWatching() {
                                 key={item.detailPath}
                                 className="shrink-0 w-[220px] sm:w-[260px] md:w-[290px] xl:w-[320px] 2xl:w-[360px] 3xl:w-[420px] 4xl:w-[480px] rounded-[20px] overflow-hidden relative group"
                                 style={{
-                                    background: "#111111",
+                                    background: "#080808",
                                     border: "1px solid rgba(255,255,255,0.06)",
                                     scrollSnapAlign: "start",
                                 }}
@@ -89,8 +89,8 @@ export default function ContinueWatching() {
                                 exit={{ opacity: 0, scale: 0.9, x: -20 }}
                                 transition={{ duration: 0.4, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
                                 whileHover={{
-                                    borderColor: "rgba(255,45,85,0.2)",
-                                    boxShadow: "0 16px 48px rgba(255,45,85,0.12), 0 0 0 1px rgba(255,45,85,0.1)",
+                                    borderColor: "rgba(229,9,20,0.25)",
+                                    boxShadow: "0 16px 48px rgba(229,9,20,0.12), 0 0 0 1px rgba(229,9,20,0.1)",
                                 }}
                             >
                                 {/* Poster area */}

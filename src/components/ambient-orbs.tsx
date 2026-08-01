@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 const orbs = [
     {
         size: 600,
-        color: "rgba(255, 45, 85, 0.12)",
+        color: "rgba(229, 9, 20, 0.14)",
         animation: "orbMove1",
         duration: 18,
         top: "-10%",
@@ -13,7 +13,7 @@ const orbs = [
     },
     {
         size: 500,
-        color: "rgba(255, 45, 85, 0.07)",
+        color: "rgba(229, 9, 20, 0.08)",
         animation: "orbMove2",
         duration: 22,
         top: "30%",
@@ -22,7 +22,7 @@ const orbs = [
     },
     {
         size: 400,
-        color: "rgba(120, 20, 50, 0.09)",
+        color: "rgba(178, 7, 16, 0.1)",
         animation: "orbMove3",
         duration: 26,
         top: "65%",
@@ -44,7 +44,7 @@ export default function AmbientOrbs() {
                     style={{
                         width: orb.size,
                         height: orb.size,
-                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(255,45,85,0) 65%)`,
+                        background: `radial-gradient(circle, ${orb.color} 0%, rgba(229,9,20,0) 65%)`,
                         top: orb.top,
                         left: orb.left,
                         right: (orb as any).right,

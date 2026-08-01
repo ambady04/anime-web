@@ -106,7 +106,7 @@ export default function RootLayout({
             </head>
             <body
                 className="min-h-full text-white flex flex-col relative"
-                style={{ backgroundColor: "#060606", fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
+                style={{ backgroundColor: "#000000", fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
             >
                 <AuthProvider>
                     {/* Client-only providers: smooth scroll + ambient orbs */}

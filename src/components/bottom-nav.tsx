@@ -24,11 +24,11 @@ export default function BottomNav() {
             <div
                 className="relative"
                 style={{
-                    background: "rgba(6,6,6,0.88)",
+                    background: "rgba(0,0,0,0.92)",
                     backdropFilter: "blur(32px) saturate(200%)",
                     WebkitBackdropFilter: "blur(32px) saturate(200%)",
                     borderTop: "1px solid rgba(255,255,255,0.06)",
-                    boxShadow: "0 -8px 32px rgba(0,0,0,0.6)",
+                    boxShadow: "0 -8px 32px rgba(0,0,0,0.8)",
                 }}
             >
                 <div className="flex items-center justify-around h-[60px] max-w-lg mx-auto px-2 relative">
@@ -55,7 +55,7 @@ export default function BottomNav() {
                                                 width: 28,
                                                 height: 2.5,
                                                 background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
-                                                boxShadow: "0 0 12px rgba(255,0,85,0.95), 0 0 24px rgba(255,0,85,0.55)",
+                                                boxShadow: "0 0 12px rgba(229,9,20,0.95), 0 0 24px rgba(229,9,20,0.55)",
                                             }}
                                             transition={{ type: "spring", stiffness: 400, damping: 35 }}
                                         />
@@ -75,7 +75,7 @@ export default function BottomNav() {
                                         className="w-5 h-5 transition-colors duration-200"
                                         style={{
                                             color: isActive ? "var(--primary)" : "rgba(255,255,255,0.4)",
-                                            filter: isActive ? "drop-shadow(0 0 6px rgba(255,0,85,0.6))" : "none",
+                                            filter: isActive ? "drop-shadow(0 0 6px rgba(229,9,20,0.6))" : "none",
                                         }}
                                     />
                                 </motion.div>
