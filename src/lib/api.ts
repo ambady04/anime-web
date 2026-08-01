@@ -263,11 +263,18 @@ export const isSeriesType = (subjectType?: number | null): boolean => {
     return subjectType === 2 || subjectType === 7 || subjectType === 10;
 };
 
-// Helper to safely parse numeric resolution from number or string (e.g. "1080P", "720p", 1080)
+// Helper to safely parse numeric resolution from number or string (e.g. "4K", "2160p", "1080P", "720p", 1080)
 export const parseResolution = (res?: string | number | null): number => {
     if (typeof res === "number") return isNaN(res) ? 0 : res;
     if (!res) return 0;
-    const num = parseInt(String(res).replace(/\D/g, ""), 10);
+    const str = String(res).trim().toUpperCase();
+    if (str.includes("4K") || str.includes("UHD") || str.includes("2160")) return 2160;
+    if (str.includes("2K") || str.includes("1440")) return 1440;
+    if (str.includes("FHD") || str.includes("1080")) return 1080;
+    if (str.includes("HD") || str.includes("720")) return 720;
+    if (str.includes("SD") || str.includes("480")) return 480;
+    if (str.includes("360")) return 360;
+    const num = parseInt(str.replace(/\D/g, ""), 10);
     return isNaN(num) ? 0 : num;
 };
 

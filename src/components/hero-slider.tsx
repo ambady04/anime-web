@@ -72,10 +72,6 @@ function HeroSlider({ banners }: HeroSliderProps) {
             onMouseLeave={() => setIsHovered(false)}
             aria-label="Featured content"
         >
-            {/* ── Cinematic letterbox bars ── */}
-            <div className="cinematic-bar top-0" />
-            <div className="cinematic-bar bottom-0" />
-
             {/* ── Background image with Ken Burns zoom ── */}
             <AnimatePresence mode="sync">
                 <motion.div

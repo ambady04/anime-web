@@ -442,10 +442,11 @@ export default function VideoPlayer({
                         const hls = new Hls({
                             enableWorker: true,
                             lowLatencyMode: false,
-                            maxBufferLength: 120,
-                            maxMaxBufferLength: 300,
-                            maxBufferSize: 120 * 1000 * 1000,
+                            maxBufferLength: 180,
+                            maxMaxBufferLength: 600,
+                            maxBufferSize: 256 * 1024 * 1024,
                             startLevel: -1,
+                            progressive: true,
                             abrEwmaFastLive: 3,
                             abrEwmaSlowLive: 9,
                             fragLoadingMaxRetry: 4,
@@ -643,11 +644,8 @@ export default function VideoPlayer({
         setInitialSeekTime(resumeTime);
 
         if (sortedDownloads.length > 0) {
-            // Start at 1080p directly for high quality playback.
-            // If 1080p isn't available, fall back to the highest available.
-            const defaultQuality =
-                sortedDownloads.find((d) => parseResolution(d.resolution) === 1080) ||
-                sortedDownloads[0]; // sortedDownloads is sorted highest-first
+            // Start at the highest available quality (4K, 1440p, 1080p, etc.).
+            const defaultQuality = sortedDownloads[0]; // sortedDownloads is sorted highest-first
             setActiveDownload(defaultQuality);
             setIsLoading(true);
             setPlayerError(false);
@@ -950,8 +948,7 @@ export default function VideoPlayer({
                         ? freshSorted.find(
                               (d) => parseResolution(d.resolution) === currentResolution,
                           ) || freshSorted[0]
-                        : freshSorted.find((d) => parseResolution(d.resolution) === 1080) ||
-                          freshSorted[0]; // highest available
+                        : freshSorted[0]; // highest available quality (4K/1080p)
 
                 setActiveDownload(null);
                 setTimeout(() => setActiveDownload(pick), 10);
@@ -2955,96 +2952,94 @@ export default function VideoPlayer({
                                                 setShowSpeedMenu(false);
                                                 setShowAudioMenu(false);
                                                 setShowSubtitleMenu(false);
-                                                setShowRatioMenu(false);
-                                            }}
-                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                                                showQualityMenu
-                                                    ? "bg-primary/20 text-primary-light border-primary/30"
-                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
-                                            }`}
-                                        >
-                                            <span>
-                                                {activeDownload
-                                                    ? isAutoQuality
-                                                        ? `Auto (${activeDownload.resolution}p)`
-                                                        : `${activeDownload.resolution}p`
-                                                    : "Auto"}
-                                            </span>
-                                            <Settings className="w-3.5 h-3.5" />
-                                        </button>
+                                                    setShowQualityMenu(
+                                                        !showQualityMenu,
+                                                    );
+                                                    setShowSpeedMenu(false);
+                                                    setShowAudioMenu(false);
+                                                    setShowSubtitleMenu(false);
+                                                    setShowRatioMenu(false);
+                                                }}
+                                                className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                                                    showQualityMenu
+                                                        ? "bg-primary/20 text-primary-light border-primary/30"
+                                                        : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                                                }`}
+                                            >
+                                                <span>
+                                                    {activeDownload
+                                                        ? isAutoQuality
+                                                            ? `Auto (${parseResolution(activeDownload.resolution)}p)`
+                                                            : parseResolution(activeDownload.resolution) >= 2160
+                                                              ? "4K"
+                                                              : `${parseResolution(activeDownload.resolution)}p`
+                                                        : "Auto"}
+                                                </span>
+                                                <Settings className="w-3.5 h-3.5" />
+                                            </button>
 
-                                        {showQualityMenu &&
-                                            sortedDownloads.length > 0 && (
-                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Quality
-                                                    </p>
-                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() => {
-                                                                setIsAutoQuality(
-                                                                    true,
-                                                                );
-                                                                setShowQualityMenu(
-                                                                    false,
-                                                                );
-                                                                const defaultQuality =
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            720,
-                                                                    ) ||
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            1080,
-                                                                    ) ||
-                                                                    sortedDownloads[0];
-                                                                if (
-                                                                    defaultQuality &&
-                                                                    activeDownload?.id !==
-                                                                        defaultQuality.id
-                                                                ) {
-                                                                    handleQualityChange(
-                                                                        defaultQuality,
+                                            {showQualityMenu &&
+                                                sortedDownloads.length > 0 && (
+                                                    <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                            Quality
+                                                        </p>
+                                                        <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setIsAutoQuality(
                                                                         true,
                                                                     );
-                                                                }
-                                                            }}
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Auto
-                                                        </button>
-                                                        {sortedDownloads.map(
-                                                            (link, idx) => (
-                                                                <button
-                                                                    key={`${link.id || "quality"}-${idx}`}
-                                                                    onClick={() => {
+                                                                    setShowQualityMenu(
+                                                                        false,
+                                                                    );
+                                                                    const defaultQuality = sortedDownloads[0];
+                                                                    if (
+                                                                        defaultQuality &&
+                                                                        activeDownload?.id !==
+                                                                            defaultQuality.id
+                                                                    ) {
                                                                         handleQualityChange(
-                                                                            link,
+                                                                            defaultQuality,
+                                                                            true,
                                                                         );
-                                                                        setShowQualityMenu(
-                                                                            false,
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        !isAutoQuality &&
-                                                                        activeDownload?.id ===
-                                                                            link.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        link.resolution
                                                                     }
-                                                                    p
-                                                                </button>
-                                                            ),
-                                                        )}
+                                                                }}
+                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                            >
+                                                                Auto (Highest)
+                                                            </button>
+                                                            {sortedDownloads.map(
+                                                                (link, idx) => {
+                                                                    const resNum = parseResolution(link.resolution);
+                                                                    const label = resNum >= 2160 ? "4K Ultra HD" : resNum === 1440 ? "2K 1440p" : resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                    return (
+                                                                        <button
+                                                                            key={`${link.id || "quality"}-${idx}`}
+                                                                            onClick={() => {
+                                                                                handleQualityChange(
+                                                                                    link,
+                                                                                );
+                                                                                setShowQualityMenu(
+                                                                                    false,
+                                                                                );
+                                                                            }}
+                                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                                !isAutoQuality &&
+                                                                                activeDownload?.id ===
+                                                                                    link.id
+                                                                                    ? "text-primary bg-primary/10"
+                                                                                    : "text-white/80"
+                                                                            }`}
+                                                                        >
+                                                                            {label}
+                                                                        </button>
+                                                                    );
+                                                                },
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
+                                                )}
                                     </div>
 
                                     {/* Speed */}
@@ -3472,12 +3467,14 @@ export default function VideoPlayer({
                                             }`}
                                         >
                                             {activeDownload
-                                                ? `${activeDownload.resolution}p`
+                                                ? parseResolution(activeDownload.resolution) >= 2160
+                                                  ? "4K"
+                                                  : `${parseResolution(activeDownload.resolution)}p`
                                                 : "Auto"}
                                         </button>
                                         {showQualityMenu &&
                                             sortedDownloads.length > 0 && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[110px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
                                                     <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
                                                         Quality
                                                     </p>
@@ -3490,13 +3487,7 @@ export default function VideoPlayer({
                                                                 setShowQualityMenu(
                                                                     false,
                                                                 );
-                                                                const defaultQuality =
-                                                                    sortedDownloads.find(
-                                                                        (d) =>
-                                                                            d.resolution ===
-                                                                            720,
-                                                                    ) ||
-                                                                    sortedDownloads[0];
+                                                                const defaultQuality = sortedDownloads[0];
                                                                 if (
                                                                     defaultQuality &&
                                                                     activeDownload?.id !==
@@ -3509,34 +3500,35 @@ export default function VideoPlayer({
                                                             }}
                                                             className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
                                                         >
-                                                            Auto
+                                                            Auto (Highest)
                                                         </button>
                                                         {sortedDownloads.map(
-                                                            (link, idx) => (
-                                                                <button
-                                                                    key={`${link.id || "quality"}-${idx}`}
-                                                                    onClick={() => {
-                                                                        handleQualityChange(
-                                                                            link,
-                                                                        );
-                                                                        setShowQualityMenu(
-                                                                            false,
-                                                                        );
-                                                                    }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        !isAutoQuality &&
-                                                                        activeDownload?.id ===
-                                                                            link.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        link.resolution
-                                                                    }
-                                                                    p
-                                                                </button>
-                                                            ),
+                                                            (link, idx) => {
+                                                                const resNum = parseResolution(link.resolution);
+                                                                const label = resNum >= 2160 ? "4K Ultra HD" : resNum === 1440 ? "2K 1440p" : resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                return (
+                                                                    <button
+                                                                        key={`${link.id || "quality"}-${idx}`}
+                                                                        onClick={() => {
+                                                                            handleQualityChange(
+                                                                                link,
+                                                                            );
+                                                                            setShowQualityMenu(
+                                                                                false,
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                            !isAutoQuality &&
+                                                                            activeDownload?.id ===
+                                                                                link.id
+                                                                                ? "text-primary bg-primary/10"
+                                                                                : "text-white/80"
+                                                                        }`}
+                                                                    >
+                                                                        {label}
+                                                                    </button>
+                                                                );
+                                                            },
                                                         )}
                                                     </div>
                                                 </div>

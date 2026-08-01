@@ -89,6 +89,7 @@ export async function GET(req: NextRequest) {
         const forwardHeaders = [
             "content-type",
             "content-range",
+            "content-length",
             "accept-ranges",
             "etag",
             "last-modified",

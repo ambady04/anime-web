@@ -230,7 +230,6 @@ html, body {
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================================
@@ -374,32 +373,27 @@ html, body {
    ============================================================ */
 
 .hero-gradient-left {
-    background: linear-gradient(90deg, #000000 0%, rgba(0,0,0,0.85) 40%, rgba(0,0,0,0.4) 70%, transparent 100%);
+    background: linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.3) 35%, transparent 70%);
 }
 
 .hero-gradient-bottom {
-    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.6) 60%, #000000 100%);
+    background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.85) 100%);
 }
 
 .hero-gradient-top {
-    background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 40%);
+    background: linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 50%);
 }
 
 .hero-vignette {
-    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+    background: radial-gradient(ellipse at center, transparent 65%, rgba(0,0,0,0.35) 100%);
 }
 
 /* ============================================================
-   LETTER BOX BARS (cinematic effect)
+   LETTER BOX BARS
    ============================================================ */
 
 .cinematic-bar {
-    position: absolute;
-    left: 0; right: 0;
-    height: 6vh;
-    background: #000000;
-    z-index: 5;
-    pointer-events: none;
+    display: none;
 }
 
 /* ============================================================

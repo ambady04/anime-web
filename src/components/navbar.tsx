@@ -64,11 +64,9 @@ export default function Navbar() {
                 className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 backdrop-blur-md"
                 animate={{
                     backgroundColor: scrolled ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0)",
-                    borderBottomColor: scrolled ? "rgba(255, 255, 255, 0.08)" : "rgba(255, 255, 255, 0)",
                     boxShadow: scrolled ? "0 4px 30px rgba(0, 0, 0, 0.3)" : "none",
                 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                style={{ borderBottomWidth: 1, borderBottomStyle: "solid" }}
             >
                 <div className="max-w-tv px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 relative">
 
