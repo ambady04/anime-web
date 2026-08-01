@@ -335,7 +335,59 @@ export const movieApi = {
         if (season) params.season = season;
         if (episode) params.episode = episode;
         if (adult) params.adult = adult;
-        return fetchFromApi<StreamData>("/api/stream", params);
+        const data = await fetchFromApi<StreamData>("/api/stream", params);
+
+        // Smart High-Res Fallback:
+        // Upstream CDNs (MovieBox/Aoneroom) store master 1080p/4K streams under season 1 / episode 1 index.
+        // If initial response doesn't contain a 1080p/4K stream (d.resolution >= 1080),
+        // try querying candidate parameter tuples ([1,1], [0,1], [1,0]) to unlock all high-res streams.
+        const hasHighRes = (data.downloads || []).some(
+            (d) => parseResolution(d.resolution) >= 1080,
+        );
+        if (!hasHighRes) {
+            const candidates = [[1, 1], [0, 1], [1, 0]];
+            for (const [fbSeason, fbEpisode] of candidates) {
+                if (fbSeason === season && fbEpisode === episode) continue;
+                try {
+                    const fbParams: Record<string, string | number | boolean> = {
+                        path,
+                        season: fbSeason,
+                        episode: fbEpisode,
+                    };
+                    if (adult) fbParams.adult = adult;
+                    const fbData = await fetchFromApi<StreamData>("/api/stream", fbParams);
+                    if (fbData.downloads && fbData.downloads.length > 0) {
+                        const fbHasHighRes = fbData.downloads.some(
+                            (d) => parseResolution(d.resolution) >= 1080,
+                        );
+                        if (fbHasHighRes) {
+                            const mergedMap = new Map<number, DownloadLink>();
+                            for (const d of [...fbData.downloads, ...(data.downloads || [])]) {
+                                const resNum = parseResolution(d.resolution);
+                                if (!mergedMap.has(resNum) || d.size > (mergedMap.get(resNum)?.size || 0)) {
+                                    mergedMap.set(resNum, d);
+                                }
+                            }
+                            const mergedDownloads = Array.from(mergedMap.values()).sort(
+                                (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
+                            );
+                            return {
+                                ...fbData,
+                                downloads: mergedDownloads,
+                                captions:
+                                    fbData.captions && fbData.captions.length > 0
+                                        ? fbData.captions
+                                        : data.captions,
+                            };
+                        }
+                    }
+                } catch {
+                    // Try next fallback candidate
+                }
+            }
+        }
+
+        return data;
     },
 
     // Search movies and series — always fresh
