@@ -147,9 +147,7 @@ async function fetchFromPool<T>(
                 },
                 body: body ? JSON.stringify(body) : undefined,
                 signal: controller.signal,
-                ...(isPost
-                    ? { cache: "no-store" }
-                    : { next: { revalidate: revalidateSeconds } }),
+                cache: "no-store",
             };
 
             const res = await fetch(url, reqInit);
