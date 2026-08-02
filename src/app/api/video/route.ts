@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Video proxy: forwards requests to the Vercel-hosted backend which proxies
-// the video from CDN with correct headers (Lavf UA, no Referer).
-//
-// Why not fetch CDN directly from this CF Worker?
-// The CDN (bcdn.hakunaymatata.com) blocks ALL Cloudflare IP ranges (returns 427).
-// Vercel uses AWS IPs which the CDN accepts.
-//
-// Flow: Browser → /api/video (CF Worker) → api.abisolutions.online/api/video (Vercel) → CDN
 export const dynamic = "force-dynamic";
 
-const VERCEL_VIDEO_PROXY =
-    process.env.VIDEO_PROXY_URL ||
-    process.env.NEXT_PUBLIC_VIDEO_PROXY_URL ||
-    (process.env.NODE_ENV === "development"
-        ? "http://localhost:8000/api/video"
-        : "https://api.abisolutions.online/api/video");
+const REFERER_POOL = [
+    "https://videodownloader.site/",
+    "https://h5.aoneroom.com/",
+    "https://moviebox.ph/",
+    "https://www.movieboxpro.app/",
+    "https://fmoviesunblocked.net/",
+];
 
 export async function OPTIONS() {
     return new NextResponse(null, {
@@ -25,7 +18,7 @@ export async function OPTIONS() {
             "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
             "Access-Control-Allow-Headers": "Range, Content-Type",
             "Access-Control-Expose-Headers":
-                "Content-Range, Content-Length, Accept-Ranges",
+                "Content-Range, Content-Length, Accept-Ranges, Content-Type",
             "Access-Control-Max-Age": "86400",
         },
     });
@@ -34,129 +27,116 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
     try {
         const { searchParams } = req.nextUrl;
-        const targetUrl = searchParams.get("url");
-        const referer = searchParams.get("referer") || "https://videodownloader.site/";
-        const mode = searchParams.get("mode") || "stream";
+        let url = searchParams.get("url");
+        const reqReferer = searchParams.get("referer") || "https://videodownloader.site/";
 
-        let upstreamUrl: string;
-        if (targetUrl) {
-            upstreamUrl = `${VERCEL_VIDEO_PROXY}?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}`;
-        } else {
-            const qs = searchParams.toString();
-            upstreamUrl = `${VERCEL_VIDEO_PROXY}${qs ? `?${qs}` : ""}`;
+        if (!url) {
+            const rawQs = req.nextUrl.search;
+            if (rawQs.includes("url=")) {
+                let part = rawQs.split("url=")[1];
+                for (const delim of ["&referer=", "&mode="]) {
+                    if (part.includes(delim)) {
+                        part = part.split(delim)[0];
+                    }
+                }
+                url = decodeURIComponent(part);
+            }
         }
 
-        // Forward Range header for seek support
-        const reqHeaders: Record<string, string> = {
-            Accept: "*/*",
-        };
-        const range = req.headers.get("range");
-        if (range) {
-            reqHeaders["Range"] = range;
-        }
-
-        const upstream = await fetch(upstreamUrl, {
-            headers: reqHeaders,
-            redirect: "follow",
-            signal: req.signal,
-            // @ts-ignore — CF-specific: bypass edge cache to avoid stale cached errors
-            cf: { cacheTtl: 0, cacheEverything: false },
-        });
-
-        // If upstream returned an error, pass it through with no-cache
-        if (!upstream.ok && upstream.status !== 206) {
-            const errorBody = await upstream.text();
-            // Map 422 or 403 to 502 so browser HTML5 video element triggers immediate recovery
-            const returnStatus =
-                upstream.status === 422 || upstream.status === 403
-                    ? 502
-                    : upstream.status;
-            return new NextResponse(errorBody, {
-                status: returnStatus,
-                headers: {
-                    "Content-Type":
-                        upstream.headers.get("content-type") ||
-                        "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Cache-Control": "no-store, no-cache, must-revalidate",
-                    "CDN-Cache-Control": "no-store",
-                },
-            });
-        }
-
-        // Stream video bytes through to the client
-        const resHeaders = new Headers();
-        const forwardHeaders = [
-            "content-type",
-            "content-range",
-            "content-length",
-            "accept-ranges",
-            "etag",
-            "last-modified",
-        ];
-        for (const h of forwardHeaders) {
-            const v = upstream.headers.get(h);
-            if (v) resHeaders.set(h, v);
-        }
-
-        if (!resHeaders.has("accept-ranges")) {
-            resHeaders.set("accept-ranges", "bytes");
-        }
-        if (!resHeaders.has("content-type")) {
-            resHeaders.set("content-type", "video/mp4");
-        }
-
-        resHeaders.set("Access-Control-Allow-Origin", "*");
-        resHeaders.set(
-            "Access-Control-Expose-Headers",
-            "Content-Range, Content-Length, Accept-Ranges, Content-Type",
-        );
-        resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
-        resHeaders.set("X-Accel-Buffering", "no");
-
-        // Attach abort signal listener to cleanly cancel upstream body on client disconnect
-        if (req.signal && upstream.body) {
-            req.signal.addEventListener(
-                "abort",
-                () => {
-                    try {
-                        if (upstream.body && !upstream.body.locked) {
-                            upstream.body.cancel();
-                        }
-                    } catch {}
-                },
-                { once: true },
+        if (!url) {
+            return NextResponse.json(
+                { detail: "Missing url parameter" },
+                { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
             );
         }
 
-        return new NextResponse(upstream.body, {
-            status: upstream.status,
-            headers: resHeaders,
-        });
-    } catch (err: unknown) {
-        // Handle client aborts (e.g. user seeking or closing video tab) gracefully
-        const isAbort =
-            req.signal.aborted ||
-            (err instanceof Error &&
-                (err.name === "AbortError" ||
-                    err.message.includes("terminated") ||
-                    err.message.includes("closed") ||
-                    err.message.includes("UND_ERR_SOCKET")));
+        // If an explicit external proxy URL is specified, forward to it
+        if (process.env.VIDEO_PROXY_URL) {
+            const upstreamUrl = `${process.env.VIDEO_PROXY_URL}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(reqReferer)}`;
+            const reqHeaders: Record<string, string> = { Accept: "*/*" };
+            const range = req.headers.get("range");
+            if (range) reqHeaders["Range"] = range;
 
-        if (isAbort) {
-            return new NextResponse(null, { status: 499 });
+            const upstream = await fetch(upstreamUrl, {
+                headers: reqHeaders,
+                signal: req.signal,
+            });
+
+            const resHeaders = new Headers();
+            for (const h of ["content-type", "content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
+                const v = upstream.headers.get(h);
+                if (v) resHeaders.set(h, v);
+            }
+            resHeaders.set("Access-Control-Allow-Origin", "*");
+            return new NextResponse(upstream.body, { status: upstream.status, headers: resHeaders });
         }
 
-        const msg = err instanceof Error ? err.message : "Internal proxy error";
-        return new NextResponse(
-            JSON.stringify({ error: "internal_error", message: msg }),
-            {
-                status: 502,
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                },
-            },
+        // Direct CDN Byte Proxying (Lavf UA + Referer Pool)
+        const referersToTry = [undefined, reqReferer, ...REFERER_POOL];
+        const rangeHeader = req.headers.get("range");
+
+        let lastStatus = 0;
+        let upstreamResp: Response | null = null;
+
+        for (const ref of referersToTry) {
+            const headers: Record<string, string> = {
+                "User-Agent": "Lavf/58.29.100",
+                Accept: "*/*",
+                "Accept-Encoding": "identity",
+            };
+            if (ref) headers["Referer"] = ref;
+            if (rangeHeader) headers["Range"] = rangeHeader;
+
+            try {
+                const resp = await fetch(url, {
+                    headers,
+                    signal: req.signal,
+                    cache: "no-store",
+                });
+
+                lastStatus = resp.status;
+                if (resp.ok || resp.status === 206) {
+                    upstreamResp = resp;
+                    break;
+                }
+            } catch {
+                continue;
+            }
+        }
+
+        if (!upstreamResp) {
+            return NextResponse.json(
+                { error: "cdn_rejected", cdnStatus: lastStatus || 502 },
+                { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
+            );
+        }
+
+        const resHeaders = new Headers();
+        for (const h of ["content-type", "content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
+            const v = upstreamResp.headers.get(h);
+            if (v) resHeaders.set(h, v);
+        }
+
+        if (!resHeaders.has("accept-ranges")) resHeaders.set("accept-ranges", "bytes");
+        if (!resHeaders.has("content-type")) resHeaders.set("content-type", "video/mp4");
+        resHeaders.set("Access-Control-Allow-Origin", "*");
+        resHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Type");
+        resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+
+        return new NextResponse(upstreamResp.body, {
+            status: upstreamResp.status,
+            headers: resHeaders,
+        });
+    } catch (err: any) {
+        const isAbort =
+            req.signal.aborted ||
+            (err instanceof Error && (err.name === "AbortError" || err.message.includes("closed")));
+
+        if (isAbort) return new NextResponse(null, { status: 499 });
+
+        return NextResponse.json(
+            { error: "internal_error", message: err?.message || String(err) },
+            { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
         );
     }
 }

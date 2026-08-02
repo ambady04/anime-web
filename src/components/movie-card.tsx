@@ -167,13 +167,13 @@ function MovieCard({
                 <div className="absolute bottom-0 left-0 right-0 p-3.5 z-10">
                     {/* Badges row */}
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                        {subject.imdbRatingValue > 0 && (
+                        {Number(subject.imdbRatingValue) > 0 && (
                             <div
                                 className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black"
                                 style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(234,179,8,0.3)", color: "#EAB308", backdropFilter: "blur(8px)" }}
                             >
                                 <Star className="w-2.5 h-2.5 fill-current" />
-                                {subject.imdbRatingValue.toFixed(1)}
+                                {Number(subject.imdbRatingValue).toFixed(1)}
                             </div>
                         )}
 

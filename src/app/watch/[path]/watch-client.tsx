@@ -650,11 +650,11 @@ export default function WatchClient({
 
                         {/* Badges row */}
                         <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-bold">
-                            {subject.imdbRatingValue && (
+                            {Number(subject.imdbRatingValue) > 0 && (
                                 <div className="flex items-center space-x-1.5 bg-yellow-500/10 border border-yellow-500/20 px-2.5 py-1.5 rounded-xl text-yellow-500">
                                     <Star className="w-3 h-3 fill-yellow-500" />
                                     <span>
-                                        {subject.imdbRatingValue.toFixed(1)}{" "}
+                                        {Number(subject.imdbRatingValue).toFixed(1)}{" "}
                                         IMDB
                                     </span>
                                 </div>
@@ -705,18 +705,27 @@ export default function WatchClient({
                             </div>
 
                         {/* Genres */}
-                        {subject.genre && subject.genre.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-glass-border">
-                                {subject.genre.map((gen, idx) => (
-                                    <span
-                                        key={idx}
-                                        className="text-[9px] font-black uppercase tracking-wider bg-glass-card text-foreground/60 border border-glass-border px-2.5 py-1 rounded-full"
-                                    >
-                                        {gen}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
+                        {(() => {
+                            const raw: any = subject.genre;
+                            const list = Array.isArray(raw)
+                                ? raw
+                                : typeof raw === "string"
+                                ? raw.split(",").map((g: string) => g.trim()).filter(Boolean)
+                                : [];
+                            if (list.length === 0) return null;
+                            return (
+                                <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-glass-border">
+                                    {list.map((gen, idx) => (
+                                        <span
+                                            key={idx}
+                                            className="text-[9px] font-black uppercase tracking-wider bg-glass-card text-foreground/60 border border-glass-border px-2.5 py-1 rounded-full"
+                                        >
+                                            {gen}
+                                        </span>
+                                    ))}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Collapsible Details (always visible on xl, toggled on mobile) */}

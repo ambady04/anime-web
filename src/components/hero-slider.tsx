@@ -57,8 +57,15 @@ function HeroSlider({ banners }: HeroSliderProps) {
     const imageUrl = activeItem.image?.url || subject?.cover?.url || "";
     const title = subject?.title || activeItem.title || "Featured Film";
     const desc = subject?.description || "Experience the best cinematic streams.";
-    const rating = subject?.imdbRatingValue;
-    const genres = (subject?.genre || []).slice(0, 3);
+    const rating = Number(subject?.imdbRatingValue || 0);
+    const rawGenre = subject?.genre;
+    const genres = (
+        Array.isArray(rawGenre)
+            ? rawGenre
+            : typeof rawGenre === "string"
+            ? (rawGenre as string).split(",").map((g) => g.trim()).filter(Boolean)
+            : []
+    ).slice(0, 3);
     const detailPath = activeItem.detailPath || subject?.detailPath || "";
     const year = subject?.releaseDate?.split("-")[0];
     const isSeries = isSeriesType(subject?.subjectType);
