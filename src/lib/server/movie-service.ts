@@ -13,9 +13,50 @@ const H5_API_HOST_POOL = [
     "https://api4.aoneroom.com",
 ];
 
-const DEFAULT_HEADERS = (adult = false) => {
+let cachedAuthToken: string | null = null;
+
+async function getAuthToken(): Promise<string | null> {
+    if (cachedAuthToken) return cachedAuthToken;
+
+    for (const host of H5_API_HOST_POOL) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const res = await fetch(`${host}/wefeed-h5api-bff/subject/search-suggest`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "User-Agent":
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            const xUser = res.headers.get("x-user");
+            if (xUser) {
+                const parsed = JSON.parse(xUser);
+                if (parsed.token) {
+                    cachedAuthToken = parsed.token;
+                    return cachedAuthToken;
+                }
+            }
+        } catch {
+            // Try next host
+        }
+    }
+    return null;
+}
+
+const getHeaders = async (adult = false) => {
     const playMode = adult ? "0" : "1";
-    return {
+    const token = await getAuthToken();
+
+    const headers: Record<string, string> = {
         "User-Agent":
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
         Accept: "application/json",
@@ -30,6 +71,12 @@ const DEFAULT_HEADERS = (adult = false) => {
             lang: "en",
         }),
     };
+
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    return headers;
 };
 
 const isCamSubject = (subject: Subject): boolean => {
@@ -62,17 +109,18 @@ async function fetchFromPool<T>(
     const fullPath = queryString ? `${endpointPath}?${queryString}` : endpointPath;
 
     let lastError: Error | null = null;
+    const reqHeaders = await getHeaders(adult);
 
     for (const host of H5_API_HOST_POOL) {
         try {
             const url = `${host}${fullPath}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
 
             const reqInit: RequestInit = {
                 method,
                 headers: {
-                    ...DEFAULT_HEADERS(adult),
+                    ...reqHeaders,
                     ...(body ? { "Content-Type": "application/json" } : {}),
                 },
                 body: body ? JSON.stringify(body) : undefined,
@@ -145,7 +193,7 @@ export const movieService = {
             subjectType: type ?? 0,
         };
 
-        // Try POST search first
+        // 1. Primary: POST /wefeed-h5api-bff/subject/search
         try {
             const rawData = await fetchFromPool<any>(
                 "/wefeed-h5api-bff/subject/search",
@@ -153,17 +201,38 @@ export const movieService = {
                 { method: "POST", body: payload, adult, revalidateSeconds: 600 },
             );
             const data = rawData.data || rawData;
-            if (data && Array.isArray(data.items)) {
-                const items: Subject[] = data.items.filter((i: Subject) =>
+            const rawItems = data?.items || data?.list;
+            if (Array.isArray(rawItems) && rawItems.length > 0) {
+                const items: Subject[] = rawItems.filter((i: Subject) =>
                     Boolean(i?.detailPath),
                 );
                 return { items: stripCamSubjects(items) };
             }
         } catch {
-            // Ignore & attempt fallback
+            // Reset cached token if 401/403 or failed
+            cachedAuthToken = null;
         }
 
-        // Try GET search fallback
+        // 2. Fallback 1: POST /wefeed-mobile-bff/subject-api/search (V3 Mobile API)
+        try {
+            const rawData = await fetchFromPool<any>(
+                "/wefeed-mobile-bff/subject-api/search",
+                {},
+                { method: "POST", body: payload, adult, revalidateSeconds: 600 },
+            );
+            const data = rawData.data || rawData;
+            const rawItems = data?.items || data?.list;
+            if (Array.isArray(rawItems) && rawItems.length > 0) {
+                const items: Subject[] = rawItems.filter((i: Subject) =>
+                    Boolean(i?.detailPath),
+                );
+                return { items: stripCamSubjects(items) };
+            }
+        } catch {
+            // Ignore
+        }
+
+        // 3. Fallback 2: GET /wefeed-h5api-bff/subject/search
         try {
             const rawData = await fetchFromPool<any>(
                 "/wefeed-h5api-bff/subject/search",
@@ -171,8 +240,9 @@ export const movieService = {
                 { method: "GET", adult, revalidateSeconds: 600 },
             );
             const data = rawData.data || rawData;
-            if (data && Array.isArray(data.items)) {
-                const items: Subject[] = data.items.filter((i: Subject) =>
+            const rawItems = data?.items || data?.list;
+            if (Array.isArray(rawItems) && rawItems.length > 0) {
+                const items: Subject[] = rawItems.filter((i: Subject) =>
                     Boolean(i?.detailPath),
                 );
                 return { items: stripCamSubjects(items) };
@@ -304,17 +374,19 @@ export const movieService = {
                 filterType,
             };
 
+            const reqHeaders = await getHeaders(adult);
+
             for (const host of H5_API_HOST_POOL) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
                     const res = await fetch(
                         `${host}/wefeed-h5api-bff/home/movieFilter`,
                         {
                             method: "POST",
                             headers: {
-                                ...DEFAULT_HEADERS(adult),
+                                ...reqHeaders,
                                 "Content-Type": "application/json",
                             },
                             body: JSON.stringify(payload),
