@@ -18,18 +18,21 @@ export default async function HomePage() {
         errorMsg = err instanceof Error ? err.message : "Error loading live media catalog.";
     }
 
-    // Extract sections
+    // Extract banner section
     const bannerModule = homeData?.operatingList?.find(
         (m) => m.type === "BANNER",
     );
     const banners = bannerModule?.banner?.items || [];
 
+    // Extract all content shelves containing subjects (Trending, Cinema, Series, Anime, etc.)
     const shelves =
         homeData?.operatingList?.filter(
             (m) =>
-                m.type === "SUBJECTS_MOVIE" &&
                 m.subjects &&
-                m.subjects.length > 0,
+                m.subjects.length > 0 &&
+                m.type !== "BANNER" &&
+                m.type !== "FILTER" &&
+                m.type !== "CUSTOM",
         ) || [];
 
     return (
@@ -38,54 +41,49 @@ export default async function HomePage() {
             {banners.length > 0 ? (
                 <HeroSlider banners={banners} />
             ) : (
-                /* Fallback Empty Hero spacing */
-                <div className="h-[25vh] w-full" />
+                <div className="h-[15vh] w-full" />
             )}
 
             {/* 2. Client-side Continue Watching History */}
             <ContinueWatching />
 
-            {/* 3. Display Content Shelves (Trending, Cinema, etc.) */}
+            {/* 3. Display Content Shelves (Trending, Cinema, Anime, Series, etc.) */}
             {shelves.length > 0 ? (
                 <div className="space-y-4">
                     {shelves.map((shelf, idx) => (
                         <MovieShelf
                             key={`${shelf.opId || "shelf"}-${idx}`}
-                            title={shelf.title}
+                            title={shelf.title || "Trending Content"}
                             subjects={shelf.subjects}
                         />
                     ))}
                 </div>
-            ) : errorMsg ? (
-                /* API Error UI Container */
-                <div className="max-w-md mx-auto my-24 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20 select-none">
+            ) : (
+                /* Fallback Error / Offline UI Container */
+                <div className="max-w-md mx-auto my-16 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20 select-none">
                     <Film className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
                     <h2 className="text-lg font-black text-foreground uppercase tracking-wider mb-2">
-                        Service Temporarily Offline
+                        Catalog Reloading
                     </h2>
                     <p className="text-xs text-foreground/70 mb-6 font-medium">
-                        We are experiencing problems fetching catalogs from the
-                        live media backend API.
+                        Fetching latest movies, series, and trending catalogs from live media mirrors.
                     </p>
-                    <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary font-mono text-left mb-6 overflow-x-auto">
-                        {errorMsg}
-                    </div>
+                    {errorMsg && (
+                        <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary font-mono text-left mb-6 overflow-x-auto">
+                            {errorMsg}
+                        </div>
+                    )}
                     <Link
                         href="/"
-                        className="inline-flex items-center space-x-2 bg-primary hover:bg-primary-light text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all"
+                        className="inline-flex items-center space-x-2 bg-primary hover:bg-primary-light text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
                     >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Retry Connection</span>
+                        <span>Refresh Catalog</span>
                     </Link>
-                </div>
-            ) : (
-                /* Loading skeleton fallback */
-                <div className="max-w-380 mx-auto px-4 py-20 text-center text-foreground/50 font-bold uppercase tracking-wider text-xs animate-pulse select-none">
-                    <p>Scanning Vercel media nodes...</p>
                 </div>
             )}
 
-            {/* 4. Custom Curated Collections (at the end) */}
+            {/* 4. Custom Curated Collections */}
             <CustomCollections />
         </div>
     );
