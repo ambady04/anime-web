@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
     HomepageData,
     ItemDetails,
@@ -10,11 +11,19 @@ const H5_HOSTS = ["https://h5-api.aoneroom.com"];
 
 let cachedAuthToken: string | null = null;
 
+function generateXClientToken(tsMs = Date.now()): string {
+    const ts = String(tsMs);
+    const reversedTs = ts.split("").reverse().join("");
+    const hashVal = crypto.createHash("md5").update(reversedTs).digest("hex");
+    return `${ts},${hashVal}`;
+}
+
 export async function getAuthToken(): Promise<string | null> {
     if (cachedAuthToken) return cachedAuthToken;
 
     for (const host of H5_HOSTS) {
         try {
+            const ts = Date.now();
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 4000);
 
@@ -25,6 +34,7 @@ export async function getAuthToken(): Promise<string | null> {
                     "User-Agent":
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     Accept: "application/json",
+                    "X-Client-Token": generateXClientToken(ts),
                     Referer: "https://videodownloader.site/",
                     Origin: "https://videodownloader.site/",
                 },
@@ -52,12 +62,14 @@ export async function getAuthToken(): Promise<string | null> {
 
 const getPublicHeaders = (adult = false) => {
     const playMode = adult ? "0" : "1";
+    const ts = Date.now();
     return {
         "User-Agent":
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
         Accept: "application/json",
         "Accept-Language": "en-US,en;q=0.9",
         "X-Play-Mode": playMode,
+        "X-Client-Token": generateXClientToken(ts),
         Referer: "https://videodownloader.site/",
         Origin: "https://videodownloader.site/",
         "X-Client-Info": JSON.stringify({
@@ -72,6 +84,7 @@ const getPublicHeaders = (adult = false) => {
 
 const getHeaders = async (adult = false) => {
     const playMode = adult ? "0" : "1";
+    const ts = Date.now();
     const token = await getAuthToken();
 
     const headers: Record<string, string> = {
@@ -80,6 +93,7 @@ const getHeaders = async (adult = false) => {
         Accept: "application/json",
         "Accept-Language": "en-US,en;q=0.9",
         "X-Play-Mode": playMode,
+        "X-Client-Token": generateXClientToken(ts),
         Referer: "https://videodownloader.site/",
         Origin: "https://videodownloader.site/",
         "X-Client-Info": JSON.stringify({
@@ -118,7 +132,7 @@ async function fetchFromPool<T>(
         useAuth?: boolean;
     } = {},
 ): Promise<T> {
-    const { method = "GET", body, adult = false, revalidateSeconds = 600, useAuth = false } = options;
+    const { method = "GET", body, adult = false, useAuth = false } = options;
 
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -138,7 +152,6 @@ async function fetchFromPool<T>(
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-            const isPost = method.toUpperCase() === "POST";
             const reqInit: RequestInit = {
                 method,
                 headers: {
@@ -173,7 +186,7 @@ export const movieService = {
             const rawData = await fetchFromPool<any>(
                 "/wefeed-h5api-bff/home?host=h5-api.aoneroom.com",
                 {},
-                { adult, revalidateSeconds: 600, useAuth: false },
+                { adult, useAuth: false },
             );
 
             const data = (rawData.data || rawData) as HomepageData;
@@ -248,7 +261,7 @@ export const movieService = {
         const rawData = await fetchFromPool<any>(
             "/wefeed-h5api-bff/detail",
             { detailPath: path },
-            { adult, revalidateSeconds: 600, useAuth: false },
+            { adult, useAuth: false },
         );
 
         const detailsData = (rawData.data || rawData) as ItemDetails;
@@ -259,7 +272,7 @@ export const movieService = {
                 const recRaw = await fetchFromPool<any>(
                     "/wefeed-h5api-bff/subject/recommend",
                     { subjectId: detailsData.subject.subjectId },
-                    { adult, revalidateSeconds: 600, useAuth: false },
+                    { adult, useAuth: false },
                 );
                 const recData = recRaw.data || recRaw;
                 relatedItems = (recData.items || []).filter((i: Subject) =>

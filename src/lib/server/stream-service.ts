@@ -1,12 +1,15 @@
+import crypto from "crypto";
 import { StreamData, DownloadLink, Caption } from "../api";
 import { movieService, getAuthToken } from "./movie-service";
 
-const MIRRORS = [
-    "h5-api.aoneroom.com",
-    "api6.aoneroom.com",
-    "api5.aoneroom.com",
-    "api4.aoneroom.com",
-];
+const MIRRORS = ["h5-api.aoneroom.com"];
+
+function generateXClientToken(tsMs = Date.now()): string {
+    const ts = String(tsMs);
+    const reversedTs = ts.split("").reverse().join("");
+    const hashVal = crypto.createHash("md5").update(reversedTs).digest("hex");
+    return `${ts},${hashVal}`;
+}
 
 const parseResolution = (res: any): number => {
     if (typeof res === "number") return isNaN(res) ? 0 : res;
@@ -24,6 +27,7 @@ const parseResolution = (res: any): number => {
 
 const getStreamHeaders = async (host: string, referer: string, adult = false) => {
     const playMode = adult ? "0" : "1";
+    const ts = Date.now();
     const token = await getAuthToken();
 
     const headers: Record<string, string> = {
@@ -34,6 +38,7 @@ const getStreamHeaders = async (host: string, referer: string, adult = false) =>
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "X-Play-Mode": playMode,
+        "X-Client-Token": generateXClientToken(ts),
         "X-Client-Info": JSON.stringify({
             "X-Play-Mode": playMode,
             timezone: "America/New_York",
