@@ -129,6 +129,7 @@ export interface ItemDetails {
     isForbid: boolean;
     watchTimeLimit: number;
     related: Subject[];
+    dubs?: Subject[];
 }
 
 export interface DownloadLink {

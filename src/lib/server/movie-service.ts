@@ -14,7 +14,7 @@ const H5_HOSTS = [
 
 let cachedAuthToken: string | null = null;
 
-async function getAuthToken(): Promise<string | null> {
+export async function getAuthToken(): Promise<string | null> {
     if (cachedAuthToken) return cachedAuthToken;
 
     for (const host of H5_HOSTS) {

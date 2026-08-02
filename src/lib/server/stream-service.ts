@@ -1,5 +1,5 @@
 import { StreamData, DownloadLink, Caption } from "../api";
-import { movieService } from "./movie-service";
+import { movieService, getAuthToken } from "./movie-service";
 
 const MIRRORS = ["h5-api.aoneroom.com", "moviebox.ph", "moviebox.pk"];
 
@@ -17,16 +17,17 @@ const parseResolution = (res: any): number => {
     return nums ? parseInt(nums[0], 10) : 0;
 };
 
-const DEFAULT_HEADERS = (host: string, referer: string, adult = false) => {
+const getStreamHeaders = async (host: string, referer: string, adult = false) => {
     const playMode = adult ? "0" : "1";
-    return {
+    const token = await getAuthToken();
+
+    const headers: Record<string, string> = {
         Host: host,
-        Referer: referer,
-        Origin: "https://videodownloader.site",
-        "X-Requested-With": "XMLHttpRequest",
+        Referer: referer || "https://videodownloader.site/",
+        Origin: "https://videodownloader.site/",
         "User-Agent":
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-        Accept: "application/json",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.9",
         "X-Play-Mode": playMode,
         "X-Client-Info": JSON.stringify({
@@ -37,6 +38,13 @@ const DEFAULT_HEADERS = (host: string, referer: string, adult = false) => {
             lang: "en",
         }),
     };
+
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["Cookie"] = `token=${token}`;
+    }
+
+    return headers;
 };
 
 async function fetchMirrorStream(
@@ -57,10 +65,12 @@ async function fetchMirrorStream(
         url.searchParams.set("detailPath", detailPath);
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const reqHeaders = await getStreamHeaders(mirrorHost, referer, adult);
 
         const res = await fetch(url.toString(), {
-            headers: DEFAULT_HEADERS(mirrorHost, referer, adult),
+            headers: reqHeaders,
             signal: controller.signal,
             cache: "no-store",
         });
@@ -120,8 +130,7 @@ export const streamService = {
             };
         }
 
-        const movieboxReferer = `https://h5.aoneroom.com/movies/${path}`;
-        const referers = [movieboxReferer, "https://videodownloader.site/"];
+        const referers = ["https://videodownloader.site/", `https://h5.aoneroom.com/movies/${path}`];
 
         const isEpisodic =
             subject.subjectType === 2 ||
@@ -178,61 +187,55 @@ export const streamService = {
                 (r) => r && r.hasResource && (r.downloads.length > 0 || r.captions.length > 0),
             );
             if (valid) {
-                return normalizeStreamData(valid);
+                return valid;
             }
         } catch {
-            // Proceed to fallbacks
+            // Fallthrough to dub track fallback
         }
 
-        // ── DUB FALLBACK ──
-        if (isEpisodic && subject.dubs && subject.dubs.length > 0) {
-            for (const dub of subject.dubs) {
-                if (!dub.detailPath || dub.detailPath === path) continue;
-                try {
-                    const dubDetails = await movieService.getDetails(
-                        dub.detailPath,
-                        adult,
-                    );
-                    if (dubDetails.subject?.subjectId) {
-                        const dubTasks: Promise<StreamData | null>[] = [];
-                        for (const mirror of MIRRORS) {
-                            for (const ref of referers) {
-                                for (const epPath of endpoints) {
-                                    for (const [sAtt, eAtt] of attempts) {
-                                        dubTasks.push(
-                                            fetchMirrorStream(
-                                                mirror,
-                                                ref,
-                                                epPath,
-                                                dubDetails.subject.subjectId,
-                                                dub.detailPath,
-                                                sAtt,
-                                                eAtt,
-                                                adult,
-                                            ),
-                                        );
-                                    }
-                                }
+        // ── TIER 2: Fallback to dub tracks ──
+        const dubs = details.dubs || [];
+        for (const dub of dubs) {
+            if (!dub.detailPath || dub.detailPath === path) continue;
+            try {
+                const dubDetails = await movieService.getDetails(dub.detailPath, adult);
+                const dubSubject = dubDetails.subject;
+                if (!dubSubject || !dubSubject.subjectId) continue;
+
+                const dubTasks: Promise<StreamData | null>[] = [];
+                for (const mirror of MIRRORS) {
+                    for (const ref of referers) {
+                        for (const epPath of endpoints) {
+                            for (const [sAtt, eAtt] of attempts) {
+                                dubTasks.push(
+                                    fetchMirrorStream(
+                                        mirror,
+                                        ref,
+                                        epPath,
+                                        dubSubject.subjectId,
+                                        dub.detailPath,
+                                        sAtt,
+                                        eAtt,
+                                        adult,
+                                    ),
+                                );
                             }
                         }
-                        const dubResults = await Promise.all(dubTasks);
-                        const validDub = dubResults.find(
-                            (r) =>
-                                r &&
-                                r.hasResource &&
-                                (r.downloads.length > 0 || r.captions.length > 0),
-                        );
-                        if (validDub) {
-                            return normalizeStreamData(validDub);
-                        }
                     }
-                } catch {
-                    // Try next dub
                 }
+
+                const dubResults = await Promise.all(dubTasks);
+                const dubValid = dubResults.find(
+                    (r) => r && r.hasResource && (r.downloads.length > 0 || r.captions.length > 0),
+                );
+                if (dubValid) {
+                    return dubValid;
+                }
+            } catch {
+                // Continue to next dub
             }
         }
 
-        // Return empty stream payload if no mirrors responded
         return {
             downloads: [],
             captions: [],
@@ -243,27 +246,3 @@ export const streamService = {
         };
     },
 };
-
-function normalizeStreamData(data: StreamData): StreamData {
-    const seenUrls = new Set<string>();
-    const cleanDownloads: DownloadLink[] = [];
-
-    for (const d of data.downloads || []) {
-        if (!d.url || seenUrls.has(d.url)) continue;
-        seenUrls.add(d.url);
-        cleanDownloads.push({
-            ...d,
-            resolution: parseResolution(d.resolution),
-        });
-    }
-
-    cleanDownloads.sort(
-        (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
-    );
-
-    return {
-        ...data,
-        downloads: cleanDownloads,
-        stream_domain: "https://videodownloader.site/",
-    };
-}
