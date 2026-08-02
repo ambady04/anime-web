@@ -6,12 +6,7 @@ import {
     OperatingListItem,
 } from "../api";
 
-const H5_HOSTS = [
-    "https://h5-api.aoneroom.com",
-    "https://api6.aoneroom.com",
-    "https://api5.aoneroom.com",
-    "https://api4.aoneroom.com",
-];
+const H5_HOSTS = ["https://h5-api.aoneroom.com"];
 
 let cachedAuthToken: string | null = null;
 
@@ -21,7 +16,7 @@ export async function getAuthToken(): Promise<string | null> {
     for (const host of H5_HOSTS) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
             const res = await fetch(`${host}/wefeed-h5api-bff/subject/search-suggest`, {
                 method: "POST",
@@ -49,7 +44,7 @@ export async function getAuthToken(): Promise<string | null> {
                 }
             }
         } catch {
-            // Try next host
+            // Retry
         }
     }
     return null;
@@ -141,7 +136,7 @@ async function fetchFromPool<T>(
         try {
             const url = `${host}${fullPath}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
             const isPost = method.toUpperCase() === "POST";
             const reqInit: RequestInit = {
@@ -371,7 +366,7 @@ export const movieService = {
             for (const host of H5_HOSTS) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3500);
+                    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
                     const res = await fetch(
                         `${host}/wefeed-h5api-bff/home/movieFilter`,
