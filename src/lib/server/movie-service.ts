@@ -6,11 +6,10 @@ import {
     OperatingListItem,
 } from "../api";
 
-const H5_API_HOST_POOL = [
+const H5_HOSTS = [
     "https://h5-api.aoneroom.com",
-    "https://api6.aoneroom.com",
-    "https://api5.aoneroom.com",
-    "https://api4.aoneroom.com",
+    "https://moviebox.ph",
+    "https://moviebox.pk",
 ];
 
 let cachedAuthToken: string | null = null;
@@ -18,21 +17,24 @@ let cachedAuthToken: string | null = null;
 async function getAuthToken(): Promise<string | null> {
     if (cachedAuthToken) return cachedAuthToken;
 
-    for (const host of H5_API_HOST_POOL) {
+    for (const host of H5_HOSTS) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
             const res = await fetch(`${host}/wefeed-h5api-bff/subject/search-suggest`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     Accept: "application/json",
+                    Referer: "https://videodownloader.site/",
+                    Origin: "https://videodownloader.site/",
                 },
                 body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
                 signal: controller.signal,
+                cache: "no-store",
             });
 
             clearTimeout(timeoutId);
@@ -46,7 +48,7 @@ async function getAuthToken(): Promise<string | null> {
                 }
             }
         } catch {
-            // Try next host
+            // Try next mirror
         }
     }
     return null;
@@ -58,11 +60,12 @@ const getHeaders = async (adult = false) => {
 
     const headers: Record<string, string> = {
         "User-Agent":
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         Accept: "application/json",
         "Accept-Language": "en-US,en;q=0.9",
         "X-Play-Mode": playMode,
         Referer: "https://videodownloader.site/",
+        Origin: "https://videodownloader.site/",
         "X-Client-Info": JSON.stringify({
             "X-Play-Mode": playMode,
             timezone: "America/New_York",
@@ -74,6 +77,7 @@ const getHeaders = async (adult = false) => {
 
     if (token) {
         headers["Authorization"] = `Bearer ${token}`;
+        headers["Cookie"] = `token=${token}`;
     }
 
     return headers;
@@ -111,12 +115,13 @@ async function fetchFromPool<T>(
     let lastError: Error | null = null;
     const reqHeaders = await getHeaders(adult);
 
-    for (const host of H5_API_HOST_POOL) {
+    for (const host of H5_HOSTS) {
         try {
             const url = `${host}${fullPath}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
 
+            const isPost = method.toUpperCase() === "POST";
             const reqInit: RequestInit = {
                 method,
                 headers: {
@@ -125,7 +130,9 @@ async function fetchFromPool<T>(
                 },
                 body: body ? JSON.stringify(body) : undefined,
                 signal: controller.signal,
-                next: { revalidate: revalidateSeconds },
+                ...(isPost
+                    ? { cache: "no-store" }
+                    : { next: { revalidate: revalidateSeconds } }),
             };
 
             const res = await fetch(url, reqInit);
@@ -174,7 +181,8 @@ export const movieService = {
             }
 
             return data;
-        } catch {
+        } catch (err) {
+            console.error("getHome error:", err);
             return { platformList: [], operatingList: [] };
         }
     },
@@ -193,62 +201,24 @@ export const movieService = {
             subjectType: type ?? 0,
         };
 
-        // 1. Primary: POST /wefeed-h5api-bff/subject/search
         try {
             const rawData = await fetchFromPool<any>(
                 "/wefeed-h5api-bff/subject/search",
                 {},
-                { method: "POST", body: payload, adult, revalidateSeconds: 600 },
+                { method: "POST", body: payload, adult },
             );
-            const data = rawData.data || rawData;
-            const rawItems = data?.items || data?.list;
-            if (Array.isArray(rawItems) && rawItems.length > 0) {
-                const items: Subject[] = rawItems.filter((i: Subject) =>
-                    Boolean(i?.detailPath),
-                );
-                return { items: stripCamSubjects(items) };
-            }
-        } catch {
-            // Reset cached token if 401/403 or failed
-            cachedAuthToken = null;
-        }
 
-        // 2. Fallback 1: POST /wefeed-mobile-bff/subject-api/search (V3 Mobile API)
-        try {
-            const rawData = await fetchFromPool<any>(
-                "/wefeed-mobile-bff/subject-api/search",
-                {},
-                { method: "POST", body: payload, adult, revalidateSeconds: 600 },
-            );
             const data = rawData.data || rawData;
             const rawItems = data?.items || data?.list;
-            if (Array.isArray(rawItems) && rawItems.length > 0) {
+            if (Array.isArray(rawItems)) {
                 const items: Subject[] = rawItems.filter((i: Subject) =>
                     Boolean(i?.detailPath),
                 );
                 return { items: stripCamSubjects(items) };
             }
-        } catch {
-            // Ignore
-        }
-
-        // 3. Fallback 2: GET /wefeed-h5api-bff/subject/search
-        try {
-            const rawData = await fetchFromPool<any>(
-                "/wefeed-h5api-bff/subject/search",
-                { keyword: q, page, perPage: 24, subjectType: type ?? 0 },
-                { method: "GET", adult, revalidateSeconds: 600 },
-            );
-            const data = rawData.data || rawData;
-            const rawItems = data?.items || data?.list;
-            if (Array.isArray(rawItems) && rawItems.length > 0) {
-                const items: Subject[] = rawItems.filter((i: Subject) =>
-                    Boolean(i?.detailPath),
-                );
-                return { items: stripCamSubjects(items) };
-            }
-        } catch {
-            // Ignore
+        } catch (err) {
+            console.error("search error:", err);
+            cachedAuthToken = null; // reset token on failure
         }
 
         return { items: [] };
@@ -376,10 +346,10 @@ export const movieService = {
 
             const reqHeaders = await getHeaders(adult);
 
-            for (const host of H5_API_HOST_POOL) {
+            for (const host of H5_HOSTS) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3500);
+                    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
                     const res = await fetch(
                         `${host}/wefeed-h5api-bff/home/movieFilter`,
@@ -391,7 +361,7 @@ export const movieService = {
                             },
                             body: JSON.stringify(payload),
                             signal: controller.signal,
-                            next: { revalidate: 600 },
+                            cache: "no-store",
                         },
                     );
 
@@ -433,7 +403,8 @@ export const movieService = {
                 },
                 items: searchResult.items,
             };
-        } catch {
+        } catch (err) {
+            console.error("getCategory fallback error:", err);
             return {
                 pager: {
                     hasMore: false,
