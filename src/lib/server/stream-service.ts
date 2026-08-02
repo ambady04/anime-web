@@ -1,7 +1,12 @@
 import { StreamData, DownloadLink, Caption } from "../api";
 import { movieService, getAuthToken } from "./movie-service";
 
-const MIRRORS = ["h5-api.aoneroom.com", "moviebox.ph", "moviebox.pk"];
+const MIRRORS = [
+    "h5-api.aoneroom.com",
+    "api6.aoneroom.com",
+    "api5.aoneroom.com",
+    "api4.aoneroom.com",
+];
 
 const parseResolution = (res: any): number => {
     if (typeof res === "number") return isNaN(res) ? 0 : res;

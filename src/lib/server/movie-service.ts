@@ -8,8 +8,9 @@ import {
 
 const H5_HOSTS = [
     "https://h5-api.aoneroom.com",
-    "https://moviebox.ph",
-    "https://moviebox.pk",
+    "https://api6.aoneroom.com",
+    "https://api5.aoneroom.com",
+    "https://api4.aoneroom.com",
 ];
 
 let cachedAuthToken: string | null = null;
@@ -20,7 +21,7 @@ export async function getAuthToken(): Promise<string | null> {
     for (const host of H5_HOSTS) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
 
             const res = await fetch(`${host}/wefeed-h5api-bff/subject/search-suggest`, {
                 method: "POST",
@@ -48,11 +49,31 @@ export async function getAuthToken(): Promise<string | null> {
                 }
             }
         } catch {
-            // Try next mirror
+            // Try next host
         }
     }
     return null;
 }
+
+const getPublicHeaders = (adult = false) => {
+    const playMode = adult ? "0" : "1";
+    return {
+        "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-Play-Mode": playMode,
+        Referer: "https://videodownloader.site/",
+        Origin: "https://videodownloader.site/",
+        "X-Client-Info": JSON.stringify({
+            "X-Play-Mode": playMode,
+            timezone: "America/New_York",
+            system_language: "en",
+            region: "",
+            lang: "en",
+        }),
+    };
+};
 
 const getHeaders = async (adult = false) => {
     const playMode = adult ? "0" : "1";
@@ -99,9 +120,10 @@ async function fetchFromPool<T>(
         body?: any;
         adult?: boolean;
         revalidateSeconds?: number;
+        useAuth?: boolean;
     } = {},
 ): Promise<T> {
-    const { method = "GET", body, adult = false, revalidateSeconds = 600 } = options;
+    const { method = "GET", body, adult = false, revalidateSeconds = 600, useAuth = false } = options;
 
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -113,13 +135,13 @@ async function fetchFromPool<T>(
     const fullPath = queryString ? `${endpointPath}?${queryString}` : endpointPath;
 
     let lastError: Error | null = null;
-    const reqHeaders = await getHeaders(adult);
+    const reqHeaders = useAuth ? await getHeaders(adult) : getPublicHeaders(adult);
 
     for (const host of H5_HOSTS) {
         try {
             const url = `${host}${fullPath}`;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
 
             const isPost = method.toUpperCase() === "POST";
             const reqInit: RequestInit = {
@@ -142,13 +164,13 @@ async function fetchFromPool<T>(
                 const data = await res.json();
                 return data as T;
             }
-            lastError = new Error(`Host ${host} returned status ${res.status}`);
+            lastError = new Error(`Service temporarily unavailable (${res.status})`);
         } catch (err) {
             lastError = err instanceof Error ? err : new Error(String(err));
         }
     }
 
-    throw lastError || new Error(`All hosts exhausted for ${endpointPath}`);
+    throw lastError || new Error(`All media mirrors exhausted for ${endpointPath}`);
 }
 
 export const movieService = {
@@ -156,9 +178,9 @@ export const movieService = {
     getHome: async (adult = false): Promise<HomepageData> => {
         try {
             const rawData = await fetchFromPool<any>(
-                "/wefeed-h5api-bff/home?host=moviebox.ph",
+                "/wefeed-h5api-bff/home?host=h5-api.aoneroom.com",
                 {},
-                { adult, revalidateSeconds: 600 },
+                { adult, revalidateSeconds: 600, useAuth: false },
             );
 
             const data = (rawData.data || rawData) as HomepageData;
@@ -205,7 +227,7 @@ export const movieService = {
             const rawData = await fetchFromPool<any>(
                 "/wefeed-h5api-bff/subject/search",
                 {},
-                { method: "POST", body: payload, adult },
+                { method: "POST", body: payload, adult, useAuth: true },
             );
 
             const data = rawData.data || rawData;
@@ -218,7 +240,7 @@ export const movieService = {
             }
         } catch (err) {
             console.error("search error:", err);
-            cachedAuthToken = null; // reset token on failure
+            cachedAuthToken = null;
         }
 
         return { items: [] };
@@ -233,7 +255,7 @@ export const movieService = {
         const rawData = await fetchFromPool<any>(
             "/wefeed-h5api-bff/detail",
             { detailPath: path },
-            { adult, revalidateSeconds: 600 },
+            { adult, revalidateSeconds: 600, useAuth: false },
         );
 
         const detailsData = (rawData.data || rawData) as ItemDetails;
@@ -244,7 +266,7 @@ export const movieService = {
                 const recRaw = await fetchFromPool<any>(
                     "/wefeed-h5api-bff/subject/recommend",
                     { subjectId: detailsData.subject.subjectId },
-                    { adult, revalidateSeconds: 600 },
+                    { adult, revalidateSeconds: 600, useAuth: false },
                 );
                 const recData = recRaw.data || recRaw;
                 relatedItems = (recData.items || []).filter((i: Subject) =>
@@ -344,12 +366,12 @@ export const movieService = {
                 filterType,
             };
 
-            const reqHeaders = await getHeaders(adult);
+            const reqHeaders = getPublicHeaders(adult);
 
             for (const host of H5_HOSTS) {
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 4000);
+                    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
                     const res = await fetch(
                         `${host}/wefeed-h5api-bff/home/movieFilter`,
