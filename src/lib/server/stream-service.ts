@@ -22,7 +22,6 @@ const getStreamHeaders = async (host: string, referer: string, adult = false) =>
     const token = await getAuthToken();
 
     const headers: Record<string, string> = {
-        Host: host,
         Referer: referer || "https://videodownloader.site/",
         Origin: "https://videodownloader.site/",
         "User-Agent":
