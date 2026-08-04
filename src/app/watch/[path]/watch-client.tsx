@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
     Heart,
@@ -19,8 +19,9 @@ import {
     Bookmark,
     Check,
     RotateCcw,
+    AlertTriangle,
 } from "lucide-react";
-import { ItemDetails, StreamData, DubModel, isSeriesType, parseResolution } from "@/lib/api";
+import { movieApi, ItemDetails, StreamData, DubModel, isSeriesType, parseResolution } from "@/lib/api";
 import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
@@ -53,26 +54,79 @@ function formatBytes(bytes: number): string {
 
 interface WatchClientProps {
     path: string;
-    details: ItemDetails;
-    stream: StreamData;
-    activeSeason: number;
-    activeEpisode: number;
+    initialDetails?: ItemDetails | null;
+    initialStream?: StreamData | null;
+    initialSeason?: number;
+    initialEpisode?: number;
 }
 
 export default function WatchClient({
     path,
-    details,
-    stream,
-    activeSeason,
-    activeEpisode,
+    initialDetails,
+    initialStream,
+    initialSeason = 0,
+    initialEpisode = 0,
 }: WatchClientProps) {
     const router = useRouter();
     const { user } = useAuth();
+    const [details, setDetails] = useState<ItemDetails | null>(initialDetails || null);
+    const [stream, setStream] = useState<StreamData | null>(initialStream || null);
+    const [activeSeason, setActiveSeason] = useState<number>(initialSeason);
+    const [activeEpisode, setActiveEpisode] = useState<number>(initialEpisode);
+    const [isLoadingData, setIsLoadingData] = useState<boolean>(!initialDetails || !initialStream);
+    const [fetchError, setFetchError] = useState<string>("");
+
     const [isPageLoading, setIsPageLoading] = useState(false);
     const [loadingEpisode, setLoadingEpisode] = useState<number | null>(null);
     const [loadingAudio, setLoadingAudio] = useState<string | null>(null);
     const [showInfo, setShowInfo] = useState(false);
     const [showSeasonDropdown, setShowSeasonDropdown] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+        async function loadClientMediaData() {
+            if (details && stream) {
+                setIsLoadingData(false);
+                return;
+            }
+            try {
+                setIsLoadingData(true);
+                setFetchError("");
+
+                let d = details;
+                if (!d) {
+                    d = await movieApi.getDetails(path);
+                    if (!isMounted) return;
+                    setDetails(d);
+                }
+
+                const isSeries = isSeriesType(d?.subject?.subjectType);
+                const sNum = activeSeason || initialSeason || (isSeries ? 1 : 0);
+                const eNum = activeEpisode || initialEpisode || (isSeries ? 1 : 0);
+                if (isMounted) {
+                    setActiveSeason(sNum);
+                    setActiveEpisode(eNum);
+                }
+
+                let s = stream;
+                if (!s) {
+                    s = await movieApi.getStream(path, sNum, eNum);
+                    if (!isMounted) return;
+                    setStream(s);
+                }
+            } catch (err: any) {
+                if (isMounted) {
+                    setFetchError(err?.message || "Failed to retrieve media playback link.");
+                }
+            } finally {
+                if (isMounted) setIsLoadingData(false);
+            }
+        }
+        loadClientMediaData();
+        return () => {
+            isMounted = false;
+        };
+    }, [path]);
 
     useEffect(() => {
         if (!showSeasonDropdown) return;
@@ -90,16 +144,17 @@ export default function WatchClient({
         };
     }, [showSeasonDropdown]);
 
-    const { subject, stars, resource, related, metadata } = useMemo(
-        () => details,
-        [details],
-    );
-
     useEffect(() => {
         setIsPageLoading(false);
         setLoadingEpisode(null);
         setLoadingAudio(null);
     }, [path, stream]);
+
+    const subject = details?.subject;
+    const stars = details?.stars || [];
+    const resource = details?.resource;
+    const related = details?.related || [];
+    const metadata = details?.metadata;
 
     const [isInWatchlist, setIsInWatchlist] = useState(false);
     const [bookmarkedSeason, setBookmarkedSeason] = useState<
@@ -110,13 +165,15 @@ export default function WatchClient({
     >(undefined);
 
     useEffect(() => {
+        if (!subject?.detailPath) return;
         setIsInWatchlist(localStore.isInWatchlist(subject.detailPath));
         const item = localStore.getWatchlistItem(subject.detailPath);
         setBookmarkedSeason(item?.bookmarkedSeason);
         setBookmarkedEpisode(item?.bookmarkedEpisode);
-    }, [subject.detailPath]);
+    }, [subject?.detailPath]);
 
     const handleWatchlistToggle = () => {
+        if (!subject) return;
         const added = localStore.toggleWatchlist({
             detailPath: subject.detailPath,
             title: subject.title,
@@ -128,19 +185,19 @@ export default function WatchClient({
         });
         setIsInWatchlist(added);
         if (!added) {
-            // If removed from watchlist, clear the episode bookmark state too
             setBookmarkedSeason(undefined);
             setBookmarkedEpisode(undefined);
         }
     };
 
-    const isSeries = isSeriesType(subject.subjectType);
+    const isSeries = isSeriesType(subject?.subjectType);
 
     const isEpisodeBookmarked =
         bookmarkedSeason === activeSeason &&
         bookmarkedEpisode === activeEpisode;
 
     const handleEpisodeBookmarkToggle = () => {
+        if (!subject) return;
         const item = {
             detailPath: subject.detailPath,
             title: subject.title,
@@ -163,9 +220,8 @@ export default function WatchClient({
         }
     };
 
-    // Auto-redirect to bookmarked episode if no query params are explicitly set
     useEffect(() => {
-        if (typeof window !== "undefined") {
+        if (typeof window !== "undefined" && subject?.detailPath) {
             const hasParams =
                 window.location.search.includes("season=") ||
                 window.location.search.includes("episode=");
@@ -178,17 +234,29 @@ export default function WatchClient({
                 }
             }
         }
-    }, [isSeries, subject.detailPath, path]);
+    }, [isSeries, subject?.detailPath, path]);
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
 
-    // Keep selectedSeason in sync with activeSeason prop — handles navigation
-    // from search results or external links that change the season.
+    const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(new Set());
+    const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
+
+    useEffect(() => {
+        if (!subject?.detailPath) return;
+        setWatchedEpisodes(localStore.getWatchedEpisodes(subject.detailPath, selectedSeason));
+        setWatchHistory(localStore.getHistory());
+
+        if (user) {
+            syncSeasonWatchedEpisodes(user.uid, subject.detailPath, selectedSeason)
+                .then((syncedEps) => setWatchedEpisodes(syncedEps))
+                .catch(() => {});
+        }
+    }, [subject?.detailPath, selectedSeason, user]);
+
     useEffect(() => {
         if (activeSeason && activeSeason !== selectedSeason) {
             setSelectedSeason(activeSeason);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeSeason]);
 
     const currentSeasonData = useMemo(
@@ -202,7 +270,7 @@ export default function WatchClient({
     );
 
     useEffect(() => {
-        if (!isSeries || !subject.title) return;
+        if (!isSeries || !subject?.title) return;
 
         let isMounted = true;
         const cacheKey = `fillers-v4-${subject.detailPath}`;
@@ -221,7 +289,6 @@ export default function WatchClient({
         const fetchFillers = async () => {
             try {
                 const query = cleanTitle(subject.title);
-                // Use server-side API route — avoids Jikan rate limits and CORS in browser
                 const res = await fetch(
                     `/api/fillers?title=${encodeURIComponent(query)}`,
                 );
@@ -231,7 +298,6 @@ export default function WatchClient({
 
                 if (isMounted) {
                     setFillerEpisodes(new Set(fillers));
-                    // Cache any successful API response (including empty arrays for anime with 0 fillers)
                     localStorage.setItem(cacheKey, JSON.stringify(fillers));
                 }
             } catch (e) {
@@ -244,85 +310,24 @@ export default function WatchClient({
         return () => {
             isMounted = false;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isSeries, subject.title, subject.detailPath, selectedSeason]);
+    }, [isSeries, subject?.title, subject?.detailPath]);
 
-    const handleEpisodeClick = (epNum: number) => {
-        // Mark the currently-playing episode as watched before switching
-        if (activeEpisode && activeEpisode !== epNum) {
-            localStore.markEpisodeWatched(
-                subject.detailPath,
-                selectedSeason,
-                activeEpisode,
-            );
-            // Update UI immediately
-            setWatchedEpisodes(
-                localStore.getWatchedEpisodes(
-                    subject.detailPath,
-                    selectedSeason,
-                ),
-            );
-        }
-        setLoadingEpisode(epNum);
-        setIsPageLoading(true);
-        // Use hard navigation to bypass Next.js Router Cache — stream URLs
-        // contain expiring CDN tokens and must always be fetched fresh.
-        window.location.href = `/watch/${path}?season=${selectedSeason}&episode=${epNum}`;
-    };
-
-    const handleNextEpisode = () => {
-        if (isSeries && activeEpisode < totalEpisodes) {
-            // Mark current episode as watched before moving to next
-            localStore.markEpisodeWatched(
-                subject.detailPath,
-                selectedSeason,
-                activeEpisode,
-            );
-            setWatchedEpisodes(
-                localStore.getWatchedEpisodes(
-                    subject.detailPath,
-                    selectedSeason,
-                ),
-            );
-            handleEpisodeClick(activeEpisode + 1);
-        }
-    };
-
-    const handlePrevEpisode = () => {
-        if (isSeries && activeEpisode > 1) {
-            handleEpisodeClick(activeEpisode - 1);
-        }
-    };
-
-    const handleAudioClick = (detailPath: string) => {
-        setLoadingAudio(detailPath);
-        setIsPageLoading(true);
-        // Use hard navigation to bypass Router Cache — different audio track
-        // needs a completely fresh stream from the server.
-        window.location.href = `/watch/${detailPath}${isSeries ? `?season=${selectedSeason}&episode=${activeEpisode}` : ""}`;
-    };
+    const activeEpRef = useRef<HTMLButtonElement | null>(null);
 
     const hasDubs = useMemo(
-        () => subject.dubs && subject.dubs.length > 0,
-        [subject.dubs],
+        () => Boolean(subject?.dubs && subject.dubs.length > 0),
+        [subject?.dubs],
     );
 
-    // Build a complete dubs list that always includes the current audio track.
-    // The API's subject.dubs may not include the currently-playing path's entry,
-    // or the path comparison may fail due to URL encoding differences.
     const completeDubs = useMemo(() => {
-        if (!subject.dubs || subject.dubs.length === 0) return [];
+        if (!subject?.dubs || subject.dubs.length === 0) return [];
 
-        // Normalize path comparison: decode both sides and compare
         const decodedPath = decodeURIComponent(path);
         const currentInList = subject.dubs.some(
             (d) => decodeURIComponent(d.detailPath) === decodedPath,
         );
         if (currentInList) return subject.dubs;
 
-        // Current path isn't in the dubs list — add it as the base/original track.
-        // Use corner first (it reflects the real audio language, e.g. "Hindi", "Korean").
-        // If corner is absent/generic, derive from countryName.
         const COUNTRY_TO_LANG: Record<string, string> = {
             japan: "Japanese",
             korea: "Korean",
@@ -340,7 +345,7 @@ export default function WatchClient({
             uk: "English",
         };
 
-        const cornerVal = subject.corner?.trim();
+        const cornerVal = subject?.corner?.trim();
         const isValidCorner =
             cornerVal &&
             cornerVal.length > 0 &&
@@ -351,7 +356,7 @@ export default function WatchClient({
         if (isValidCorner) {
             derivedLang = cornerVal;
         } else {
-            const country = subject.countryName?.toLowerCase() ?? "";
+            const country = subject?.countryName?.toLowerCase() ?? "";
             for (const [key, lang] of Object.entries(COUNTRY_TO_LANG)) {
                 if (country.includes(key)) {
                     derivedLang = lang;
@@ -361,195 +366,62 @@ export default function WatchClient({
         }
 
         const currentEntry: DubModel = {
-            subjectId: subject.subjectId,
+            subjectId: subject?.subjectId || "",
             lanName: derivedLang,
-            lanCode: derivedLang.toLowerCase().slice(0, 2),
+            lanCode: derivedLang.slice(0, 2).toLowerCase(),
             original: true,
-            type: 0,
-            detailPath: path,
+            type: 1,
+            detailPath: subject?.detailPath || path,
         };
+
         return [currentEntry, ...subject.dubs];
-    }, [subject.dubs, subject.subjectId, subject.corner, subject.countryName, path]);
+    }, [subject, path]);
 
-    // Track which episodes have been watched (loaded from localStorage per season)
-    const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(
-        new Set(),
-    );
-    const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
-
-    // Memoized lookup map for episode progress — avoids O(n) .find() per episode in the grid
-    const episodeProgressMap = useMemo(() => {
-        const map = new Map<string, HistoryItem>();
-        for (const h of watchHistory) {
-            if (
-                h.detailPath === subject.detailPath &&
-                h.season === selectedSeason
-            ) {
-                map.set(`${h.season}-${h.episode}`, h);
-            }
+    if (!details || !subject) {
+        if (fetchError) {
+            return (
+                <div className="max-w-md mx-auto my-32 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20">
+                    <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4 animate-bounce" />
+                    <h2 className="text-xl font-bold text-foreground mb-2">Streaming Offline</h2>
+                    <p className="text-sm text-foreground/60 mb-6">
+                        This media link cannot be retrieved. It may be geo-restricted or temporarily unavailable on host mirrors.
+                    </p>
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 font-mono text-left mb-6 overflow-x-auto">
+                        {fetchError}
+                    </div>
+                    <div className="flex flex-col space-y-3">
+                        <button
+                            onClick={() => { setDetails(null); setStream(null); }}
+                            className="flex items-center justify-center space-x-2 bg-primary hover:opacity-90 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all cursor-pointer"
+                        >
+                            <span>Try Again</span>
+                        </button>
+                        <Link
+                            href="/"
+                            className="flex items-center justify-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            <span>Return Home</span>
+                        </Link>
+                    </div>
+                </div>
+            );
         }
-        return map;
-    }, [watchHistory, subject.detailPath, selectedSeason]);
-    useEffect(() => {
-        // Load local state synchronously first for instant UI response
-        setWatchedEpisodes(
-            localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
+        return (
+            <div className="max-w-md mx-auto my-32 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20 select-none">
+                <Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" />
+                <h2 className="text-lg font-black text-foreground uppercase tracking-wider mb-2">
+                    Connecting Media Stream
+                </h2>
+                <p className="text-xs text-foreground/70 font-medium">
+                    Fetching details and high-speed video mirrors directly from edge nodes...
+                </p>
+            </div>
         );
-        setWatchHistory(localStore.getHistory());
-
-        // Bidirectional sync with cloud database in the background if logged in
-        if (user) {
-            syncSeasonWatchedEpisodes(
-                user.uid,
-                subject.detailPath,
-                selectedSeason,
-            )
-                .then((syncedEps) => {
-                    setWatchedEpisodes(syncedEps);
-                })
-                .catch((err) => {
-                    console.error(
-                        "[sync] Background episode sync failed:",
-                        err,
-                    );
-                });
-        }
-    }, [subject.detailPath, selectedSeason, activeEpisode, user]);
-
-    const handleEpisodeContextMenu = (e: React.MouseEvent, epNum: number) => {
-        e.preventDefault();
-        const isEpWatched = watchedEpisodes.has(epNum);
-        if (isEpWatched) {
-            localStore.markEpisodeUnwatched(
-                subject.detailPath,
-                selectedSeason,
-                epNum,
-            );
-            // Clear progress from history too
-            const currentHistory = localStore.getHistory();
-            const updatedHistory = currentHistory.filter(
-                (h) =>
-                    !(
-                        h.detailPath === subject.detailPath &&
-                        h.season === selectedSeason &&
-                        h.episode === epNum
-                    ),
-            );
-            localStorage.setItem(
-                "kixo_history",
-                JSON.stringify(updatedHistory),
-            );
-        } else {
-            localStore.markEpisodeWatched(
-                subject.detailPath,
-                selectedSeason,
-                epNum,
-            );
-        }
-        // Sync states to update UI instantly
-        setWatchedEpisodes(
-            localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
-        );
-        setWatchHistory(localStore.getHistory());
-    };
-
-    const toggleActiveEpisodeWatched = () => {
-        const isEpWatched = watchedEpisodes.has(activeEpisode);
-        if (isEpWatched) {
-            localStore.markEpisodeUnwatched(
-                subject.detailPath,
-                activeSeason,
-                activeEpisode,
-            );
-
-            // Clear progress from history too
-            const currentHistory = localStore.getHistory();
-            const updatedHistory = currentHistory.filter(
-                (h) =>
-                    !(
-                        h.detailPath === subject.detailPath &&
-                        h.season === activeSeason &&
-                        h.episode === activeEpisode
-                    ),
-            );
-            localStorage.setItem(
-                "kixo_history",
-                JSON.stringify(updatedHistory),
-            );
-        } else {
-            localStore.markEpisodeWatched(
-                subject.detailPath,
-                activeSeason,
-                activeEpisode,
-            );
-        }
-        // Sync states to update UI instantly
-        setWatchedEpisodes(
-            localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
-        );
-        setWatchHistory(localStore.getHistory());
-    };
-
-    const handleMarkSeasonWatched = () => {
-        if (
-            window.confirm(
-                `Mark all ${totalEpisodes} episodes of Season ${selectedSeason} as watched?`,
-            )
-        ) {
-            localStore.markSeasonWatched(
-                subject.detailPath,
-                selectedSeason,
-                totalEpisodes,
-            );
-            setWatchedEpisodes(
-                localStore.getWatchedEpisodes(
-                    subject.detailPath,
-                    selectedSeason,
-                ),
-            );
-        }
-    };
-
-    const handleClearSeasonWatched = () => {
-        if (
-            window.confirm(
-                `Reset watched progress for all episodes in Season ${selectedSeason}?`,
-            )
-        ) {
-            localStore.clearSeasonWatched(subject.detailPath, selectedSeason);
-            // Clear history items of this season to remove progress bars
-            const currentHistory = localStore.getHistory();
-            const updatedHistory = currentHistory.filter(
-                (h) =>
-                    !(
-                        h.detailPath === subject.detailPath &&
-                        h.season === selectedSeason
-                    ),
-            );
-            localStorage.setItem(
-                "kixo_history",
-                JSON.stringify(updatedHistory),
-            );
-
-            setWatchedEpisodes(new Set());
-            setWatchHistory(localStore.getHistory());
-        }
-    };
-
-    // Ref for the currently active episode button — used to auto-scroll it into view
-    const activeEpRef = useRef<HTMLButtonElement | null>(null);
-    useEffect(() => {
-        if (activeEpRef.current) {
-            activeEpRef.current.scrollIntoView({
-                block: "nearest",
-                behavior: "smooth",
-            });
-        }
-    }, [activeSeason, activeEpisode, selectedSeason]);
+    }
 
     return (
         <div className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-8 2xl:px-12 py-3 sm:py-4 animate-fade-in relative z-20">
-            {/* Back button */}
             <button
                 onClick={() => router.back()}
                 className="flex items-center space-x-2 text-foreground/50 hover:text-primary transition-colors mb-4 text-xs font-black uppercase tracking-wider group focus:outline-none cursor-pointer"
@@ -558,570 +430,252 @@ export default function WatchClient({
                 <span>Back to Catalog</span>
             </button>
 
-            {/* ── Main two-column layout ── */}
             <div className="flex flex-col xl:flex-row gap-5">
-                {/* ══ LEFT — Video Player + Info ══ */}
                 <div className="flex-1 min-w-0 space-y-4">
-                    {/* Video Player */}
-                    <div className="w-full aspect-video min-h-[200px] rounded-2xl overflow-hidden shadow-card border border-glass-border relative bg-black">
-                        <VideoPlayer
-                            key={`${path}-s${activeSeason}-e${activeEpisode}`}
-                            streamData={stream}
-                            detailPath={path}
-                            seriesDetailPath={subject.detailPath}
-                            title={subject.title}
-                            coverUrl={subject.cover?.url || ""}
-                            isSeries={isSeries}
-                            season={isSeries ? activeSeason : undefined}
-                            episode={isSeries ? activeEpisode : undefined}
-                            dubs={completeDubs}
-                            onNextEpisode={
-                                activeEpisode < totalEpisodes
-                                    ? handleNextEpisode
-                                    : undefined
-                            }
-                            onPrevEpisode={
-                                activeEpisode > 1
-                                    ? handlePrevEpisode
-                                    : undefined
-                            }
-                            shouldPause={
-                                loadingEpisode !== null ||
-                                loadingAudio !== null ||
-                                isPageLoading
-                            }
-                        />
-                        {(isPageLoading ||
-                            loadingEpisode !== null ||
-                            loadingAudio !== null) && (
-                            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-40 animate-fade-in">
-                                {/* Animated loading ring */}
-                                <div className="relative w-16 h-16 mb-4">
-                                    <div className="absolute inset-0 rounded-full border-2 border-primary/20" />
-                                    <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
-                                    <div
-                                        className="absolute inset-2 rounded-full border-2 border-transparent border-b-primary/60 animate-spin"
-                                        style={{
-                                            animationDirection: "reverse",
-                                            animationDuration: "1.5s",
-                                        }}
-                                    />
-                                </div>
-                                <p className="text-xs text-white font-bold uppercase tracking-widest">
-                                    Switching Stream...
-                                </p>
-                                <p className="text-[10px] text-white/40 mt-1 font-medium">
-                                    Resolving new CDN mirrors
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                    <VideoPlayer
+                        streamData={stream || { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" }}
+                        title={cleanTitle(subject.title)}
+                        coverUrl={subject.cover?.url || ""}
+                        detailPath={subject.detailPath}
+                        isSeries={Boolean(isSeries)}
+                        season={activeSeason}
+                        episode={activeEpisode}
+                    />
 
-                    {/* Title bar + quick actions */}
-                    <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-card">
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                                {isSeries && (
-                                    <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full mb-2">
-                                        <Tv className="w-3 h-3" />
-                                        TV Series • S{activeSeason} E
-                                        {activeEpisode}
-                                    </span>
+                    <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+                            <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
+                                        {cleanTitle(subject.title)}
+                                    </h1>
+                                    {isSeries && activeEpisode > 0 && (
+                                        <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-bold border border-primary/30">
+                                            S{activeSeason} E{activeEpisode}
+                                        </span>
+                                    )}
+                                </div>
+                                {subject.releaseDate && (
+                                    <p className="text-xs text-foreground/50 font-medium">
+                                        Released: {subject.releaseDate}
+                                    </p>
                                 )}
-                                {!isSeries && (
-                                    <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full mb-2">
-                                        <Film className="w-3 h-3" />
-                                        Feature Film
-                                    </span>
-                                )}
-                                <h1 className="text-lg sm:text-xl md:text-2xl font-black text-foreground tracking-tight leading-snug line-clamp-2">
-                                    {subject.title}
-                                </h1>
                             </div>
 
-                            {/* Info toggle on mobile */}
-                            <button
-                                onClick={() => setShowInfo((v) => !v)}
-                                className="xl:hidden shrink-0 p-2 rounded-xl bg-glass-card border border-glass-border text-foreground/60 hover:text-primary transition-colors"
-                            >
-                                <Info className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        {/* Badges row */}
-                        <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-bold">
-                            {Number(subject.imdbRatingValue) > 0 && (
-                                <div className="flex items-center space-x-1.5 bg-yellow-500/10 border border-yellow-500/20 px-2.5 py-1.5 rounded-xl text-yellow-500">
-                                    <Star className="w-3 h-3 fill-yellow-500" />
-                                    <span>
-                                        {Number(subject.imdbRatingValue).toFixed(1)}{" "}
-                                        IMDB
-                                    </span>
-                                </div>
-                            )}
-                            {subject.releaseDate && (
-                                <div className="flex items-center space-x-1.5 bg-glass-card border border-glass-border px-2.5 py-1.5 rounded-xl text-foreground/70">
-                                    <Calendar className="w-3 h-3 text-primary" />
-                                    <span>
-                                        {subject.releaseDate.split("-")[0]}
-                                    </span>
-                                </div>
-                            )}
-                            <button
-                                onClick={handleWatchlistToggle}
-                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-bold uppercase tracking-wider ${
-                                    isInWatchlist
-                                        ? "bg-primary border-primary/20 text-white shadow-lg shadow-primary-glow"
-                                        : "bg-glass-card hover:bg-glass-panel border-glass-border text-foreground/70"
-                                }`}
-                            >
-                                <Heart
-                                    className={`w-3 h-3 ${isInWatchlist ? "fill-white" : ""}`}
-                                />
-                                <span>
-                                    {isInWatchlist ? "Saved" : "Bookmark"}
-                                </span>
-                            </button>
-                            {isSeries && (
+                            <div className="flex items-center gap-2">
                                 <button
-                                    onClick={handleEpisodeBookmarkToggle}
-                                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-bold uppercase tracking-wider ${
-                                        isEpisodeBookmarked
-                                            ? "bg-emerald-500 border-emerald-500/20 text-white shadow-lg shadow-emerald-500/20 animate-fade-in"
-                                            : "bg-glass-card hover:bg-glass-panel border-glass-border text-foreground/70"
+                                    onClick={handleWatchlistToggle}
+                                    className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                        isInWatchlist
+                                            ? "bg-primary text-white shadow-lg shadow-primary/25"
+                                            : "bg-white/5 hover:bg-white/10 text-foreground/80 border border-white/10"
                                     }`}
-                                    title={`Bookmark Season ${activeSeason} Episode ${activeEpisode}`}
                                 >
-                                    <Bookmark
-                                        className={`w-3 h-3 ${isEpisodeBookmarked ? "fill-white" : ""}`}
+                                    <Heart
+                                        className={`w-3.5 h-3.5 ${
+                                            isInWatchlist ? "fill-current" : ""
+                                        }`}
                                     />
                                     <span>
-                                        {isEpisodeBookmarked
-                                            ? `Bookmarked S${activeSeason} E${activeEpisode}`
-                                            : `Bookmark S${activeSeason} E${activeEpisode}`}
+                                        {isInWatchlist
+                                            ? "In Watchlist"
+                                            : "Add to Watchlist"}
                                     </span>
                                 </button>
-                            )}
-                            </div>
 
-                        {/* Genres */}
-                        {(() => {
-                            const raw: any = subject.genre;
-                            const list = Array.isArray(raw)
-                                ? raw
-                                : typeof raw === "string"
-                                ? raw.split(",").map((g: string) => g.trim()).filter(Boolean)
-                                : [];
-                            if (list.length === 0) return null;
-                            return (
-                                <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-glass-border">
-                                    {list.map((gen, idx) => (
-                                        <span
-                                            key={idx}
-                                            className="text-[9px] font-black uppercase tracking-wider bg-glass-card text-foreground/60 border border-glass-border px-2.5 py-1 rounded-full"
-                                        >
-                                            {gen}
+                                {isSeries && activeEpisode > 0 && (
+                                    <button
+                                        onClick={handleEpisodeBookmarkToggle}
+                                        className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                            isEpisodeBookmarked
+                                                ? "bg-amber-500 text-white shadow-lg shadow-amber-500/25"
+                                                : "bg-white/5 hover:bg-white/10 text-foreground/80 border border-white/10"
+                                        }`}
+                                        title={
+                                            isEpisodeBookmarked
+                                                ? "Bookmarked episode — Click to clear"
+                                                : "Bookmark current episode"
+                                        }
+                                    >
+                                        <Bookmark
+                                            className={`w-3.5 h-3.5 ${
+                                                isEpisodeBookmarked
+                                                    ? "fill-current"
+                                                    : ""
+                                            }`}
+                                        />
+                                        <span>
+                                            {isEpisodeBookmarked
+                                                ? `S${activeSeason} E${activeEpisode} Saved`
+                                                : "Bookmark Episode"}
                                         </span>
-                                    ))}
-                                </div>
-                            );
-                        })()}
-                    </div>
-
-                    {/* Collapsible Details (always visible on xl, toggled on mobile) */}
-                    <div
-                        className={`xl:block space-y-4 ${showInfo ? "block" : "hidden"}`}
-                    >
-                        {/* Synopsis */}
-                        <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-card space-y-2">
-                            <h3 className="font-black text-foreground text-xs uppercase tracking-wider">
-                                Synopsis
-                            </h3>
-                            <p className="text-foreground/65 text-xs sm:text-sm leading-relaxed">
-                                {metadata?.description ||
-                                    subject.description ||
-                                    "No description available."}
-                            </p>
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Cast */}
-                        {stars && stars.length > 0 && (
-                            <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-card space-y-3">
-                                <h3 className="font-black text-foreground text-xs uppercase tracking-wider flex items-center space-x-2">
-                                    <UserCheck className="w-4 h-4 text-primary" />
-                                    <span>Cast & Staff</span>
-                                </h3>
-                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-2.5">
-                                    {stars.slice(0, 8).map((star, idx) => (
-                                        <div
-                                            key={`${star.staffId}-${idx}`}
-                                            className="p-2.5 bg-glass-card border border-glass-border rounded-xl flex flex-col items-center text-center gap-1.5"
-                                        >
-                                            {star.avatarUrl ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img
-                                                    src={star.avatarUrl}
-                                                    alt={star.name}
-                                                    className="w-10 h-10 rounded-full object-cover border border-glass-border"
-                                                    loading="lazy"
-                                                />
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center text-[10px] font-black text-foreground/50">
-                                                    {star.name
-                                                        .slice(0, 2)
-                                                        .toUpperCase()}
-                                                </div>
-                                            )}
-                                            <span className="text-[10px] font-bold text-foreground line-clamp-1 w-full">
-                                                {star.name}
-                                            </span>
-                                            <span className="text-[9px] text-foreground/40 uppercase font-bold tracking-wide line-clamp-1 w-full">
-                                                {star.character ||
-                                                    (star.staffType === 2
-                                                        ? "Director"
-                                                        : "Cast")}
-                                            </span>
-                                        </div>
-                                    ))}
+                        {completeDubs.length > 1 && (
+                            <div className="mt-3 pt-3 border-t border-white/5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/40 mb-2 block">
+                                    Audio Languages
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                    {completeDubs.map((dub) => {
+                                        const isSelected =
+                                            decodeURIComponent(dub.detailPath) ===
+                                            decodeURIComponent(path);
+                                        return (
+                                            <button
+                                                key={dub.detailPath}
+                                                disabled={
+                                                    isSelected ||
+                                                    loadingAudio === dub.detailPath
+                                                }
+                                                onClick={() => {
+                                                    setLoadingAudio(
+                                                        dub.detailPath,
+                                                    );
+                                                    router.push(
+                                                        `/watch/${dub.detailPath}?season=${activeSeason}&episode=${activeEpisode}`,
+                                                    );
+                                                }}
+                                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                                    isSelected
+                                                        ? "bg-primary text-white shadow-md shadow-primary/20"
+                                                        : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
+                                                }`}
+                                            >
+                                                {loadingAudio ===
+                                                dub.detailPath ? (
+                                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                                ) : (
+                                                    <Volume2 className="w-3 h-3 opacity-70" />
+                                                )}
+                                                <span>{dub.lanName}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* ══ RIGHT SIDEBAR — Episodes + Audio ══ */}
-                <div className="w-full xl:w-[360px] 2xl:w-[400px] shrink-0 space-y-4 xl:sticky xl:top-20 xl:self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto no-scrollbar">
-                    {/* Episodes Panel (series only) */}
-                    {isSeries &&
-                        totalEpisodes > 0 &&
-                        (() => {
-                            const watchedCount = watchedEpisodes.size;
-                            const seasonProgressPercent = Math.round(
-                                (watchedCount / totalEpisodes) * 100,
-                            );
-                            return (
-                                <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-card space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <h2 className="font-black text-foreground text-xs uppercase tracking-wider flex items-center space-x-2">
-                                            <Play className="w-3.5 h-3.5 text-primary fill-primary animate-pulse" />
-                                            <span>Episode Guide</span>
-                                        </h2>
-                                        {resource?.seasons &&
-                                            resource.seasons.length > 1 && (
-                                                <div
-                                                    className="relative inline-block text-left"
-                                                    id="season-selector-container"
-                                                >
+                {isSeries && resource?.seasons && resource.seasons.length > 0 && (
+                    <div className="w-full xl:w-80 flex-shrink-0 space-y-4">
+                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
+                                    Episodes ({totalEpisodes})
+                                </h3>
+
+                                {resource.seasons.length > 1 && (
+                                    <div
+                                        id="season-selector-container"
+                                        className="relative"
+                                    >
+                                        <button
+                                            onClick={() =>
+                                                setShowSeasonDropdown(
+                                                    !showSeasonDropdown,
+                                                )
+                                            }
+                                            className="flex items-center space-x-1 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1 rounded-lg text-xs font-bold text-foreground/80 cursor-pointer"
+                                        >
+                                            <span>Season {selectedSeason}</span>
+                                            <ChevronDown className="w-3 h-3" />
+                                        </button>
+
+                                        {showSeasonDropdown && (
+                                            <div className="absolute right-0 mt-1 w-36 py-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                                                {resource.seasons.map((s) => (
                                                     <button
-                                                        onClick={() =>
+                                                        key={s.se}
+                                                        onClick={() => {
+                                                            setSelectedSeason(
+                                                                s.se,
+                                                            );
                                                             setShowSeasonDropdown(
-                                                                !showSeasonDropdown,
-                                                            )
-                                                        }
-                                                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-glass-border bg-glass-card hover:bg-glass-panel text-[10px] font-black text-foreground focus:outline-none cursor-pointer uppercase tracking-wider transition-all"
+                                                                false,
+                                                            );
+                                                        }}
+                                                        className={`w-full text-left px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                                                            s.se ===
+                                                            selectedSeason
+                                                                ? "bg-primary text-white"
+                                                                : "text-foreground/70 hover:bg-white/10"
+                                                        }`}
                                                     >
-                                                        <span>
-                                                            Season{" "}
-                                                            {selectedSeason}
-                                                        </span>
-                                                        <ChevronDown className="w-3 h-3 text-foreground/45 ml-0.5" />
+                                                        Season {s.se}
                                                     </button>
-
-                                                    {showSeasonDropdown && (
-                                                        <div className="absolute right-0 mt-2 w-32 rounded-xl border border-glass-border bg-zinc-950/80 backdrop-blur-md shadow-2xl z-50 py-1 overflow-hidden">
-                                                            {resource.seasons.map(
-                                                                (se) => (
-                                                                    <button
-                                                                        key={
-                                                                            se.se
-                                                                        }
-                                                                        onClick={() => {
-                                                                            setSelectedSeason(
-                                                                                se.se,
-                                                                            );
-                                                                            setShowSeasonDropdown(
-                                                                                false,
-                                                                            );
-                                                                        }}
-                                                                        className={`w-full text-left px-3 py-2 text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-between cursor-pointer ${
-                                                                            selectedSeason ===
-                                                                            se.se
-                                                                                ? "bg-primary text-white"
-                                                                                : "text-foreground/80 hover:text-white hover:bg-white/5"
-                                                                        }`}
-                                                                    >
-                                                                        <span>
-                                                                            Season{" "}
-                                                                            {
-                                                                                se.se
-                                                                            }
-                                                                        </span>
-                                                                        {selectedSeason ===
-                                                                            se.se && (
-                                                                            <Check className="w-3 h-3 text-white" />
-                                                                        )}
-                                                                    </button>
-                                                                ),
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
+                                )}
+                            </div>
 
-                                    {/* Season Progress Bar */}
-                                    <div className="space-y-1.5">
-                                        <div className="flex items-center justify-between text-[9px] font-bold tracking-wider text-foreground/50 uppercase">
-                                            <span>Season Progress</span>
-                                            <span className="text-emerald-400 font-extrabold">
-                                                {watchedCount} / {totalEpisodes}{" "}
-                                                Watched ({seasonProgressPercent}
-                                                %)
-                                            </span>
-                                        </div>
-                                        <div className="w-full h-1.5 bg-foreground/5 rounded-full overflow-hidden border border-glass-border">
-                                            <div
-                                                className="h-full bg-linear-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                                                style={{
-                                                    width: `${seasonProgressPercent}%`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-wider text-foreground/50 border-t border-glass-border/40 pt-3">
-                                        <button
-                                            onClick={toggleActiveEpisodeWatched}
-                                            className={`flex-1 border py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black ${
-                                                watchedEpisodes.has(
-                                                    activeEpisode,
-                                                )
-                                                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-600 hover:bg-emerald-500/20 hover:border-emerald-500/40"
-                                                    : "bg-glass-card border-glass-border text-foreground/60 hover:bg-glass-panel hover:text-foreground"
-                                            }`}
-                                        >
-                                            <Check className="w-2.5 h-2.5" />
-                                            <span>
-                                                {watchedEpisodes.has(
-                                                    activeEpisode,
-                                                )
-                                                    ? "Unmark Episode"
-                                                    : "Mark Episode Watched"}
-                                            </span>
-                                        </button>
-                                        <button
-                                            onClick={handleClearSeasonWatched}
-                                            className="flex-1 bg-glass-card border border-glass-border text-foreground/60 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-500 py-2 px-2.5 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 cursor-pointer font-black"
-                                        >
-                                            <RotateCcw className="w-2.5 h-2.5" />
-                                            <span>Clear Progress</span>
-                                        </button>
-                                    </div>
-
-                                    {/* Show a hint when browsing a different season than what's currently playing */}
-                                    {selectedSeason !== activeSeason && (
-                                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/8 border border-primary/20 text-primary text-[10px] font-bold">
-                                            <Play className="w-3 h-3 fill-primary shrink-0" />
-                                            <span>
-                                                Now playing: S{activeSeason} E
-                                                {activeEpisode} — click below to
-                                                switch
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 sm:gap-2 max-h-56 sm:max-h-64 xl:max-h-[380px] overflow-y-auto pr-0.5 no-scrollbar">
-                                        {Array.from({
-                                            length: totalEpisodes,
-                                        }).map((_, idx) => {
-                                            const epNum = idx + 1;
-                                            const isActive =
-                                                epNum === activeEpisode &&
-                                                selectedSeason === activeSeason;
-                                            const isWatched =
-                                                watchedEpisodes.has(epNum);
-                                            const isFiller =
-                                                fillerEpisodes.has(epNum);
-
-                                            const epHistory =
-                                                episodeProgressMap.get(
-                                                    `${selectedSeason}-${epNum}`,
-                                                );
-                                            const hasProgress =
-                                                !isActive &&
-                                                epHistory &&
-                                                epHistory.progress > 5 &&
-                                                epHistory.progress < 90;
-                                            const progressPercent = epHistory
-                                                ? epHistory.progress
-                                                : 0;
-
-                                            return (
-                                                <button
-                                                    key={epNum}
-                                                    ref={
-                                                        isActive
-                                                            ? activeEpRef
-                                                            : null
-                                                    }
-                                                    onClick={() =>
-                                                        handleEpisodeClick(
-                                                            epNum,
-                                                        )
-                                                    }
-                                                    onContextMenu={(e) =>
-                                                        handleEpisodeContextMenu(
-                                                            e,
-                                                            epNum,
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        loadingEpisode === epNum
-                                                    }
-                                                    className={`relative py-3 rounded-xl text-xs font-black border transition-all duration-300 cursor-pointer overflow-hidden flex items-center justify-center ${
-                                                        loadingEpisode === epNum
-                                                            ? "bg-primary/50 text-white border-primary/30 animate-pulse scale-105"
-                                                            : isActive
-                                                              ? "bg-linear-to-br from-primary to-primary/80 text-white border-primary/20 shadow-md shadow-primary-glow/10 scale-105 font-bold"
-                                                              : isWatched
-                                                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/25 hover:bg-emerald-500/20 hover:text-emerald-700 hover:border-emerald-500/40"
-                                                                : isFiller
-                                                                  ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/25 hover:bg-yellow-500/20 hover:text-yellow-400 hover:border-yellow-500/40"
-                                                                  : "bg-glass-card border-glass-border text-foreground/60 hover:bg-glass-panel hover:text-foreground hover:border-glass-border-hover"
-                                                    }`}
-                                                >
-                                                    {loadingEpisode ===
-                                                    epNum ? (
-                                                        <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto text-white" />
-                                                    ) : (
-                                                        epNum
-                                                    )}
-
-                                                    {/* Partial progress bar */}
-                                                    {hasProgress && (
-                                                        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-foreground/10 overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-linear-to-r from-blue-500 to-sky-400"
-                                                                style={{
-                                                                    width: `${progressPercent}%`,
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    {/* Color legend */}
-                                    <div className="flex items-center justify-center gap-3 mt-2 pt-1.5 border-t border-white/5 flex-wrap">
-                                        <span className="flex items-center gap-1 text-[8px] font-bold text-emerald-500/80">
-                                            <span className="w-2 h-2 rounded-sm bg-emerald-500/30 border border-emerald-500/40 inline-block" />
-                                            Watched
-                                        </span>
-                                        <span className="flex items-center gap-1 text-[8px] font-bold text-yellow-400/80">
-                                            <span className="w-2 h-2 rounded-sm bg-yellow-500/20 border border-yellow-500/30 inline-block" />
-                                            Filler
-                                        </span>
-                                        <span className="flex items-center gap-1 text-[8px] font-bold text-primary/80">
-                                            <span className="w-2 h-2 rounded-sm bg-primary/40 border border-primary/40 inline-block" />
-                                            Current
-                                        </span>
-                                    </div>
-                                    <p className="text-[8px] text-foreground/30 font-medium text-center leading-tight mt-1">
-                                        Right-click (or long-press) any episode
-                                        to toggle watched status manually
-                                    </p>
-                                </div>
-                            );
-                        })()}
-
-                    {/* Audio Tracks Panel */}
-                    {hasDubs && (
-                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-card space-y-3">
-                            <h3 className="font-black text-foreground text-xs uppercase tracking-wider flex items-center space-x-2">
-                                <Volume2 className="w-3.5 h-3.5 text-primary" />
-                                <span>Available Audio Tracks</span>
-                            </h3>
-                            <div className="flex flex-col gap-1.5">
-                                {completeDubs.map((dub, idx) => {
+                            <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-4 gap-2">
+                                {Array.from(
+                                    { length: totalEpisodes },
+                                    (_, i) => i + 1,
+                                ).map((epNum) => {
                                     const isCurrent =
-                                        decodeURIComponent(path) ===
-                                        decodeURIComponent(dub.detailPath);
-                                    const isLoadingThis =
-                                        loadingAudio === dub.detailPath;
+                                        selectedSeason === activeSeason &&
+                                        epNum === activeEpisode;
+                                    const isWatched = watchedEpisodes.has(epNum);
+                                    const isFiller = fillerEpisodes.has(epNum);
+
                                     return (
                                         <button
-                                            key={idx}
-                                            onClick={() =>
-                                                handleAudioClick(dub.detailPath)
+                                            key={epNum}
+                                            ref={isCurrent ? activeEpRef : null}
+                                            disabled={
+                                                loadingEpisode === epNum ||
+                                                isCurrent
                                             }
-                                            disabled={isLoadingThis}
-                                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all duration-200 cursor-pointer ${
-                                                isLoadingThis
-                                                    ? "bg-primary/50 text-white border-primary/30 animate-pulse"
-                                                    : isCurrent
-                                                      ? "bg-primary text-white border-primary/20 shadow-lg shadow-primary-glow"
-                                                      : "bg-glass-card hover:bg-glass-panel border-glass-border text-foreground/70 hover:text-foreground"
+                                            onClick={() => {
+                                                setLoadingEpisode(epNum);
+                                                router.push(
+                                                    `/watch/${path}?season=${selectedSeason}&episode=${epNum}`,
+                                                );
+                                            }}
+                                            className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer ${
+                                                isCurrent
+                                                    ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"
+                                                    : isWatched
+                                                    ? "bg-primary/20 text-primary border border-primary/30"
+                                                    : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
                                             }`}
                                         >
-                                            <span className="flex items-center gap-2">
-                                                {isLoadingThis ? (
-                                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                                ) : (
-                                                    <Volume2
-                                                        className={`w-3 h-3 ${isCurrent ? "opacity-100" : "opacity-40"}`}
-                                                    />
-                                                )}
-                                                {dub.lanName}
-                                            </span>
-                                            {dub.original && (
+                                            {loadingEpisode === epNum ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto text-primary" />
+                                            ) : (
+                                                <span>{epNum}</span>
+                                            )}
+                                            {isFiller && (
                                                 <span
-                                                    className={`text-[9px] uppercase tracking-widest font-black px-1.5 py-0.5 rounded-md ${isCurrent || isLoadingThis ? "bg-white/20" : "bg-primary/10 text-primary"}`}
-                                                >
-                                                    Original
-                                                </span>
-                                            )}
-                                            {isCurrent && !isLoadingThis && (
-                                                <span className="text-[9px] uppercase tracking-widest font-black px-1.5 py-0.5 rounded-md bg-white/20">
-                                                    Playing
-                                                </span>
-                                            )}
-                                            {isLoadingThis && (
-                                                <span className="text-[9px] uppercase tracking-widest font-black px-1.5 py-0.5 rounded-md bg-white/20">
-                                                    Loading
-                                                </span>
+                                                    className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"
+                                                    title="Filler Episode"
+                                                />
                                             )}
                                         </button>
                                     );
                                 })}
                             </div>
                         </div>
-                    )}
-
-                    {/* Movie badge (no episodes, no dubs) */}
-                    {!isSeries && !hasDubs && (
-                        <div className="p-5 rounded-2xl glass-panel border border-glass-border shadow-card text-center space-y-2">
-                            <Film className="w-8 h-8 text-primary/40 mx-auto" />
-                            <span className="inline-flex bg-primary/10 border border-primary/20 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                Feature Film
-                            </span>
-                            <p className="text-xs text-foreground/45 font-medium">
-                                Standalone film — no episodes or alternate audio
-                                tracks available.
-                            </p>
-                        </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
-            {/* Related Content */}
-            {related && related.length > 0 && (
-                <div className="mt-12 border-t border-glass-border pt-8">
-                    <MovieShelf title="You May Also Like" subjects={related} />
+            {related.length > 0 && (
+                <div className="mt-8">
+                    <MovieShelf
+                        title="You Might Also Like"
+                        subjects={related}
+                    />
                 </div>
             )}
-
         </div>
     );
 }
