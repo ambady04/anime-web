@@ -1,13 +1,22 @@
-// ─── KIXO Service Worker v6 ───────────────────────────────────────────────────
+// ─── KIXO Service Worker v7 ───────────────────────────────────────────────────
 // Strategy:
-//   /api/*                    → Network-Only (video & data must bypass SW completely)
-//   /_next/static/*           → Cache-First (hashed filenames, immutable)
-//   External CDN images       → Cache-First (poster URLs are static, never change)
-//   Page navigations          → Network-First (fresh HTML, offline fallback)
+//   hakunaymatata.com (video CDN) → Intercept + re-issue with correct Referer
+//   hakunaymatata.com (images)    → Cache-First
+//   /api/*                        → Network-Only
+//   /_next/static/*               → Cache-First (hashed filenames, immutable)
+//   External CDN images           → Cache-First (poster URLs are static)
+//   Page navigations              → Network-First (fresh HTML, offline fallback)
+//
+// WHY: The video CDN (bcdnxw.hakunaymatata.com) only allows playback when
+// Referer is https://videodownloader.site/. Browsers send the page origin
+// as Referer by default, which the CDN rejects with 429. This SW intercepts
+// those requests and re-issues them with the correct Referer so the CDN
+// hotlink protection passes — without needing any server-side proxy.
 
-const STATIC_CACHE = "kixo-static-v6";
+const STATIC_CACHE = "kixo-static-v7";
 const IMAGE_CACHE = "kixo-images-v1";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
+const VIDEO_REFERER = "https://videodownloader.site/";
 
 self.addEventListener("install", (event) => {
     self.skipWaiting();
@@ -44,40 +53,29 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
     const isSameOrigin = url.origin === self.location.origin;
 
-    // ── Network-Only: All API routes (including /api/video) pass through directly ──
-
-    // ── EXTERNAL CDN IMAGES (poster artwork) ──────────────────────────────────
-    // Movie posters from pbcdnw.aoneroom.com etc. are static URLs that never
-    // change. Cache-First with NO background revalidation — fetch once, done.
-    // This prevents the fetch loop that was killing bandwidth.
-    if (
-        !isSameOrigin &&
-        (url.hostname.includes("aoneroom.com") ||
-            url.hostname.includes("hakunaymatata.com") ||
-            url.hostname.includes("tmdb.org"))
-    ) {
-        // Only cache images, not video streams from these domains
+    // ── VIDEO CDN (hakunaymatata.com) ─────────────────────────────────────────
+    // Re-issue with correct Referer so the CDN hotlink protection passes.
+    // The browser normally sends the page URL as Referer → CDN returns 429.
+    // We override it to videodownloader.site which is in the CDN's allowlist.
+    if (!isSameOrigin && url.hostname.endsWith("hakunaymatata.com")) {
         const accept = event.request.headers.get("accept") || "";
         const isImage =
             accept.includes("image") ||
             /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(url.pathname);
 
         if (isImage) {
+            // Cache poster/thumbnail images from this CDN
             event.respondWith(
                 caches.open(IMAGE_CACHE).then(async (cache) => {
                     const cached = await cache.match(event.request);
                     if (cached) return cached;
-
                     try {
                         const response = await fetch(event.request);
                         if (response.ok) {
                             cache
                                 .put(event.request, response.clone())
                                 .then(() =>
-                                    trimCache(
-                                        IMAGE_CACHE,
-                                        IMAGE_CACHE_MAX_ENTRIES,
-                                    ),
+                                    trimCache(IMAGE_CACHE, IMAGE_CACHE_MAX_ENTRIES),
                                 );
                         }
                         return response;
@@ -88,7 +86,72 @@ self.addEventListener("fetch", (event) => {
             );
             return;
         }
-        // Non-image from CDN (e.g. subtitle files) — don't cache, pass through
+
+        // Video / subtitle / other — re-fetch with correct Referer.
+        // Preserve the Range header so video seeking (byte-range requests) works.
+        event.respondWith(
+            (async () => {
+                const headers = new Headers();
+                headers.set("Accept", event.request.headers.get("accept") || "*/*");
+
+                const rangeHeader = event.request.headers.get("range");
+                if (rangeHeader) {
+                    headers.set("Range", rangeHeader);
+                }
+
+                try {
+                    const response = await fetch(url.href, {
+                        method: "GET",
+                        headers,
+                        referrer: VIDEO_REFERER,
+                        referrerPolicy: "unsafe-url",
+                        mode: "cors",
+                        credentials: "omit",
+                    });
+                    return response;
+                } catch {
+                    // Fallback: pass through original request
+                    return fetch(event.request);
+                }
+            })(),
+        );
+        return;
+    }
+
+    // ── OTHER EXTERNAL CDN IMAGES (aoneroom.com, tmdb.org) ────────────────────
+    if (
+        !isSameOrigin &&
+        (url.hostname.includes("aoneroom.com") ||
+            url.hostname.includes("tmdb.org"))
+    ) {
+        const accept = event.request.headers.get("accept") || "";
+        const isImage =
+            accept.includes("image") ||
+            /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(url.pathname);
+
+        if (isImage) {
+            event.respondWith(
+                caches.open(IMAGE_CACHE).then(async (cache) => {
+                    const cached = await cache.match(event.request);
+                    if (cached) return cached;
+                    try {
+                        const response = await fetch(event.request);
+                        if (response.ok) {
+                            cache
+                                .put(event.request, response.clone())
+                                .then(() =>
+                                    trimCache(IMAGE_CACHE, IMAGE_CACHE_MAX_ENTRIES),
+                                );
+                        }
+                        return response;
+                    } catch {
+                        return cached || new Response("", { status: 408 });
+                    }
+                }),
+            );
+            return;
+        }
+        // Non-image from other CDN (subtitle files etc.) — pass through
         return;
     }
 
@@ -122,14 +185,13 @@ self.addEventListener("fetch", (event) => {
     if (event.request.mode === "navigate") {
         event.respondWith(
             fetch(event.request).catch(() =>
-                caches.match(OFFLINE_PAGE).then((r) => r || Response.error()),
+                caches.match("/").then((r) => r || Response.error()),
             ),
         );
         return;
     }
 
     // ── Cache-First: same-origin static (fonts, icons, manifest) ──────────────
-    // These rarely change. Cache once, no background refetch.
     event.respondWith(
         caches.open(STATIC_CACHE).then(async (cache) => {
             const cached = await cache.match(event.request);
