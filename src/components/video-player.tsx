@@ -402,8 +402,7 @@ export default function VideoPlayer({
     useEffect(() => {
         if (!isHistoryChecked || !activeDownload) return;
 
-        const referer =
-            streamData.stream_domain || "https://videodownloader.site/";
+        const referer = window.location.origin;
         const proxyBase = getVideoProxyBase();
         const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
         const src = useDirect
