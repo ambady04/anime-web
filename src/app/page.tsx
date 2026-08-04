@@ -54,7 +54,7 @@ export default async function HomePage() {
                         <MovieShelf
                             key={`${shelf.opId || "shelf"}-${idx}`}
                             title={shelf.title || "Trending Content"}
-                            subjects={shelf.subjects}
+                            subjects={shelf.subjects || []}
                         />
                     ))}
                 </div>

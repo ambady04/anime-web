@@ -182,37 +182,32 @@ async function fetchFromPool<T>(
 export const movieService = {
     // 1. GET HOME
     getHome: async (adult = false): Promise<HomepageData> => {
-        try {
-            const rawData = await fetchFromPool<any>(
-                "/wefeed-h5api-bff/home?host=h5-api.aoneroom.com",
-                {},
-                { adult, useAuth: false },
-            );
+        const rawData = await fetchFromPool<any>(
+            "/wefeed-h5api-bff/home?host=h5-api.aoneroom.com",
+            {},
+            { adult, useAuth: false },
+        );
 
-            const data = (rawData.data || rawData) as HomepageData;
+        const data = (rawData.data || rawData) as HomepageData;
 
-            if (data.operatingList) {
-                data.operatingList = data.operatingList.map((op) => ({
-                    ...op,
-                    subjects: stripCamSubjects(
-                        (op.subjects || []).filter((s) => Boolean(s.detailPath)),
-                    ),
-                    banner: op.banner
-                        ? {
-                              ...op.banner,
-                              items: (op.banner.items ?? []).filter(
-                                  (b) => !(b.subject && isCamSubject(b.subject)),
-                              ),
-                          }
-                        : op.banner,
-                }));
-            }
-
-            return data;
-        } catch (err) {
-            console.error("getHome error:", err);
-            return { platformList: [], operatingList: [] };
+        if (data.operatingList) {
+            data.operatingList = data.operatingList.map((op) => ({
+                ...op,
+                subjects: stripCamSubjects(
+                    (op.subjects || []).filter((s) => Boolean(s.detailPath)),
+                ),
+                banner: op.banner
+                    ? {
+                          ...op.banner,
+                          items: (op.banner.items ?? []).filter(
+                              (b) => !(b.subject && isCamSubject(b.subject)),
+                          ),
+                      }
+                    : op.banner,
+            }));
         }
+
+        return data;
     },
 
     // 2. SEARCH

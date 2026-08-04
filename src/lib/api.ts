@@ -2,6 +2,21 @@ const isBrowser = typeof window !== "undefined";
 
 export const API_BASE_URL = "";
 
+const H5_BASE = "https://h5-api.aoneroom.com";
+
+const getClientHeaders = (adult = false) => {
+    const playMode = adult ? "0" : "1";
+    return {
+        "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-Play-Mode": playMode,
+        Referer: "https://videodownloader.site/",
+        Origin: "https://videodownloader.site/",
+    };
+};
+
 export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
@@ -48,43 +63,33 @@ export interface BannerItem {
     id: string;
     title: string;
     image: ImageModel;
-    url: string | null;
-    subjectId: string;
-    subjectType: number;
-    subject: Subject | null;
-    detailPath: string;
+    subject?: Subject;
+    detailPath?: string;
 }
 
-export interface FilterItem {
-    title: string;
-    url: string;
-    query: string;
-    image: ImageModel;
-}
-
-export interface PlatformItem {
-    name: string;
-    uploadBy: string;
+export interface BannerModule {
+    items: BannerItem[];
 }
 
 export interface OperatingListItem {
-    type: "BANNER" | "FILTER" | "SUBJECTS_MOVIE" | "CUSTOM" | "SPORT_LIVE";
-    position: number;
+    opId?: string;
     title: string;
-    subjects: Subject[];
-    banner: {
-        items: BannerItem[];
-    } | null;
-    filters: FilterItem[];
-    customData: any;
+    type: string; // e.g. "BANNER", "SUBJECTS_MOVIE", "FILTER"
+    banner?: BannerModule;
+    subjects?: Subject[];
     genreTopId: string | null;
     detailPath: string;
-    opId?: string;
 }
 
 export interface HomepageData {
     platformList: PlatformItem[];
     operatingList: OperatingListItem[];
+}
+
+export interface PlatformItem {
+    id: string;
+    name: string;
+    iconUrl: string;
 }
 
 export interface StarModel {
@@ -129,7 +134,7 @@ export interface ItemDetails {
     isForbid: boolean;
     watchTimeLimit: number;
     related: Subject[];
-    dubs?: Subject[];
+    dubs?: DubModel[];
 }
 
 export interface DownloadLink {
@@ -160,7 +165,7 @@ export interface StreamData {
 async function fetchFromApi<T>(
     endpoint: string,
     params: Record<string, string | number | boolean> = {},
-    maxRetries = 3,
+    maxRetries = 2,
 ): Promise<T> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -183,9 +188,9 @@ async function fetchFromApi<T>(
                 return (await response.json()) as T;
             }
 
-            const isTransient = [404, 502, 503, 504].includes(response.status);
+            const isTransient = [404, 429, 500, 502, 503, 504].includes(response.status);
             if (isTransient && attempt < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 300 * 3 ** attempt));
+                await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
                 continue;
             }
 
@@ -195,7 +200,7 @@ async function fetchFromApi<T>(
         } catch (err: unknown) {
             lastError = err instanceof Error ? err : new Error(String(err));
             if (attempt < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 300 * 3 ** attempt));
+                await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
                 continue;
             }
             throw lastError;
@@ -237,7 +242,26 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getHome(adult);
         }
-        return fetchFromApi<HomepageData>("/api/home", { adult });
+        try {
+            const res = await fetchFromApi<HomepageData>("/api/home", { adult });
+            if (res && res.operatingList && res.operatingList.length > 0) return res;
+        } catch {
+            // Direct browser fallback
+        }
+        const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/home?host=h5-api.aoneroom.com`, {
+            headers: getClientHeaders(adult),
+        });
+        const json: any = await directRes.json();
+        const data = (json.data || json) as HomepageData;
+        if (data.operatingList) {
+            data.operatingList = data.operatingList.map((op) => ({
+                ...op,
+                subjects: stripCamSubjects(
+                    (op.subjects || []).filter((s) => Boolean(s.detailPath)),
+                ),
+            }));
+        }
+        return data;
     },
 
     getDetails: async (path: string, adult = false): Promise<ItemDetails> => {
@@ -245,7 +269,17 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getDetails(path, adult);
         }
-        return fetchFromApi<ItemDetails>("/api/details", { path, adult });
+        try {
+            const res = await fetchFromApi<ItemDetails>("/api/details", { path, adult });
+            if (res && res.subject) return res;
+        } catch {
+            // Direct browser fallback
+        }
+        const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(path)}`, {
+            headers: getClientHeaders(adult),
+        });
+        const json: any = await directRes.json();
+        return (json.data || json) as ItemDetails;
     },
 
     getStream: async (
@@ -258,11 +292,53 @@ export const movieApi = {
             const { streamService } = await import("./server/stream-service");
             return streamService.getStream(path, season, episode, adult);
         }
-        const params: Record<string, string | number | boolean> = { path };
-        if (season) params.season = season;
-        if (episode) params.episode = episode;
-        if (adult) params.adult = adult;
-        return fetchFromApi<StreamData>("/api/stream", params);
+        try {
+            const params: Record<string, string | number | boolean> = { path };
+            if (season) params.season = season;
+            if (episode) params.episode = episode;
+            if (adult) params.adult = adult;
+            const res = await fetchFromApi<StreamData>("/api/stream", params);
+            if (res && res.downloads && res.downloads.length > 0) return res;
+        } catch {
+            // Direct browser fallback
+        }
+
+        const details = await movieApi.getDetails(path, adult);
+        const subjectId = details.subject?.subjectId;
+        if (!subjectId) {
+            return { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" };
+        }
+
+        let token = "";
+        try {
+            const tokenRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Referer: "https://videodownloader.site/" },
+                body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
+            });
+            const xUser = tokenRes.headers.get("x-user");
+            if (xUser) token = JSON.parse(xUser).token;
+        } catch {
+            // Ignore token fetch error
+        }
+
+        const dlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${season}&ep=${episode}&detailPath=${encodeURIComponent(path)}`, {
+            headers: {
+                ...getClientHeaders(adult),
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
+                ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
+            },
+        });
+        const dlJson: any = await dlRes.json();
+        const data = dlJson.data || dlJson;
+        return {
+            downloads: data.downloads || [],
+            captions: data.captions || [],
+            hasResource: true,
+            limited: Boolean(data.limited),
+            limitedCode: data.limitedCode || "",
+            stream_domain: "https://videodownloader.site/",
+        };
     },
 
     search: async (
@@ -275,12 +351,44 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.search(q, page, type, adult);
         }
-        return fetchFromApi<{ items: Subject[] }>("/api/search", {
-            q,
-            page,
-            type: type ?? "",
-            adult,
+        try {
+            const res = await fetchFromApi<{ items: Subject[] }>("/api/search", {
+                q,
+                page,
+                type: type ?? "",
+                adult,
+            });
+            if (res && res.items && res.items.length > 0) return res;
+        } catch {
+            // Direct browser fallback
+        }
+
+        let token = "";
+        try {
+            const tokenRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Referer: "https://videodownloader.site/" },
+                body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
+            });
+            const xUser = tokenRes.headers.get("x-user");
+            if (xUser) token = JSON.parse(xUser).token;
+        } catch {
+            // Ignore
+        }
+
+        const searchRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...getClientHeaders(adult),
+                ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
+            },
+            body: JSON.stringify({ keyword: q, page, perPage: 24, subjectType: type ?? 0 }),
         });
+        const json: any = await searchRes.json();
+        const data = json.data || json;
+        const rawItems = data.items || [];
+        return { items: stripCamSubjects(rawItems.filter((i: Subject) => Boolean(i?.detailPath))) };
     },
 
     getCategory: async (
@@ -302,20 +410,36 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getCategory(name, page, query, adult);
         }
-        return fetchFromApi<{
+        try {
+            const res = await fetchFromApi<{
+                pager: {
+                    hasMore: boolean;
+                    nextPage: number;
+                    page: number;
+                    perPage: number;
+                    totalCount: number;
+                };
+                items: Subject[];
+            }>("/api/category", {
+                name,
+                page,
+                query: query ?? "",
+                adult,
+            });
+            if (res && res.items && res.items.length > 0) return res;
+        } catch {
+            // Direct browser fallback
+        }
+        const searchRes = await movieApi.search(name, page, undefined, adult);
+        return {
             pager: {
-                hasMore: boolean;
-                nextPage: number;
-                page: number;
-                perPage: number;
-                totalCount: number;
-            };
-            items: Subject[];
-        }>("/api/category", {
-            name,
-            page,
-            query: query ?? "",
-            adult,
-        });
+                hasMore: searchRes.items.length >= 20,
+                nextPage: page + 1,
+                page,
+                perPage: 20,
+                totalCount: searchRes.items.length,
+            },
+            items: searchRes.items,
+        };
     },
 };
