@@ -165,7 +165,7 @@ export interface StreamData {
 async function fetchFromApi<T>(
     endpoint: string,
     params: Record<string, string | number | boolean> = {},
-    maxRetries = 2,
+    maxRetries = 1,
 ): Promise<T> {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, val]) => {
@@ -188,19 +188,13 @@ async function fetchFromApi<T>(
                 return (await response.json()) as T;
             }
 
-            const isTransient = [404, 429, 500, 502, 503, 504].includes(response.status);
-            if (isTransient && attempt < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
-                continue;
-            }
-
             throw new Error(
                 `Failed to fetch API endpoint ${endpoint}: ${response.statusText}`,
             );
         } catch (err: unknown) {
             lastError = err instanceof Error ? err : new Error(String(err));
             if (attempt < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 200 * 2 ** attempt));
+                await new Promise((r) => setTimeout(r, 100));
                 continue;
             }
             throw lastError;
@@ -309,6 +303,10 @@ export const movieApi = {
             return { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" };
         }
 
+        const isSeries = isSeriesType(details.subject?.subjectType);
+        const reqSeason = season > 0 ? season : (isSeries ? 1 : 0);
+        const reqEpisode = episode > 0 ? episode : (isSeries ? 1 : 0);
+
         let token = "";
         try {
             const tokenRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`, {
@@ -319,10 +317,10 @@ export const movieApi = {
             const xUser = tokenRes.headers.get("x-user");
             if (xUser) token = JSON.parse(xUser).token;
         } catch {
-            // Ignore token fetch error
+            // Ignore
         }
 
-        const dlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${season}&ep=${episode}&detailPath=${encodeURIComponent(path)}`, {
+        const dlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`, {
             headers: {
                 ...getClientHeaders(adult),
                 "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
@@ -331,8 +329,38 @@ export const movieApi = {
         });
         const dlJson: any = await dlRes.json();
         const data = dlJson.data || dlJson;
+        let downloads: DownloadLink[] = data.downloads || [];
+
+        // Fallback to dub tracks if primary download is empty for series
+        if (downloads.length === 0 && details.dubs && details.dubs.length > 0) {
+            for (const dub of details.dubs) {
+                if (!dub.detailPath || dub.detailPath === path) continue;
+                try {
+                    const dubDetails = await movieApi.getDetails(dub.detailPath, adult);
+                    const dubSubId = dubDetails.subject?.subjectId;
+                    if (!dubSubId) continue;
+
+                    const dubDlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${dubSubId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(dub.detailPath)}`, {
+                        headers: {
+                            ...getClientHeaders(adult),
+                            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
+                            ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
+                        },
+                    });
+                    const dubJson: any = await dubDlRes.json();
+                    const dubData = dubJson.data || dubJson;
+                    if (dubData.downloads && dubData.downloads.length > 0) {
+                        downloads = dubData.downloads;
+                        break;
+                    }
+                } catch {
+                    // Ignore dub error
+                }
+            }
+        }
+
         return {
-            downloads: data.downloads || [],
+            downloads,
             captions: data.captions || [],
             hasResource: true,
             limited: Boolean(data.limited),
