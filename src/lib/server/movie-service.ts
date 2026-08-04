@@ -7,7 +7,30 @@ import {
     OperatingListItem,
 } from "../api";
 
-const H5_HOSTS = ["https://h5-api.aoneroom.com"];
+// Real API host pool — same as MovieBox-Tui open-source client.
+// These are mobile/app API endpoints, NOT rate-limited like h5-api.aoneroom.com.
+const H5_HOSTS = [
+    "https://api6.aoneroom.com",
+    "https://api5.aoneroom.com",
+    "https://api4.aoneroom.com",
+    "https://api4sg.aoneroom.com",
+    "https://api3.aoneroom.com",
+    "https://api6sg.aoneroom.com",
+    "https://api.inmoviebox.com",
+    // Fallback to h5 web endpoint
+    "https://h5-api.aoneroom.com",
+];
+
+// Spoof a random residential IP to bypass Cloudflare datacenter rate-limits.
+function randomSpoofedIp(): string {
+    const ranges = [
+        [1, 9], [11, 126], [128, 169], [171, 172], [174, 191], [193, 197], [199, 203],
+    ];
+    const range = ranges[Math.floor(Math.random() * ranges.length)];
+    const first = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+    const rest = () => Math.floor(Math.random() * 255);
+    return `${first}.${rest()}.${rest()}.${rest()}`;
+}
 
 let cachedAuthToken: string | null = null;
 
@@ -63,6 +86,7 @@ export async function getAuthToken(): Promise<string | null> {
 const getPublicHeaders = (adult = false) => {
     const playMode = adult ? "0" : "1";
     const ts = Date.now();
+    const spoofedIp = randomSpoofedIp();
     return {
         "User-Agent":
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
@@ -79,6 +103,9 @@ const getPublicHeaders = (adult = false) => {
             region: "",
             lang: "en",
         }),
+        "X-Forwarded-For": spoofedIp,
+        "X-Real-IP": spoofedIp,
+        "CF-Connecting-IP": spoofedIp,
     };
 };
 
@@ -86,6 +113,7 @@ const getHeaders = async (adult = false) => {
     const playMode = adult ? "0" : "1";
     const ts = Date.now();
     const token = await getAuthToken();
+    const spoofedIp = randomSpoofedIp();
 
     const headers: Record<string, string> = {
         "User-Agent":
@@ -103,6 +131,9 @@ const getHeaders = async (adult = false) => {
             region: "",
             lang: "en",
         }),
+        "X-Forwarded-For": spoofedIp,
+        "X-Real-IP": spoofedIp,
+        "CF-Connecting-IP": spoofedIp,
     };
 
     if (token) {

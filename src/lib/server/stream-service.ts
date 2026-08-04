@@ -2,7 +2,29 @@ import crypto from "crypto";
 import { StreamData, DownloadLink, Caption } from "../api";
 import { movieService, getAuthToken } from "./movie-service";
 
-const MIRRORS = ["h5-api.aoneroom.com"];
+// Real API host pool — sourced from MovieBox-Tui open-source client.
+// These mobile/app API endpoints are NOT rate-limited like the h5-api.aoneroom.com web endpoint.
+const MIRRORS = [
+    "api6.aoneroom.com",
+    "api5.aoneroom.com",
+    "api4.aoneroom.com",
+    "api4sg.aoneroom.com",
+    "api3.aoneroom.com",
+    "api6sg.aoneroom.com",
+    "api.inmoviebox.com",
+];
+
+// Spoof a random residential IP to avoid datacenter IP blocks.
+// This mirrors the `random_spoofed_ip()` approach in MovieBox-Tui.
+function randomSpoofedIp(): string {
+    const ranges = [
+        [1, 9], [11, 126], [128, 169], [171, 172], [174, 191], [193, 197], [199, 203],
+    ];
+    const range = ranges[Math.floor(Math.random() * ranges.length)];
+    const first = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+    const rest = () => Math.floor(Math.random() * 255);
+    return `${first}.${rest()}.${rest()}.${rest()}`;
+}
 
 function generateXClientToken(tsMs = Date.now()): string {
     const ts = String(tsMs);
@@ -29,6 +51,7 @@ const getStreamHeaders = async (host: string, referer: string, adult = false) =>
     const playMode = adult ? "0" : "1";
     const ts = Date.now();
     const token = await getAuthToken();
+    const spoofedIp = randomSpoofedIp();
 
     const headers: Record<string, string> = {
         Referer: referer || "https://videodownloader.site/",
@@ -46,6 +69,10 @@ const getStreamHeaders = async (host: string, referer: string, adult = false) =>
             region: "",
             lang: "en",
         }),
+        // Spoof a residential IP to bypass datacenter (Cloudflare) IP rate-limits
+        "X-Forwarded-For": spoofedIp,
+        "X-Real-IP": spoofedIp,
+        "CF-Connecting-IP": spoofedIp,
     };
 
     if (token) {
