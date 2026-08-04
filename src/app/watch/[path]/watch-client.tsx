@@ -425,7 +425,7 @@ export default function WatchClient({
         setLoadingEpisode(ep);
         setActiveSeason(se);
         setActiveEpisode(ep);
-        setStream(null);
+
         if (typeof window !== "undefined") {
             window.history.pushState({}, "", `/watch/${path}?season=${se}&episode=${ep}`);
         }
