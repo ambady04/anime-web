@@ -7,7 +7,6 @@ const REFERER_POOL = [
     "https://h5.aoneroom.com/",
     "https://moviebox.ph/",
     "https://www.movieboxpro.app/",
-    "https://fmoviesunblocked.net/",
 ];
 
 export async function OPTIONS() {
@@ -71,8 +70,8 @@ export async function GET(req: NextRequest) {
             return new NextResponse(upstream.body, { status: upstream.status, headers: resHeaders });
         }
 
-        // Direct CDN Byte Proxying (Lavf UA + Referer Pool)
-        const referersToTry = [undefined, reqReferer, ...REFERER_POOL];
+        // Always put reqReferer and videodownloader.site FIRST to avoid 429 CDN blocks
+        const referersToTry = [reqReferer, "https://videodownloader.site/", ...REFERER_POOL];
         const rangeHeader = req.headers.get("range");
 
         let lastStatus = 0;
@@ -80,7 +79,8 @@ export async function GET(req: NextRequest) {
 
         for (const ref of referersToTry) {
             const headers: Record<string, string> = {
-                "User-Agent": "Lavf/58.29.100",
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 Accept: "*/*",
                 "Accept-Encoding": "identity",
             };
