@@ -151,8 +151,38 @@ export const streamService = {
             throw new Error("Empty or invalid path");
         }
 
+        // 0. Primary: Fetch stream data from Vercel API (api.abisolutions.online)
+        // Vercel server IP is not rate-limited by upstream API.
+        try {
+            const vUrl = new URL("https://api.abisolutions.online/api/stream");
+            vUrl.searchParams.set("path", path);
+            if (season) vUrl.searchParams.set("season", String(season));
+            if (episode) vUrl.searchParams.set("episode", String(episode));
+            if (adult) vUrl.searchParams.set("adult", "true");
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+            const vRes = await fetch(vUrl.toString(), {
+                headers: { Accept: "application/json" },
+                signal: controller.signal,
+                cache: "no-store",
+            });
+            clearTimeout(timeoutId);
+
+            if (vRes.ok) {
+                const vData: any = await vRes.json();
+                if (vData && Array.isArray(vData.downloads) && vData.downloads.length > 0) {
+                    return vData as StreamData;
+                }
+            }
+        } catch {
+            // Ignore Vercel API errors and proceed to mirror fallback
+        }
+
         // 1. Get subject details to retrieve subjectId and dub information
         const details = await movieService.getDetails(path, adult);
+
         const subject = details.subject;
 
         if (!subject || !subject.subjectId) {

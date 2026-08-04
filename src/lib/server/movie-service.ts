@@ -207,8 +207,25 @@ async function fetchFromPool<T>(
         }
     }
 
+    // Fallback: try Vercel backend if mirror hosts are rate limited / blocked
+    try {
+        if (endpointPath.includes("/home")) {
+            const vRes = await fetch(`https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`, { cache: "no-store" });
+            if (vRes.ok) return (await vRes.json()) as T;
+        } else if (endpointPath.includes("/detail") && params.detailPath) {
+            const vRes = await fetch(`https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`, { cache: "no-store" });
+            if (vRes.ok) return (await vRes.json()) as T;
+        } else if (endpointPath.includes("/search") && body?.keyword) {
+            const vRes = await fetch(`https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`, { cache: "no-store" });
+            if (vRes.ok) return (await vRes.json()) as T;
+        }
+    } catch {
+        // Ignore fallback error
+    }
+
     throw lastError || new Error(`All media mirrors exhausted for ${endpointPath}`);
 }
+
 
 export const movieService = {
     // 1. GET HOME

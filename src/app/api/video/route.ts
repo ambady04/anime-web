@@ -42,20 +42,18 @@ export async function GET(req: NextRequest) {
         }
 
         const rangeHeader = req.headers.get("range");
+        const vercelProxyUrl = `https://api.abisolutions.online/api/video?url=${encodeURIComponent(url)}`;
+
         const reqHeaders: Record<string, string> = {
-            "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             Accept: "*/*",
-            "Accept-Encoding": "identity",
-            Referer: "https://videodownloader.site/",
-            Origin: "https://videodownloader.site/",
         };
 
         if (rangeHeader) {
             reqHeaders["Range"] = rangeHeader;
         }
 
-        const upstreamResp = await fetch(url, {
+        const upstreamResp = await fetch(vercelProxyUrl, {
             headers: reqHeaders,
             cache: "no-store",
         });
@@ -93,6 +91,7 @@ export async function GET(req: NextRequest) {
             status: upstreamResp.status,
             headers: resHeaders,
         });
+
     } catch (err: any) {
         return new NextResponse(null, {
             status: 200,
