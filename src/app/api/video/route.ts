@@ -18,20 +18,26 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
     try {
-        const { searchParams } = req.nextUrl;
-        let url = searchParams.get("url");
+        let url = "";
+        const fullReqUrl = req.url;
+        const urlParamIdx = fullReqUrl.indexOf("url=");
+        if (urlParamIdx !== -1) {
+            let rawVal = fullReqUrl.slice(urlParamIdx + 4);
+            for (const delim of ["&referer=", "&mode="]) {
+                const dIdx = rawVal.indexOf(delim);
+                if (dIdx !== -1) {
+                    rawVal = rawVal.slice(0, dIdx);
+                }
+            }
+            try {
+                url = decodeURIComponent(rawVal);
+            } catch {
+                url = rawVal;
+            }
+        }
 
         if (!url) {
-            const rawQs = req.nextUrl.search;
-            if (rawQs.includes("url=")) {
-                let part = rawQs.split("url=")[1];
-                for (const delim of ["&referer=", "&mode="]) {
-                    if (part.includes(delim)) {
-                        part = part.split(delim)[0];
-                    }
-                }
-                url = decodeURIComponent(part);
-            }
+            url = req.nextUrl.searchParams.get("url") || "";
         }
 
         if (!url) {
@@ -40,6 +46,7 @@ export async function GET(req: NextRequest) {
                 { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
             );
         }
+
 
         const rangeHeader = req.headers.get("range");
         const vercelProxyUrl = `https://api.abisolutions.online/api/video?url=${encodeURIComponent(url)}`;
