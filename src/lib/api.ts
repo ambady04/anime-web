@@ -21,6 +21,15 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
+    // When deployed on Cloudflare Workers (or any edge host), use the current origin
+    if (typeof window !== "undefined") {
+        try {
+            const origin = window.location.origin;
+            // If the origin already includes '/api/video', avoid duplication
+            return `${origin}/api/video`;
+        } catch {}
+    }
+    // Fallback for local development
     return "/api/video";
 }
 
