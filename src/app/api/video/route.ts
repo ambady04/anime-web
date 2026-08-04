@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const REFERER_POOL = [
-    "https://videodownloader.site/",
-    "https://h5.aoneroom.com/",
-    "https://moviebox.ph/",
-    "https://www.movieboxpro.app/",
-];
-
 export async function OPTIONS() {
     return new NextResponse(null, {
         status: 204,
@@ -27,7 +20,6 @@ export async function GET(req: NextRequest) {
     try {
         const { searchParams } = req.nextUrl;
         let url = searchParams.get("url");
-        const reqReferer = searchParams.get("referer") || "https://videodownloader.site/";
 
         if (!url) {
             const rawQs = req.nextUrl.search;
@@ -49,70 +41,41 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // If an explicit external proxy URL is specified, forward to it
-        if (process.env.VIDEO_PROXY_URL) {
-            const upstreamUrl = `${process.env.VIDEO_PROXY_URL}?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(reqReferer)}`;
-            const reqHeaders: Record<string, string> = { Accept: "*/*" };
-            const range = req.headers.get("range");
-            if (range) reqHeaders["Range"] = range;
-
-            const upstream = await fetch(upstreamUrl, {
-                headers: reqHeaders,
-                signal: req.signal,
-            });
-
-            const resHeaders = new Headers();
-            for (const h of ["content-type", "content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
-                const v = upstream.headers.get(h);
-                if (v) resHeaders.set(h, v);
-            }
-            resHeaders.set("Access-Control-Allow-Origin", "*");
-            return new NextResponse(upstream.body, { status: upstream.status, headers: resHeaders });
-        }
-
-        // Always put reqReferer and videodownloader.site FIRST to avoid 429 CDN blocks
-        const referersToTry = [reqReferer, "https://videodownloader.site/", ...REFERER_POOL];
         const rangeHeader = req.headers.get("range");
+        const reqHeaders: Record<string, string> = {
+            "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            Accept: "*/*",
+            "Accept-Encoding": "identity",
+            Referer: "https://videodownloader.site/",
+            Origin: "https://videodownloader.site/",
+        };
 
-        let lastStatus = 0;
-        let upstreamResp: Response | null = null;
-
-        for (const ref of referersToTry) {
-            const headers: Record<string, string> = {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "*/*",
-                "Accept-Encoding": "identity",
-            };
-            if (ref) headers["Referer"] = ref;
-            if (rangeHeader) headers["Range"] = rangeHeader;
-
-            try {
-                const resp = await fetch(url, {
-                    headers,
-                    signal: req.signal,
-                    cache: "no-store",
-                });
-
-                lastStatus = resp.status;
-                if (resp.ok || resp.status === 206) {
-                    upstreamResp = resp;
-                    break;
-                }
-            } catch {
-                continue;
-            }
+        if (rangeHeader) {
+            reqHeaders["Range"] = rangeHeader;
         }
 
-        if (!upstreamResp) {
+        const upstreamResp = await fetch(url, {
+            headers: reqHeaders,
+            cache: "no-store",
+        });
+
+        if (!upstreamResp.ok && upstreamResp.status !== 206) {
             return NextResponse.json(
-                { error: "cdn_rejected", cdnStatus: lastStatus || 502 },
+                { error: "cdn_rejected", status: upstreamResp.status },
                 { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
             );
         }
 
         const resHeaders = new Headers();
-        for (const h of ["content-type", "content-range", "content-length", "accept-ranges", "etag", "last-modified"]) {
+        for (const h of [
+            "content-type",
+            "content-range",
+            "content-length",
+            "accept-ranges",
+            "etag",
+            "last-modified",
+        ]) {
             const v = upstreamResp.headers.get(h);
             if (v) resHeaders.set(h, v);
         }
@@ -120,7 +83,10 @@ export async function GET(req: NextRequest) {
         if (!resHeaders.has("accept-ranges")) resHeaders.set("accept-ranges", "bytes");
         if (!resHeaders.has("content-type")) resHeaders.set("content-type", "video/mp4");
         resHeaders.set("Access-Control-Allow-Origin", "*");
-        resHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Type");
+        resHeaders.set(
+            "Access-Control-Expose-Headers",
+            "Content-Range, Content-Length, Accept-Ranges, Content-Type",
+        );
         resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
 
         return new NextResponse(upstreamResp.body, {
@@ -128,15 +94,9 @@ export async function GET(req: NextRequest) {
             headers: resHeaders,
         });
     } catch (err: any) {
-        const isAbort =
-            req.signal.aborted ||
-            (err instanceof Error && (err.name === "AbortError" || err.message.includes("closed")));
-
-        if (isAbort) return new NextResponse(null, { status: 499 });
-
-        return NextResponse.json(
-            { error: "internal_error", message: err?.message || String(err) },
-            { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
-        );
+        return new NextResponse(null, {
+            status: 200,
+            headers: { "Access-Control-Allow-Origin": "*" },
+        });
     }
 }
