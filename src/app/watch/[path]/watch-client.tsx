@@ -420,6 +420,25 @@ export default function WatchClient({
         );
     }
 
+    const handleEpisodeChange = async (se: number, ep: number) => {
+        if (loadingEpisode === ep && activeSeason === se && activeEpisode === ep) return;
+        setLoadingEpisode(ep);
+        setActiveSeason(se);
+        setActiveEpisode(ep);
+        setStream(null);
+        if (typeof window !== "undefined") {
+            window.history.pushState({}, "", `/watch/${path}?season=${se}&episode=${ep}`);
+        }
+        try {
+            const newStream = await movieApi.getStream(path, se, ep);
+            setStream(newStream);
+        } catch (err) {
+            console.error("Episode stream fetch error:", err);
+        } finally {
+            setLoadingEpisode(null);
+        }
+    };
+
     return (
         <div className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-8 2xl:px-12 py-3 sm:py-4 animate-fade-in relative z-20">
             <button
@@ -440,6 +459,16 @@ export default function WatchClient({
                         isSeries={Boolean(isSeries)}
                         season={activeSeason}
                         episode={activeEpisode}
+                        onNextEpisode={() => {
+                            if (activeEpisode < totalEpisodes) {
+                                handleEpisodeChange(activeSeason, activeEpisode + 1);
+                            }
+                        }}
+                        onPrevEpisode={() => {
+                            if (activeEpisode > 1) {
+                                handleEpisodeChange(activeSeason, activeEpisode - 1);
+                            }
+                        }}
                     />
 
                     <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl">
@@ -634,12 +663,7 @@ export default function WatchClient({
                                                 loadingEpisode === epNum ||
                                                 isCurrent
                                             }
-                                            onClick={() => {
-                                                setLoadingEpisode(epNum);
-                                                router.push(
-                                                    `/watch/${path}?season=${selectedSeason}&episode=${epNum}`,
-                                                );
-                                            }}
+                                            onClick={() => handleEpisodeChange(selectedSeason, epNum)}
                                             className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer ${
                                                 isCurrent
                                                     ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"

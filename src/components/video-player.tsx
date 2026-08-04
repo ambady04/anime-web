@@ -405,7 +405,9 @@ export default function VideoPlayer({
         const referer =
             streamData.stream_domain || "https://videodownloader.site/";
         const proxyBase = getVideoProxyBase();
-        const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
+        const useDirect =
+            directFallbackUrlsRef.current.has(activeDownload.url) ||
+            !activeDownload.url.includes("m3u8");
         const src = useDirect
             ? activeDownload.url
             : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
