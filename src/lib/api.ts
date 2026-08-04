@@ -186,10 +186,17 @@ async function fetchFromApi<T>(
     const queryString = searchParams.toString();
     const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
 
+    // Use the Vercel backend when configured — the Cloudflare Worker IPs are
+    // rate-limited by h5-api.aoneroom.com but Vercel Mumbai (bom1) is not.
+    const apiBase = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL)
+        ? process.env.NEXT_PUBLIC_API_URL
+        : "";
+    const url = apiBase ? `${apiBase}${fullEndpoint}` : fullEndpoint;
+
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const response = await fetch(fullEndpoint, {
+            const response = await fetch(url, {
                 cache: "no-store",
             });
 
@@ -203,6 +210,7 @@ async function fetchFromApi<T>(
         } catch (err: unknown) {
             lastError = err instanceof Error ? err : new Error(String(err));
             if (attempt < maxRetries - 1) {
+
                 await new Promise((r) => setTimeout(r, 100));
                 continue;
             }
@@ -286,22 +294,18 @@ export const movieApi = {
             const { streamService } = await import("./server/stream-service");
             return streamService.getStream(path, season, episode, adult);
         }
-        // Skip the server-side /api/stream route entirely in the browser.
-        // Cloudflare Worker egress IPs are rate-limited (429) by the upstream CDN,
-        // so all requests through the server fail. Go direct from the browser instead.
-        // (The try/catch below is left intentionally so future server routes can be re-enabled.)
-        const _skipServerRoute = true;
-        if (!_skipServerRoute) {
-            try {
-                const params: Record<string, string | number | boolean> = { path };
-                if (season) params.season = season;
-                if (episode) params.episode = episode;
-                if (adult) params.adult = adult;
-                const res = await fetchFromApi<StreamData>("/api/stream", params);
-                if (res && res.downloads && res.downloads.length > 0) return res;
-            } catch {
-                // Direct browser fallback
-            }
+
+        // Use fetchFromApi which routes to Vercel (api.abisolutions.online) via
+        // NEXT_PUBLIC_API_URL. Vercel can reach h5-api.aoneroom.com without 429.
+        try {
+            const params: Record<string, string | number | boolean> = { path };
+            if (season) params.season = season;
+            if (episode) params.episode = episode;
+            if (adult) params.adult = adult;
+            const res = await fetchFromApi<StreamData>("/api/stream", params);
+            if (res && res.downloads && res.downloads.length > 0) return res;
+        } catch {
+            // Direct browser fallback — Vercel API failed, try h5-api directly
         }
 
         const details = await movieApi.getDetails(path, adult);
