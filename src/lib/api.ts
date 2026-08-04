@@ -245,12 +245,8 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getHome(adult);
         }
-        try {
-            const res = await fetchFromApi<HomepageData>("/api/home", { adult });
-            if (res && res.operatingList && res.operatingList.length > 0) return res;
-        } catch {
-            // Direct browser fallback
-        }
+        // Skip the server-side /api/home route — Cloudflare Worker IPs are 429-blocked by upstream CDN.
+        // Go directly from the browser to the CDN instead.
         const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/home?host=h5-api.aoneroom.com`, {
             headers: getClientHeaders(adult),
         });
@@ -272,12 +268,7 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getDetails(path, adult);
         }
-        try {
-            const res = await fetchFromApi<ItemDetails>("/api/details", { path, adult });
-            if (res && res.subject) return res;
-        } catch {
-            // Direct browser fallback
-        }
+        // Skip server-side /api/details route — Cloudflare Worker IPs are 429-blocked.
         const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(path)}`, {
             headers: getClientHeaders(adult),
         });
@@ -295,15 +286,22 @@ export const movieApi = {
             const { streamService } = await import("./server/stream-service");
             return streamService.getStream(path, season, episode, adult);
         }
-        try {
-            const params: Record<string, string | number | boolean> = { path };
-            if (season) params.season = season;
-            if (episode) params.episode = episode;
-            if (adult) params.adult = adult;
-            const res = await fetchFromApi<StreamData>("/api/stream", params);
-            if (res && res.downloads && res.downloads.length > 0) return res;
-        } catch {
-            // Direct browser fallback
+        // Skip the server-side /api/stream route entirely in the browser.
+        // Cloudflare Worker egress IPs are rate-limited (429) by the upstream CDN,
+        // so all requests through the server fail. Go direct from the browser instead.
+        // (The try/catch below is left intentionally so future server routes can be re-enabled.)
+        const _skipServerRoute = true;
+        if (!_skipServerRoute) {
+            try {
+                const params: Record<string, string | number | boolean> = { path };
+                if (season) params.season = season;
+                if (episode) params.episode = episode;
+                if (adult) params.adult = adult;
+                const res = await fetchFromApi<StreamData>("/api/stream", params);
+                if (res && res.downloads && res.downloads.length > 0) return res;
+            } catch {
+                // Direct browser fallback
+            }
         }
 
         const details = await movieApi.getDetails(path, adult);
