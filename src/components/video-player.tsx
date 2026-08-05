@@ -197,6 +197,12 @@ export default function VideoPlayer({
         }
         return "22px";
     });
+    const [subtitleFont, setSubtitleFont] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("player-subtitle-font") || "geist";
+        }
+        return "geist";
+    });
 
     // Mobile gesture states
     const [gestureIndicator, setGestureIndicator] = useState<{
@@ -240,6 +246,45 @@ export default function VideoPlayer({
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
     }, [subtitleSize]);
+
+    useEffect(() => {
+        localStorage.setItem("player-subtitle-font", subtitleFont);
+    }, [subtitleFont]);
+
+    // Real-time listener for subtitle font & size updates from preferences modal
+    useEffect(() => {
+        const handleFontChange = (e: Event) => {
+            const customEv = e as CustomEvent;
+            if (customEv.detail) {
+                setSubtitleFont(customEv.detail);
+            } else {
+                const font = localStorage.getItem("player-subtitle-font");
+                if (font) setSubtitleFont(font);
+            }
+        };
+
+        const handleSizeChange = (e: Event) => {
+            const customEv = e as CustomEvent;
+            if (customEv.detail) {
+                setSubtitleSize(customEv.detail);
+            } else {
+                const size = localStorage.getItem("player-subtitle-size");
+                if (size) setSubtitleSize(size);
+            }
+        };
+
+        window.addEventListener("kixo-subtitle-font-changed", handleFontChange);
+        window.addEventListener("kixo-subtitle-size-changed", handleSizeChange);
+        window.addEventListener("storage", handleFontChange);
+        window.addEventListener("storage", handleSizeChange);
+
+        return () => {
+            window.removeEventListener("kixo-subtitle-font-changed", handleFontChange);
+            window.removeEventListener("kixo-subtitle-size-changed", handleSizeChange);
+            window.removeEventListener("storage", handleFontChange);
+            window.removeEventListener("storage", handleSizeChange);
+        };
+    }, []);
 
     // Detect touch device on mount
     useEffect(() => {
@@ -2113,15 +2158,78 @@ export default function VideoPlayer({
                 }
                 video::cue {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                     background: rgba(0, 0, 0, 0.75) !important;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
                 }
                 video::-webkit-media-text-track-display {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                     background: transparent !important;
                 }
                 video::-webkit-media-text-track-container {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                 }
                 video.controls-visible::-webkit-media-text-track-display {
                     transform: translateY(-80px) !important;

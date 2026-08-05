@@ -68,6 +68,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     // Local Preferences State
     const [prefTheme, setPrefTheme] = useState("dark");
     const [prefSubtitleSize, setPrefSubtitleSize] = useState("22px");
+    const [prefSubtitleFont, setPrefSubtitleFont] = useState("geist");
     const [prefAutoplay, setPrefAutoplay] = useState(true);
     const [prefAutoResume, setPrefAutoResume] = useState(true);
 
@@ -140,6 +141,9 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
             setPrefTheme(localStorage.getItem("kixo_theme") || "dark");
             setPrefSubtitleSize(
                 localStorage.getItem("player-subtitle-size") || "22px",
+            );
+            setPrefSubtitleFont(
+                localStorage.getItem("player-subtitle-font") || "geist",
             );
             setPrefAutoplay(
                 localStorage.getItem("player-autoplay") !== "false",
@@ -505,6 +509,21 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     const updatePrefSubtitleSize = (val: string) => {
         setPrefSubtitleSize(val);
         localStorage.setItem("player-subtitle-size", val);
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(
+                new CustomEvent("kixo-subtitle-size-changed", { detail: val }),
+            );
+        }
+    };
+
+    const updatePrefSubtitleFont = (val: string) => {
+        setPrefSubtitleFont(val);
+        localStorage.setItem("player-subtitle-font", val);
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(
+                new CustomEvent("kixo-subtitle-font-changed", { detail: val }),
+            );
+        }
     };
 
     const updatePrefAutoplay = (val: boolean) => {
@@ -1536,6 +1555,58 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                         </option>
                                                         <option value="32px">
                                                             Extra Large (32px)
+                                                        </option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Subtitle Font Family Setting */}
+                                                <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-2xl text-xs">
+                                                    <div>
+                                                        <span className="font-semibold text-white block">
+                                                            Player Subtitle Font
+                                                        </span>
+                                                        <span className="text-[9px] text-foreground/45 block mt-0.5">
+                                                            Changes font style inside player subtitles
+                                                        </span>
+                                                    </div>
+                                                    <select
+                                                        value={prefSubtitleFont}
+                                                        onChange={(e) =>
+                                                            updatePrefSubtitleFont(
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        className="bg-zinc-900 border border-white/10 rounded-xl px-2.5 py-1.5 text-white text-xs select-none focus:outline-none cursor-pointer"
+                                                    >
+                                                        <option value="geist">
+                                                            Geist (Sans-Serif)
+                                                        </option>
+                                                        <option value="inter">
+                                                            Inter (Clean)
+                                                        </option>
+                                                        <option value="roboto">
+                                                            Roboto (Cinematic)
+                                                        </option>
+                                                        <option value="trebuchet">
+                                                            Trebuchet (Dynamic)
+                                                        </option>
+                                                        <option value="monospace">
+                                                            Courier (Monospace)
+                                                        </option>
+                                                        <option value="serif">
+                                                            Georgia (Serif)
+                                                        </option>
+                                                        <option value="impact">
+                                                            Impact (Bold HD)
+                                                        </option>
+                                                        <option value="comic">
+                                                            Comic Sans (Casual)
+                                                        </option>
+                                                        <option value="verdana">
+                                                            Verdana (Wide)
+                                                        </option>
+                                                        <option value="lucida">
+                                                            Lucida Console (Code)
                                                         </option>
                                                     </select>
                                                 </div>

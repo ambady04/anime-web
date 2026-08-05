@@ -120,7 +120,7 @@ function MovieCard({
                     style={{ border: "1px solid rgba(255,255,255,0.06)" }}
                     animate={{
                         boxShadow: isHovered
-                            ? "0 0 0 1px rgba(229,9,20,0.2), 0 20px 60px rgba(229,9,20,0.2), 0 0 40px rgba(229,9,20,0.08)"
+                            ? "0 24px 60px -10px rgba(229, 9, 20, 0.28), 0 0 35px -5px rgba(229, 9, 20, 0.18)"
                             : "0 8px 32px rgba(0,0,0,0.8)",
                     }}
                     transition={{ duration: 0.35 }}
