@@ -49,25 +49,61 @@ export async function GET(req: NextRequest) {
 
 
         const rangeHeader = req.headers.get("range");
-        const vercelProxyUrl = `https://api.abisolutions.online/api/video?url=${encodeURIComponent(url)}`;
 
-        const reqHeaders: Record<string, string> = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            Accept: "*/*",
-        };
+        let upstreamResp: Response | null = null;
 
-        if (rangeHeader) {
-            reqHeaders["Range"] = rangeHeader;
+        // Strategy 1: Direct fetch with anti-hotlink Referer & Origin headers
+        try {
+            const directHeaders: Record<string, string> = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                Accept: "*/*",
+                Referer: "https://videodownloader.site/",
+                Origin: "https://videodownloader.site/",
+            };
+            if (rangeHeader) directHeaders["Range"] = rangeHeader;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(url, {
+                headers: directHeaders,
+                signal: controller.signal,
+                cache: "no-store",
+            });
+            clearTimeout(timeoutId);
+            if (res.ok || res.status === 206) {
+                upstreamResp = res;
+            }
+        } catch {
+            // Direct fetch failed or timed out — proceed to Vercel proxy fallback
         }
 
-        const upstreamResp = await fetch(vercelProxyUrl, {
-            headers: reqHeaders,
-            cache: "no-store",
-        });
+        // Strategy 2: Vercel Proxy API fallback if direct CDN request failed
+        if (!upstreamResp) {
+            try {
+                const vercelProxyUrl = `https://api.abisolutions.online/api/video?url=${encodeURIComponent(url)}`;
+                const vercelHeaders: Record<string, string> = {
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    Accept: "*/*",
+                };
+                if (rangeHeader) vercelHeaders["Range"] = rangeHeader;
 
-        if (!upstreamResp.ok && upstreamResp.status !== 206) {
+                const res = await fetch(vercelProxyUrl, {
+                    headers: vercelHeaders,
+                    cache: "no-store",
+                });
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                }
+            } catch {
+                // Ignore Vercel proxy error
+            }
+        }
+
+        if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
             return NextResponse.json(
-                { error: "cdn_rejected", status: upstreamResp.status },
+                { error: "cdn_rejected", status: upstreamResp?.status || 502 },
                 { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
             );
         }
@@ -100,9 +136,9 @@ export async function GET(req: NextRequest) {
         });
 
     } catch (err: any) {
-        return new NextResponse(null, {
-            status: 200,
-            headers: { "Access-Control-Allow-Origin": "*" },
-        });
+        return NextResponse.json(
+            { error: "video_proxy_failed", message: err?.message || String(err) },
+            { status: 500, headers: { "Access-Control-Allow-Origin": "*" } },
+        );
     }
 }

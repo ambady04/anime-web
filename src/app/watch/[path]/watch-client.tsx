@@ -439,8 +439,20 @@ export default function WatchClient({
         }
     };
 
+    const ratingNum = Number(subject?.imdbRatingValue || 0);
+    const genres = useMemo(() => {
+        const rawGenre = subject?.genre;
+        if (Array.isArray(rawGenre)) {
+            return rawGenre.map((g) => String(g).trim()).filter(Boolean);
+        }
+        if (typeof rawGenre === "string") {
+            return (rawGenre as string).split(",").map((g) => g.trim()).filter(Boolean);
+        }
+        return [];
+    }, [subject?.genre]);
+
     return (
-        <div className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-8 2xl:px-12 py-3 sm:py-4 animate-fade-in relative z-20">
+        <div className="max-w-screen-2xl mx-auto px-3 sm:px-6 lg:px-8 py-4 animate-fade-in relative z-20">
             <button
                 onClick={() => router.back()}
                 className="flex items-center space-x-2 text-foreground/50 hover:text-primary transition-colors mb-4 text-xs font-black uppercase tracking-wider group focus:outline-none cursor-pointer"
@@ -450,6 +462,7 @@ export default function WatchClient({
             </button>
 
             <div className="flex flex-col xl:flex-row gap-5">
+                {/* LEFT — Main Video Player & Content Info */}
                 <div className="flex-1 min-w-0 space-y-4">
                     <VideoPlayer
                         streamData={stream || { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" }}
@@ -471,9 +484,10 @@ export default function WatchClient({
                         }}
                     />
 
+                    {/* Title & Action Buttons Panel */}
                     <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
-                            <div className="space-y-1">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
                                         {cleanTitle(subject.title)}
@@ -484,14 +498,20 @@ export default function WatchClient({
                                         </span>
                                     )}
                                 </div>
-                                {subject.releaseDate && (
-                                    <p className="text-xs text-foreground/50 font-medium">
-                                        Released: {subject.releaseDate}
-                                    </p>
-                                )}
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-foreground/60 font-medium">
+                                    {ratingNum > 0 && (
+                                        <span className="flex items-center gap-1 text-amber-400 font-bold">
+                                            <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                            {ratingNum.toFixed(1)}
+                                        </span>
+                                    )}
+                                    {subject.releaseDate && <span>Released: {subject.releaseDate}</span>}
+                                    {subject.duration > 0 && <span>{Math.floor(subject.duration / 60)} mins</span>}
+                                    {subject.countryName && <span>{subject.countryName}</span>}
+                                </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 shrink-0">
                                 <button
                                     onClick={handleWatchlistToggle}
                                     className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -543,57 +563,80 @@ export default function WatchClient({
                             </div>
                         </div>
 
-                        {completeDubs.length > 1 && (
-                            <div className="mt-3 pt-3 border-t border-white/5">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/40 mb-2 block">
-                                    Audio Languages
-                                </span>
-                                <div className="flex flex-wrap gap-2">
-                                    {completeDubs.map((dub) => {
-                                        const isSelected =
-                                            decodeURIComponent(dub.detailPath) ===
-                                            decodeURIComponent(path);
-                                        return (
-                                            <button
-                                                key={dub.detailPath}
-                                                disabled={
-                                                    isSelected ||
-                                                    loadingAudio === dub.detailPath
-                                                }
-                                                onClick={() => {
-                                                    setLoadingAudio(
-                                                        dub.detailPath,
-                                                    );
-                                                    router.push(
-                                                        `/watch/${dub.detailPath}?season=${activeSeason}&episode=${activeEpisode}`,
-                                                    );
-                                                }}
-                                                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                                    isSelected
-                                                        ? "bg-primary text-white shadow-md shadow-primary/20"
-                                                        : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
-                                                }`}
-                                            >
-                                                {loadingAudio ===
-                                                dub.detailPath ? (
-                                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                                ) : (
-                                                    <Volume2 className="w-3 h-3 opacity-70" />
-                                                )}
-                                                <span>{dub.lanName}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                        {/* Genres */}
+                        {genres.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-3 mt-3 border-t border-white/5">
+                                {genres.map((g) => (
+                                    <span
+                                        key={g}
+                                        className="px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-xs font-semibold text-foreground/70"
+                                    >
+                                        {g}
+                                    </span>
+                                ))}
                             </div>
                         )}
                     </div>
+
+                    {/* Storyline & Overview Panel */}
+                    {(subject.description || metadata?.description) && (
+                        <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-2">
+                            <h3 className="text-xs font-black uppercase tracking-wider text-foreground/50">
+                                Storyline & Overview
+                            </h3>
+                            <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
+                                {subject.description || metadata?.description}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Cast & Crew */}
+                    {stars && stars.length > 0 && (
+                        <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
+                            <h3 className="text-xs font-black uppercase tracking-wider text-foreground/50">
+                                Top Cast
+                            </h3>
+                            <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-1">
+                                {stars.slice(0, 10).map((star, idx) => (
+                                    <div
+                                        key={`${star.staffId || star.name || "star"}-${star.character || ""}-${idx}`}
+                                        className="flex items-center space-x-2.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl shrink-0"
+                                    >
+                                        {star.avatarUrl ? (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img
+                                                src={star.avatarUrl}
+                                                alt={star.name}
+                                                className="w-7 h-7 rounded-full object-cover border border-white/10"
+                                            />
+                                        ) : (
+                                            <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+                                                {star.name.charAt(0)}
+                                            </div>
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold text-foreground truncate max-w-[120px]">
+                                                {star.name}
+                                            </p>
+                                            {star.character && (
+                                                <p className="text-[10px] text-foreground/50 truncate max-w-[120px]">
+                                                    {star.character}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {isSeries && resource?.seasons && resource.seasons.length > 0 && (
-                    <div className="w-full xl:w-80 flex-shrink-0 space-y-4">
-                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl">
-                            <div className="flex items-center justify-between mb-3">
+                {/* RIGHT SIDEBAR — Episodes, Audio Languages & Specs */}
+                <div className="w-full xl:w-[340px] flex-shrink-0 space-y-4">
+                    {/* Episodes Guide */}
+                    {isSeries && resource?.seasons && resource.seasons.length > 0 && (
+                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
+                            <div className="flex items-center justify-between">
                                 <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
                                     Episodes ({totalEpisodes})
                                 </h3>
@@ -644,7 +687,7 @@ export default function WatchClient({
                                 )}
                             </div>
 
-                            <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-4 gap-2">
+                            <div className="max-h-[460px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-5 gap-2">
                                 {Array.from(
                                     { length: totalEpisodes },
                                     (_, i) => i + 1,
@@ -688,8 +731,95 @@ export default function WatchClient({
                                 })}
                             </div>
                         </div>
+                    )}
+
+                    {/* Audio Languages / Dubs Panel */}
+                    {completeDubs.length > 0 && (
+                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
+                            <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
+                                Audio Languages
+                            </h3>
+                            <div className="flex flex-col gap-1.5">
+                                {completeDubs.map((dub) => {
+                                    const isSelected =
+                                        decodeURIComponent(dub.detailPath) ===
+                                        decodeURIComponent(path);
+                                    return (
+                                        <button
+                                            key={dub.detailPath}
+                                            disabled={
+                                                isSelected ||
+                                                loadingAudio === dub.detailPath
+                                            }
+                                            onClick={() => {
+                                                setLoadingAudio(
+                                                    dub.detailPath,
+                                                );
+                                                router.push(
+                                                    `/watch/${dub.detailPath}?season=${activeSeason}&episode=${activeEpisode}`,
+                                                );
+                                            }}
+                                            className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                                isSelected
+                                                    ? "bg-primary text-white shadow-md shadow-primary/20"
+                                                    : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
+                                            }`}
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <Volume2 className="w-4 h-4 opacity-70" />
+                                                <span>{dub.lanName}</span>
+                                            </div>
+                                            {isSelected && (
+                                                <span className="text-[10px] uppercase font-black tracking-wider bg-white/20 px-2 py-0.5 rounded-md">
+                                                    Active
+                                                </span>
+                                            )}
+                                            {loadingAudio === dub.detailPath && (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Media Details Panel */}
+                    <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
+                            Media Details
+                        </h3>
+                        <div className="space-y-2 text-xs">
+                            {ratingNum > 0 && (
+                                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                                    <span className="text-foreground/50 font-medium">IMDb Rating</span>
+                                    <span className="font-bold text-amber-400 flex items-center gap-1">
+                                        <Star className="w-3.5 h-3.5 fill-amber-400" />
+                                        {ratingNum.toFixed(1)} / 10
+                                    </span>
+                                </div>
+                            )}
+                            {subject.countryName && (
+                                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                                    <span className="text-foreground/50 font-medium">Country</span>
+                                    <span className="font-semibold text-foreground">{subject.countryName}</span>
+                                </div>
+                            )}
+                            {subject.releaseDate && (
+                                <div className="flex items-center justify-between py-1 border-b border-white/5">
+                                    <span className="text-foreground/50 font-medium">Release Year</span>
+                                    <span className="font-semibold text-foreground">{subject.releaseDate}</span>
+                                </div>
+                            )}
+                            {subject.duration > 0 && (
+                                <div className="flex items-center justify-between py-1">
+                                    <span className="text-foreground/50 font-medium">Duration</span>
+                                    <span className="font-semibold text-foreground">{Math.floor(subject.duration / 60)} mins</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
 
             {related.length > 0 && (

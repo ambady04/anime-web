@@ -140,6 +140,8 @@ async function fetchMirrorStream(
     return null;
 }
 
+const streamCache = new Map<string, { data: StreamData; expiresAt: number }>();
+
 export const streamService = {
     getStream: async (
         path: string,
@@ -149,6 +151,12 @@ export const streamService = {
     ): Promise<StreamData> => {
         if (!path) {
             throw new Error("Empty or invalid path");
+        }
+
+        const cacheKey = `stream:${path}:s${season}:e${episode}:adult=${adult}`;
+        const cached = streamCache.get(cacheKey);
+        if (cached && Date.now() < cached.expiresAt) {
+            return cached.data;
         }
 
         // 0. Primary: Fetch stream data from Vercel API (api.abisolutions.online)
@@ -173,6 +181,11 @@ export const streamService = {
             if (vRes.ok) {
                 const vData: any = await vRes.json();
                 if (vData && Array.isArray(vData.downloads) && vData.downloads.length > 0) {
+                    if (streamCache.size > 200) {
+                        const firstKey = streamCache.keys().next().value;
+                        if (firstKey) streamCache.delete(firstKey);
+                    }
+                    streamCache.set(cacheKey, { data: vData as StreamData, expiresAt: Date.now() + 3 * 60 * 1000 });
                     return vData as StreamData;
                 }
             }
