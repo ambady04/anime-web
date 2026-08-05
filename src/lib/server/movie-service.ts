@@ -225,10 +225,11 @@ async function fetchFromPool<T>(
         cache: "no-store",
     };
 
-    // Fast parallel race over all available mirror hosts simultaneously
+    // Race top 2 primary mirror hosts with 1500ms timeout to keep Cloudflare Worker CPU/subrequests minimal
+    const primaryHosts = H5_HOSTS.slice(0, 2);
     const fetchHost = async (host: string): Promise<T> => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
         try {
             const res = await fetch(`${host}${fullPath}`, {
                 ...reqInit,
@@ -244,7 +245,7 @@ async function fetchFromPool<T>(
     };
 
     try {
-        const result = await Promise.any(H5_HOSTS.map((h) => fetchHost(h)));
+        const result = await Promise.any(primaryHosts.map((h) => fetchHost(h)));
         if (result) {
             if (method === "GET") {
                 apiCache.set(cacheKey, result, 10 * 60 * 1000); // 10 minute TTL
@@ -252,7 +253,7 @@ async function fetchFromPool<T>(
             return result;
         }
     } catch {
-        // Race across mirror hosts failed — proceed to Vercel fallback
+        // Race across primary mirror hosts failed — proceed to Vercel fallback
     }
 
     // Fallback: try Vercel backend if mirror hosts are rate limited / blocked
