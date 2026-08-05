@@ -73,7 +73,7 @@ export default function WatchClient({
     const [stream, setStream] = useState<StreamData | null>(initialStream || null);
     const [activeSeason, setActiveSeason] = useState<number>(initialSeason);
     const [activeEpisode, setActiveEpisode] = useState<number>(initialEpisode);
-    const [isLoadingData, setIsLoadingData] = useState<boolean>(!initialDetails || !initialStream);
+    const [isLoadingData, setIsLoadingData] = useState<boolean>(!initialDetails);
     const [fetchError, setFetchError] = useState<string>("");
 
     const [isPageLoading, setIsPageLoading] = useState(false);
@@ -90,7 +90,9 @@ export default function WatchClient({
                 return;
             }
             try {
-                setIsLoadingData(true);
+                if (!details) {
+                    setIsLoadingData(true);
+                }
                 setFetchError("");
 
                 let d = details;
@@ -98,6 +100,7 @@ export default function WatchClient({
                     d = await movieApi.getDetails(path);
                     if (!isMounted) return;
                     setDetails(d);
+                    setIsLoadingData(false);
                 }
 
                 const isSeries = isSeriesType(d?.subject?.subjectType);

@@ -225,11 +225,10 @@ async function fetchFromPool<T>(
         cache: "no-store",
     };
 
-    // Fast parallel race over primary hosts
-    const primaryHosts = H5_HOSTS.slice(0, 3);
+    // Fast parallel race over all available mirror hosts simultaneously
     const fetchHost = async (host: string): Promise<T> => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
         try {
             const res = await fetch(`${host}${fullPath}`, {
                 ...reqInit,
@@ -245,29 +244,15 @@ async function fetchFromPool<T>(
     };
 
     try {
-        const result = await Promise.any(primaryHosts.map((h) => fetchHost(h)));
+        const result = await Promise.any(H5_HOSTS.map((h) => fetchHost(h)));
         if (result) {
             if (method === "GET") {
-                apiCache.set(cacheKey, result, 5 * 60 * 1000); // 5 minute TTL
+                apiCache.set(cacheKey, result, 10 * 60 * 1000); // 10 minute TTL
             }
             return result;
         }
     } catch {
-        // Primary race failed — proceed to sequential fallback across remaining hosts
-    }
-
-    for (const host of H5_HOSTS.slice(3)) {
-        try {
-            const result = await fetchHost(host);
-            if (result) {
-                if (method === "GET") {
-                    apiCache.set(cacheKey, result, 5 * 60 * 1000);
-                }
-                return result;
-            }
-        } catch (err) {
-            lastError = err instanceof Error ? err : new Error(String(err));
-        }
+        // Race across mirror hosts failed — proceed to Vercel fallback
     }
 
     // Fallback: try Vercel backend if mirror hosts are rate limited / blocked
