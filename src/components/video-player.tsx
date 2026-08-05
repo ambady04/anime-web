@@ -2065,6 +2065,11 @@ export default function VideoPlayer({
                     e.preventDefault();
                     toggleFullscreen();
                     break;
+                case "i":
+                case "I":
+                    e.preventDefault();
+                    togglePiP();
+                    break;
                 default:
                     break;
             }
