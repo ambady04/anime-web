@@ -152,6 +152,35 @@ const isCamSubject = (subject: Subject): boolean => {
 const stripCamSubjects = (subjects: Subject[] | undefined | null): Subject[] =>
     (subjects ?? []).filter((s) => !isCamSubject(s));
 
+interface CacheEntry<T> {
+    data: T;
+    expiresAt: number;
+}
+
+class ServerCache {
+    private store = new Map<string, CacheEntry<any>>();
+
+    get<T>(key: string): T | null {
+        const entry = this.store.get(key);
+        if (!entry) return null;
+        if (Date.now() > entry.expiresAt) {
+            this.store.delete(key);
+            return null;
+        }
+        return entry.data as T;
+    }
+
+    set<T>(key: string, data: T, ttlMs: number): void {
+        if (this.store.size > 300) {
+            const oldestKey = this.store.keys().next().value;
+            if (oldestKey) this.store.delete(oldestKey);
+        }
+        this.store.set(key, { data, expiresAt: Date.now() + ttlMs });
+    }
+}
+
+const apiCache = new ServerCache();
+
 async function fetchFromPool<T>(
     endpointPath: string,
     params: Record<string, string | number | boolean> = {},
@@ -174,50 +203,78 @@ async function fetchFromPool<T>(
     const queryString = searchParams.toString();
     const fullPath = queryString ? `${endpointPath}?${queryString}` : endpointPath;
 
+    // 0. Server-side In-Memory Cache Lookup
+    const bodyKey = body ? JSON.stringify(body) : "";
+    const cacheKey = `${method}:${fullPath}:${bodyKey}:adult=${adult}:auth=${useAuth}`;
+
+    if (method === "GET") {
+        const cached = apiCache.get<T>(cacheKey);
+        if (cached) return cached;
+    }
+
     let lastError: Error | null = null;
     const reqHeaders = useAuth ? await getHeaders(adult) : getPublicHeaders(adult);
 
-    for (const host of H5_HOSTS) {
+    const reqInit: RequestInit = {
+        method,
+        headers: {
+            ...reqHeaders,
+            ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+    };
+
+    // Fast parallel race over all available mirror hosts simultaneously
+    const fetchHost = async (host: string): Promise<T> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
         try {
-            const url = `${host}${fullPath}`;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-            const reqInit: RequestInit = {
-                method,
-                headers: {
-                    ...reqHeaders,
-                    ...(body ? { "Content-Type": "application/json" } : {}),
-                },
-                body: body ? JSON.stringify(body) : undefined,
+            const res = await fetch(`${host}${fullPath}`, {
+                ...reqInit,
                 signal: controller.signal,
-                cache: "no-store",
-            };
-
-            const res = await fetch(url, reqInit);
+            });
             clearTimeout(timeoutId);
-
-            if (res.ok) {
-                const data = await res.json();
-                return data as T;
-            }
-            lastError = new Error(`Service temporarily unavailable (${res.status})`);
+            if (!res.ok) throw new Error(`Status ${res.status}`);
+            return (await res.json()) as T;
         } catch (err) {
-            lastError = err instanceof Error ? err : new Error(String(err));
+            clearTimeout(timeoutId);
+            throw err;
         }
+    };
+
+    try {
+        const result = await Promise.any(H5_HOSTS.map((h) => fetchHost(h)));
+        if (result) {
+            if (method === "GET") {
+                apiCache.set(cacheKey, result, 10 * 60 * 1000); // 10 minute TTL
+            }
+            return result;
+        }
+    } catch {
+        // Race across mirror hosts failed — proceed to Vercel fallback
     }
 
     // Fallback: try Vercel backend if mirror hosts are rate limited / blocked
     try {
+        let vUrl = "";
         if (endpointPath.includes("/home")) {
-            const vRes = await fetch(`https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`, { cache: "no-store" });
-            if (vRes.ok) return (await vRes.json()) as T;
+            vUrl = `https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`;
         } else if (endpointPath.includes("/detail") && params.detailPath) {
-            const vRes = await fetch(`https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`, { cache: "no-store" });
-            if (vRes.ok) return (await vRes.json()) as T;
+            vUrl = `https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`;
         } else if (endpointPath.includes("/search") && body?.keyword) {
-            const vRes = await fetch(`https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`, { cache: "no-store" });
-            if (vRes.ok) return (await vRes.json()) as T;
+            vUrl = `https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`;
+        }
+
+        if (vUrl) {
+            const vRes = await fetch(vUrl, { cache: "no-store" });
+            if (vRes.ok) {
+                const data = (await vRes.json()) as T;
+                if (method === "GET") {
+                    apiCache.set(cacheKey, data, 5 * 60 * 1000);
+                }
+                return data;
+            }
         }
     } catch {
         // Ignore fallback error

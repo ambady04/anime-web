@@ -14,15 +14,21 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
     const parsedEpisode = episode ? Number(episode) : 0;
 
     let details = null;
+    let stream = null;
 
     try {
-        // Only fetch details server-side.
-        // Stream is intentionally NOT fetched server-side because Cloudflare Worker
-        // egress IPs are rate-limited (429) by the upstream CDN. The client (browser)
-        // fetches streams directly from the CDN with no rate-limit issues.
-        details = await movieApi.getDetails(path);
+        const [detailsResult, streamResult] = await Promise.allSettled([
+            movieApi.getDetails(path),
+            movieApi.getStream(path, parsedSeason, parsedEpisode),
+        ]);
+        if (detailsResult.status === "fulfilled") {
+            details = detailsResult.value;
+        }
+        if (streamResult.status === "fulfilled") {
+            stream = streamResult.value;
+        }
     } catch {
-        // Fallback to client-side fetching in WatchClient
+        // Client-side fallback in WatchClient
     }
 
     return (
@@ -30,7 +36,7 @@ export default async function WatchPage({ params, searchParams }: PageProps) {
             <WatchClient
                 path={path}
                 initialDetails={details}
-                initialStream={null}
+                initialStream={stream}
                 initialSeason={parsedSeason}
                 initialEpisode={parsedEpisode}
             />

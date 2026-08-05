@@ -197,6 +197,12 @@ export default function VideoPlayer({
         }
         return "22px";
     });
+    const [subtitleFont, setSubtitleFont] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("player-subtitle-font") || "geist";
+        }
+        return "geist";
+    });
 
     // Mobile gesture states
     const [gestureIndicator, setGestureIndicator] = useState<{
@@ -240,6 +246,45 @@ export default function VideoPlayer({
     useEffect(() => {
         localStorage.setItem("player-subtitle-size", subtitleSize);
     }, [subtitleSize]);
+
+    useEffect(() => {
+        localStorage.setItem("player-subtitle-font", subtitleFont);
+    }, [subtitleFont]);
+
+    // Real-time listener for subtitle font & size updates from preferences modal
+    useEffect(() => {
+        const handleFontChange = (e: Event) => {
+            const customEv = e as CustomEvent;
+            if (customEv.detail) {
+                setSubtitleFont(customEv.detail);
+            } else {
+                const font = localStorage.getItem("player-subtitle-font");
+                if (font) setSubtitleFont(font);
+            }
+        };
+
+        const handleSizeChange = (e: Event) => {
+            const customEv = e as CustomEvent;
+            if (customEv.detail) {
+                setSubtitleSize(customEv.detail);
+            } else {
+                const size = localStorage.getItem("player-subtitle-size");
+                if (size) setSubtitleSize(size);
+            }
+        };
+
+        window.addEventListener("kixo-subtitle-font-changed", handleFontChange);
+        window.addEventListener("kixo-subtitle-size-changed", handleSizeChange);
+        window.addEventListener("storage", handleFontChange);
+        window.addEventListener("storage", handleSizeChange);
+
+        return () => {
+            window.removeEventListener("kixo-subtitle-font-changed", handleFontChange);
+            window.removeEventListener("kixo-subtitle-size-changed", handleSizeChange);
+            window.removeEventListener("storage", handleFontChange);
+            window.removeEventListener("storage", handleSizeChange);
+        };
+    }, []);
 
     // Detect touch device on mount
     useEffect(() => {
@@ -402,6 +447,7 @@ export default function VideoPlayer({
     useEffect(() => {
         if (!isHistoryChecked || !activeDownload) return;
 
+        let isCancelled = false;
         const referer = window.location.origin;
         const proxyBase = getVideoProxyBase();
         const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
@@ -411,7 +457,7 @@ export default function VideoPlayer({
 
         const setup = () => {
             const video = videoRef.current;
-            if (!video) return;
+            if (!video || isCancelled) return;
 
             isInitialLoadRef.current = true;
             isRecoveringRef.current = false;
@@ -434,6 +480,7 @@ export default function VideoPlayer({
                 } else {
                     // Hls.js (Chrome / Firefox / Edge)
                     import("hls.js").then(({ default: Hls }) => {
+                        if (isCancelled) return;
                         if (!Hls.isSupported()) {
                             handlePlayerError(new Error("HLS not supported"));
                             return;
@@ -457,12 +504,16 @@ export default function VideoPlayer({
                                     ? initialSeekTime
                                     : -1,
                         });
+                        if (isCancelled) {
+                            hls.destroy();
+                            return;
+                        }
                         hlsRef.current = hls;
                         hls.attachMedia(video);
                         hls.loadSource(src);
 
                         hls.on(Hls.Events.ERROR, (_event, data) => {
-                            if (data.fatal) {
+                            if (data.fatal && !isCancelled) {
                                 if (
                                     data.type === Hls.ErrorTypes.NETWORK_ERROR
                                 ) {
@@ -488,13 +539,14 @@ export default function VideoPlayer({
                 if (playPromise !== undefined) {
                     playPromise
                         .then(() => {
+                            if (isCancelled) return;
                             setIsPlaying(true);
                             setIsLoading(false);
                             isInitialLoadRef.current = false;
                         })
                         .catch(() => {
                             // Playback pending user click or browser autoplay policy
-                            if (video.readyState >= 1) {
+                            if (!isCancelled && video.readyState >= 1) {
                                 setIsLoading(false);
                             }
                         });
@@ -504,6 +556,7 @@ export default function VideoPlayer({
 
         let rafId: number | null = null;
         const checkAndSetup = () => {
+            if (isCancelled) return;
             if (videoRef.current) {
                 setup();
             } else {
@@ -513,6 +566,7 @@ export default function VideoPlayer({
         checkAndSetup();
 
         return () => {
+            isCancelled = true;
             if (rafId !== null) cancelAnimationFrame(rafId);
             if (hlsRef.current) {
                 hlsRef.current.destroy();
@@ -775,7 +829,20 @@ export default function VideoPlayer({
     // Convert SRT to WebVTT Blob URL
     const loadSubtitleTrack = useCallback(async (srtUrl: string) => {
         try {
-            const res = await fetch(srtUrl);
+            // Route cross-origin subtitle URLs through proxy to bypass CORS restrictions
+            let fetchUrl = srtUrl;
+            if (srtUrl.startsWith("http://") || srtUrl.startsWith("https://")) {
+                try {
+                    const targetOrigin = new URL(srtUrl).origin;
+                    if (typeof window !== "undefined" && targetOrigin !== window.location.origin) {
+                        const proxyBase = getVideoProxyBase();
+                        const referer = window.location.origin;
+                        fetchUrl = `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`;
+                    }
+                } catch {}
+            }
+
+            const res = await fetch(fetchUrl);
             if (!res.ok) throw new Error("Subtitles failed to load.");
             const srtText = await res.text();
 
@@ -790,10 +857,20 @@ export default function VideoPlayer({
 
             const blob = new Blob([vttText], { type: "text/vtt" });
             const objectUrl = URL.createObjectURL(blob);
-            setSubtitleUrl(objectUrl);
+            setSubtitleUrl((prev) => {
+                if (prev && prev.startsWith("blob:")) {
+                    URL.revokeObjectURL(prev);
+                }
+                return objectUrl;
+            });
         } catch (e) {
             console.error("Subtitle parse error:", e);
-            setSubtitleUrl("");
+            setSubtitleUrl((prev) => {
+                if (prev && prev.startsWith("blob:")) {
+                    URL.revokeObjectURL(prev);
+                }
+                return "";
+            });
         }
     }, []);
 
@@ -2033,6 +2110,11 @@ export default function VideoPlayer({
                     e.preventDefault();
                     toggleFullscreen();
                     break;
+                case "i":
+                case "I":
+                    e.preventDefault();
+                    togglePiP();
+                    break;
                 default:
                     break;
             }
@@ -2060,7 +2142,11 @@ export default function VideoPlayer({
             onTouchStart={handleGestureTouchStart}
             onTouchMove={handleGestureTouchMove}
             onTouchEnd={handleGestureTouchEnd}
-            className={`relative w-full h-full bg-black select-none overflow-hidden group/player ${
+            className={`relative w-full ${
+                isFullscreen
+                    ? "fixed inset-0 z-50 h-screen w-screen rounded-none border-none"
+                    : "aspect-video rounded-2xl border border-glass-border shadow-2xl"
+            } bg-black select-none overflow-hidden group/player ${
                 isPlaying && !showControls ? "cursor-none" : ""
             }`}
         >
@@ -2072,15 +2158,78 @@ export default function VideoPlayer({
                 }
                 video::cue {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                     background: rgba(0, 0, 0, 0.75) !important;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
                 }
                 video::-webkit-media-text-track-display {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                     background: transparent !important;
                 }
                 video::-webkit-media-text-track-container {
                     font-size: ${subtitleSize} !important;
+                    font-family: ${
+                        subtitleFont === "inter"
+                            ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+                            : subtitleFont === "roboto"
+                            ? "Roboto, Arial, sans-serif"
+                            : subtitleFont === "trebuchet"
+                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                            : subtitleFont === "monospace"
+                            ? '"Courier New", Courier, monospace'
+                            : subtitleFont === "serif"
+                            ? 'Georgia, "Times New Roman", serif'
+                            : subtitleFont === "impact"
+                            ? 'Impact, "Arial Black", sans-serif'
+                            : subtitleFont === "comic"
+                            ? '"Comic Sans MS", "Comic Sans", cursive'
+                            : subtitleFont === "verdana"
+                            ? "Verdana, Geneva, sans-serif"
+                            : subtitleFont === "lucida"
+                            ? '"Lucida Console", Monaco, monospace'
+                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                    } !important;
                 }
                 video.controls-visible::-webkit-media-text-track-display {
                     transform: translateY(-80px) !important;
@@ -2460,9 +2609,9 @@ export default function VideoPlayer({
                     !showRatioMenu && (
                         <button
                             onClick={togglePlay}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-105 active:scale-95 z-10"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10"
                         >
-                            <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-white translate-x-0.5" />
+                            <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
                         </button>
                     )}
 
@@ -2677,22 +2826,22 @@ export default function VideoPlayer({
                                 {isSeries && onPrevEpisode && (
                                     <button
                                         onClick={onPrevEpisode}
-                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                         title="Previous Episode"
                                     >
-                                        <SkipBack className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
+                                        <SkipBack className="w-4 h-4 fill-white text-white" />
                                     </button>
                                 )}
 
                                 {/* Play Pause */}
                                 <button
                                     onClick={togglePlay}
-                                    className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+                                    className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                 >
                                     {isPlaying ? (
-                                        <Pause className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
+                                        <Pause className="w-4 h-4 fill-white" />
                                     ) : (
-                                        <Play className="w-5 h-5 sm:w-4.5 sm:h-4.5 fill-white" />
+                                        <Play className="w-4 h-4 fill-white" />
                                     )}
                                 </button>
 
@@ -2700,25 +2849,25 @@ export default function VideoPlayer({
                                 {isSeries && onNextEpisode && (
                                     <button
                                         onClick={handleNextEpisodeClick}
-                                        className="p-2.5 sm:p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+                                        className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                         title="Next Episode"
                                     >
-                                        <SkipForward className="w-4.5 h-4.5 sm:w-4 sm:h-4 fill-white text-white" />
+                                        <SkipForward className="w-4 h-4 fill-white text-white" />
                                     </button>
                                 )}
 
-                                {/* Volume Panel â€” hidden on mobile, shown sm+ */}
-                                <div className="hidden sm:flex items-center space-x-2">
+                                {/* Volume Panel — hidden on mobile, shown sm+ */}
+                                <div className="hidden sm:flex items-center space-x-1.5">
                                     <button
                                         onClick={toggleMute}
                                         className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center"
                                     >
                                         {isMuted || volume === 0 ? (
-                                            <VolumeX className="w-4.5 h-4.5 text-primary" />
+                                            <VolumeX className="w-4 h-4 text-primary" />
                                         ) : volume < 0.5 ? (
-                                            <Volume1 className="w-4.5 h-4.5" />
+                                            <Volume1 className="w-4 h-4" />
                                         ) : (
-                                            <Volume2 className="w-4.5 h-4.5" />
+                                            <Volume2 className="w-4 h-4" />
                                         )}
                                     </button>
                                     <input
@@ -2734,12 +2883,12 @@ export default function VideoPlayer({
                                 {/* Mobile-only mute button */}
                                 <button
                                     onClick={toggleMute}
-                                    className="sm:hidden p-2.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
+                                    className="sm:hidden p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90"
                                 >
                                     {isMuted || volume === 0 ? (
-                                        <VolumeX className="w-4.5 h-4.5 text-primary" />
+                                        <VolumeX className="w-4 h-4 text-primary" />
                                     ) : (
-                                        <Volume2 className="w-4.5 h-4.5" />
+                                        <Volume2 className="w-4 h-4" />
                                     )}
                                 </button>
                             </div>
@@ -2951,15 +3100,9 @@ export default function VideoPlayer({
                                                 setShowSpeedMenu(false);
                                                 setShowAudioMenu(false);
                                                 setShowSubtitleMenu(false);
-                                                    setShowQualityMenu(
-                                                        !showQualityMenu,
-                                                    );
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowSubtitleMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                                                setShowRatioMenu(false);
+                                            }}
+                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                                                     showQualityMenu
                                                         ? "bg-primary/20 text-primary-light border-primary/30"
                                                         : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
@@ -3546,9 +3689,9 @@ export default function VideoPlayer({
                                     }
                                 >
                                     {isFullscreen ? (
-                                        <Minimize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
+                                        <Minimize className="w-4 h-4" />
                                     ) : (
-                                        <Maximize className="w-5 h-5 sm:w-4.5 sm:h-4.5" />
+                                        <Maximize className="w-4 h-4" />
                                     )}
                                 </button>
                             </div>

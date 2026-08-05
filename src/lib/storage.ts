@@ -36,6 +36,16 @@ export interface WatchlistItem {
     bookmarkedEpisode?: number;
 }
 
+let _cachedRawHistory: { raw: string; items: HistoryItem[] } | null = null;
+let _cachedDeduplicatedHistory: { raw: string; items: HistoryItem[] } | null = null;
+let _cachedWatchlist: { raw: string; items: WatchlistItem[] } | null = null;
+
+function invalidateStorageCache() {
+    _cachedRawHistory = null;
+    _cachedDeduplicatedHistory = null;
+    _cachedWatchlist = null;
+}
+
 export const localStore = {
     // Watch History — returns deduplicated list (one entry per series/movie) for UI display.
     // For per-episode resume lookup, use getRawHistory() instead.
@@ -44,8 +54,11 @@ export const localStore = {
         try {
             const data = localStorage.getItem("kixo_history");
             if (!data) return [];
-            const history = JSON.parse(data) as HistoryItem[];
+            if (_cachedDeduplicatedHistory && _cachedDeduplicatedHistory.raw === data) {
+                return _cachedDeduplicatedHistory.items;
+            }
 
+            const history = JSON.parse(data) as HistoryItem[];
             const seen = new Set<string>();
             const deduplicated: HistoryItem[] = [];
 
@@ -62,6 +75,7 @@ export const localStore = {
                     deduplicated.push(item);
                 }
             }
+            _cachedDeduplicatedHistory = { raw: data, items: deduplicated };
             return deduplicated;
         } catch {
             return [];
@@ -75,8 +89,14 @@ export const localStore = {
         try {
             const data = localStorage.getItem("kixo_history");
             if (!data) return [];
+            if (_cachedRawHistory && _cachedRawHistory.raw === data) {
+                return _cachedRawHistory.items;
+            }
+
             const history = JSON.parse(data) as HistoryItem[];
-            return [...history].sort((a, b) => b.updatedAt - a.updatedAt);
+            const sorted = [...history].sort((a, b) => b.updatedAt - a.updatedAt);
+            _cachedRawHistory = { raw: data, items: sorted };
+            return sorted;
         } catch {
             return [];
         }
@@ -112,6 +132,7 @@ export const localStore = {
             // Keep more entries to accommodate per-episode history (max 200 entries)
             const updated = [newItem, ...filtered].slice(0, 200);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
+            invalidateStorageCache();
 
             // Sync to cloud every 15 seconds of progress or on completion
             // (avoids excessive Firestore writes while still keeping cloud updated)
@@ -142,6 +163,7 @@ export const localStore = {
             const history = localStore.getHistory();
             const updated = history.filter((h) => h.detailPath !== detailPath);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
+            invalidateStorageCache();
 
             // Background Cloud Sync
             const uid = _currentUid;
@@ -174,6 +196,7 @@ export const localStore = {
     clearHistory: () => {
         if (typeof window === "undefined") return;
         localStorage.removeItem("kixo_history");
+        invalidateStorageCache();
 
         // Background Cloud Sync
         const uid = _currentUid;
@@ -206,7 +229,13 @@ export const localStore = {
         if (typeof window === "undefined") return [];
         try {
             const data = localStorage.getItem("kixo_watchlist");
-            return data ? JSON.parse(data) : [];
+            if (!data) return [];
+            if (_cachedWatchlist && _cachedWatchlist.raw === data) {
+                return _cachedWatchlist.items;
+            }
+            const parsed = JSON.parse(data) as WatchlistItem[];
+            _cachedWatchlist = { raw: data, items: parsed };
+            return parsed;
         } catch {
             return [];
         }
@@ -269,6 +298,7 @@ export const localStore = {
             }
 
             localStorage.setItem("kixo_watchlist", JSON.stringify(updated));
+            invalidateStorageCache();
 
             // Background Cloud Sync
             const uid = _currentUid;

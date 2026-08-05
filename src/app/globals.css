@@ -497,3 +497,15 @@ select option {
 .backdrop-blur-xl  { -webkit-backdrop-filter: blur(24px); }
 .backdrop-blur-2xl { -webkit-backdrop-filter: blur(40px); }
 .backdrop-blur-3xl { -webkit-backdrop-filter: blur(64px); }
+
+/* Performance & Hardware Acceleration Utilities */
+.gpu-layer {
+    transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
+}
+
+.content-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 300px;
+}

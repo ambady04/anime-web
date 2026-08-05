@@ -89,8 +89,8 @@ export default function ContinueWatching() {
                                 exit={{ opacity: 0, scale: 0.9, x: -20 }}
                                 transition={{ duration: 0.4, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
                                 whileHover={{
-                                    borderColor: "rgba(229,9,20,0.25)",
-                                    boxShadow: "0 16px 48px rgba(229,9,20,0.12), 0 0 0 1px rgba(229,9,20,0.1)",
+                                    borderColor: "rgba(255, 255, 255, 0.15)",
+                                    boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
                                 }}
                             >
                                 {/* Poster area */}

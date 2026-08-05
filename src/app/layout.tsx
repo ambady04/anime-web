@@ -79,6 +79,7 @@ export default function RootLayout({
     return (
         <html
             lang="en"
+            data-scroll-behavior="smooth"
             suppressHydrationWarning
             className={`${geist.variable} h-full antialiased`}
             style={{ fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
