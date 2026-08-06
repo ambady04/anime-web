@@ -378,16 +378,18 @@ export default function WatchClient({
             }
         }
 
+        if (!subject) return [];
+
         const currentEntry: DubModel = {
-            subjectId: subject?.subjectId || "",
+            subjectId: subject.subjectId || "",
             lanName: derivedLang,
             lanCode: derivedLang.slice(0, 2).toLowerCase(),
             original: true,
             type: 1,
-            detailPath: subject?.detailPath || path,
+            detailPath: subject.detailPath || path,
         };
 
-        return [currentEntry, ...subject.dubs];
+        return [currentEntry, ...(subject.dubs || [])];
     }, [subject, path]);
 
     if (!details || !subject) {
@@ -479,9 +481,9 @@ export default function WatchClient({
                 <div className="flex-1 min-w-0 space-y-4">
                     <VideoPlayer
                         streamData={stream || { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" }}
-                        title={cleanTitle(subject.title)}
-                        coverUrl={subject.cover?.url || ""}
-                        detailPath={subject.detailPath}
+                        title={cleanTitle(subject?.title || "")}
+                        coverUrl={subject?.cover?.url || ""}
+                        detailPath={subject?.detailPath || path}
                         isSeries={Boolean(isSeries)}
                         season={activeSeason}
                         episode={activeEpisode}
@@ -503,7 +505,7 @@ export default function WatchClient({
                             <div className="space-y-1.5">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
-                                        {cleanTitle(subject.title)}
+                                        {cleanTitle(subject?.title || "")}
                                     </h1>
                                     {isSeries && activeEpisode > 0 && (
                                         <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary text-xs font-bold border border-primary/30">
@@ -518,9 +520,9 @@ export default function WatchClient({
                                             {ratingNum.toFixed(1)}
                                         </span>
                                     )}
-                                    {subject.releaseDate && <span>Released: {subject.releaseDate}</span>}
-                                    {subject.duration > 0 && <span>{Math.floor(subject.duration / 60)} mins</span>}
-                                    {subject.countryName && <span>{subject.countryName}</span>}
+                                    {subject?.releaseDate && <span>Released: {subject.releaseDate}</span>}
+                                    {Boolean(subject?.duration && subject.duration > 0) && <span>{Math.floor((subject?.duration || 0) / 60)} mins</span>}
+                                    {subject?.countryName && <span>{subject.countryName}</span>}
                                 </div>
                             </div>
 
@@ -592,13 +594,13 @@ export default function WatchClient({
                     </div>
 
                     {/* Storyline & Overview Panel */}
-                    {(subject.description || metadata?.description) && (
+                    {(subject?.description || metadata?.description) && (
                         <div className="p-4 sm:p-5 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-2">
                             <h3 className="text-xs font-black uppercase tracking-wider text-foreground/50">
                                 Storyline & Overview
                             </h3>
                             <p className="text-xs sm:text-sm text-foreground/80 leading-relaxed">
-                                {subject.description || metadata?.description}
+                                {subject?.description || metadata?.description}
                             </p>
                         </div>
                     )}
