@@ -97,16 +97,16 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest and guarantee 1080p and 4K quality options exist
+    // Sort qualities from highest to lowest, up to 1080p maximum
     const sortedDownloads = useMemo(() => {
-        const list = [...downloads];
+        // Filter out any qualities above 1080p
+        const list = downloads.filter(
+            (d) => parseResolution(d.resolution) <= 1080,
+        );
 
         if (list.length > 0) {
             const has1080p = list.some(
                 (d) => parseResolution(d.resolution) === 1080,
-            );
-            const has4K = list.some(
-                (d) => parseResolution(d.resolution) >= 2160,
             );
 
             // Find the highest resolution download to use as base stream
@@ -115,24 +115,23 @@ export default function VideoPlayer({
                     parseResolution(b.resolution) - parseResolution(a.resolution),
             )[0];
 
-            if (baseLink) {
-                if (!has1080p) {
-                    list.push({
-                        id: `${baseLink.id || "stream"}-1080p`,
-                        url: baseLink.url,
-                        resolution: 1080,
-                        size: baseLink.size ? Math.round(baseLink.size * 1.5) : 0,
-                    });
-                }
-                if (!has4K) {
-                    list.push({
-                        id: `${baseLink.id || "stream"}-4k`,
-                        url: baseLink.url,
-                        resolution: 2160,
-                        size: baseLink.size ? Math.round(baseLink.size * 3) : 0,
-                    });
-                }
+            if (baseLink && !has1080p) {
+                list.push({
+                    id: `${baseLink.id || "stream"}-1080p`,
+                    url: baseLink.url,
+                    resolution: 1080,
+                    size: baseLink.size ? Math.round(baseLink.size * 1.5) : 0,
+                });
             }
+        } else if (downloads.length > 0) {
+            // Fallback if all streams in downloads were above 1080p
+            const baseLink = downloads[0];
+            list.push({
+                id: `${baseLink.id || "stream"}-1080p`,
+                url: baseLink.url,
+                resolution: 1080,
+                size: baseLink.size || 0,
+            });
         }
 
         return list.sort(
@@ -3158,9 +3157,7 @@ export default function VideoPlayer({
                                                     {activeDownload
                                                         ? isAutoQuality
                                                             ? `Auto (${parseResolution(activeDownload.resolution)}p)`
-                                                            : parseResolution(activeDownload.resolution) >= 2160
-                                                              ? "4K"
-                                                              : `${parseResolution(activeDownload.resolution)}p`
+                                                            : `${parseResolution(activeDownload.resolution)}p`
                                                         : "Auto"}
                                                 </span>
                                                 <Settings className="w-3.5 h-3.5" />
@@ -3200,7 +3197,7 @@ export default function VideoPlayer({
                                                             {sortedDownloads.map(
                                                                 (link, idx) => {
                                                                     const resNum = parseResolution(link.resolution);
-                                                                    const label = resNum >= 2160 ? "4K Ultra HD" : resNum === 1440 ? "2K 1440p" : resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                    const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
                                                                     return (
                                                                         <button
                                                                             key={`${link.id || "quality"}-${idx}`}
@@ -3655,9 +3652,7 @@ export default function VideoPlayer({
                                             }`}
                                         >
                                             {activeDownload
-                                                ? parseResolution(activeDownload.resolution) >= 2160
-                                                  ? "4K"
-                                                  : `${parseResolution(activeDownload.resolution)}p`
+                                                ? `${parseResolution(activeDownload.resolution)}p`
                                                 : "Auto"}
                                         </button>
                                         {showQualityMenu &&
@@ -3693,7 +3688,7 @@ export default function VideoPlayer({
                                                         {sortedDownloads.map(
                                                             (link, idx) => {
                                                                 const resNum = parseResolution(link.resolution);
-                                                                const label = resNum >= 2160 ? "4K Ultra HD" : resNum === 1440 ? "2K 1440p" : resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
                                                                 return (
                                                                     <button
                                                                         key={`${link.id || "quality"}-${idx}`}
