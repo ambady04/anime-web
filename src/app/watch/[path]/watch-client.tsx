@@ -392,6 +392,17 @@ export default function WatchClient({
         return [currentEntry, ...(subject.dubs || [])];
     }, [subject, path]);
 
+    const genres = useMemo(() => {
+        const rawGenre = subject?.genre;
+        if (Array.isArray(rawGenre)) {
+            return rawGenre.map((g) => String(g).trim()).filter(Boolean);
+        }
+        if (typeof rawGenre === "string") {
+            return (rawGenre as string).split(",").map((g) => g.trim()).filter(Boolean);
+        }
+        return [];
+    }, [subject?.genre]);
+
     if (!details || !subject) {
         if (fetchError) {
             return (
@@ -455,16 +466,6 @@ export default function WatchClient({
     };
 
     const ratingNum = Number(subject?.imdbRatingValue || 0);
-    const genres = useMemo(() => {
-        const rawGenre = subject?.genre;
-        if (Array.isArray(rawGenre)) {
-            return rawGenre.map((g) => String(g).trim()).filter(Boolean);
-        }
-        if (typeof rawGenre === "string") {
-            return (rawGenre as string).split(",").map((g) => g.trim()).filter(Boolean);
-        }
-        return [];
-    }, [subject?.genre]);
 
     return (
         <div className="max-w-screen-2xl mx-auto px-3 sm:px-6 lg:px-8 py-4 animate-fade-in relative z-20">
