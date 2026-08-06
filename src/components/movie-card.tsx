@@ -39,8 +39,16 @@ function MovieCard({
         if (propBookmarkedEpisode !== undefined) setBookmarkedEpisode(propBookmarkedEpisode);
         if (isSeries && propBookmarkedSeason === undefined && propBookmarkedEpisode === undefined) {
             const item = localStore.getWatchlistItem(subject.detailPath);
-            setBookmarkedSeason(item?.bookmarkedSeason);
-            setBookmarkedEpisode(item?.bookmarkedEpisode);
+            if (item?.bookmarkedSeason && item?.bookmarkedEpisode) {
+                setBookmarkedSeason(item.bookmarkedSeason);
+                setBookmarkedEpisode(item.bookmarkedEpisode);
+            } else {
+                const historyItem = localStore.getHistory().find((h) => h.detailPath === subject.detailPath);
+                if (historyItem?.season && historyItem?.episode) {
+                    setBookmarkedSeason(historyItem.season);
+                    setBookmarkedEpisode(historyItem.episode);
+                }
+            }
         }
     }, [isSeries, subject.detailPath, propBookmarkedSeason, propBookmarkedEpisode]);
 
@@ -141,7 +149,7 @@ function MovieCard({
                         animate={{ scale: isHovered ? 1 : 0.7 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
                     >
-                        <Play className="w-5 h-5 fill-white text-white translate-x-0.5" />
+                        <Play className="w-5 h-5 fill-white text-white ml-[1px]" />
                     </motion.div>
                 </motion.div>
 

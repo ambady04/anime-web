@@ -317,6 +317,16 @@ export default function WatchClient({
 
     const activeEpRef = useRef<HTMLButtonElement | null>(null);
 
+    useEffect(() => {
+        if (activeEpRef.current) {
+            activeEpRef.current.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+                inline: "nearest",
+            });
+        }
+    }, [activeEpisode, selectedSeason, isLoadingData, totalEpisodes]);
+
     const hasDubs = useMemo(
         () => Boolean(subject?.dubs && subject.dubs.length > 0),
         [subject?.dubs],
@@ -641,7 +651,7 @@ export default function WatchClient({
                         <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
-                                    Episodes ({totalEpisodes})
+                                    Episodes ({totalEpisodes}) {activeEpisode > 0 && <span className="text-primary font-bold ml-1.5">• Ep {activeEpisode}</span>}
                                 </h3>
 
                                 {resource.seasons.length > 1 && (
@@ -714,7 +724,7 @@ export default function WatchClient({
                                                 isCurrent
                                                     ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"
                                                     : isWatched
-                                                    ? "bg-primary/20 text-primary border border-primary/30"
+                                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30"
                                                     : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
                                             }`}
                                         >

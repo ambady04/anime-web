@@ -113,7 +113,7 @@ export default function ContinueWatching() {
                                         aria-label={`Resume ${item.title}`}
                                     >
                                         <div
-                                            className="w-11 h-11 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300 shadow-xl"
+                                            className="w-12 h-12 rounded-full flex items-center justify-center opacity-90 sm:opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-300 shadow-xl"
                                             style={{
                                                 background:
                                                     "linear-gradient(135deg, var(--primary), var(--primary-dark))",
@@ -121,7 +121,7 @@ export default function ContinueWatching() {
                                                     "0 8px 32px rgba(229, 9, 20, 0.6)",
                                             }}
                                         >
-                                            <Play className="w-4 h-4 fill-white text-white translate-x-0.5" />
+                                            <Play className="w-5 h-5 fill-white text-white ml-[1px]" />
                                         </div>
                                     </Link>
 
@@ -163,7 +163,7 @@ export default function ContinueWatching() {
                                     <div className="flex items-center justify-between text-[10px] font-semibold tracking-wide uppercase text-secondary">
                                         <span className="flex items-center gap-1">
                                             <Clock className="w-3 h-3 text-primary" />
-                                            {item.isSeries ? `S${item.season} E${item.episode}` : "Movie"}
+                                            {item.isSeries ? `S${item.season || 1} E${item.episode || 1}` : "Movie"}
                                         </span>
                                         <span>
                                             {formatTime(item.currentTime)} / {formatTime(item.duration)}
