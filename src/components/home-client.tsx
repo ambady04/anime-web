@@ -5,7 +5,6 @@ import { HomepageData, movieApi } from "@/lib/api";
 import HeroSlider from "@/components/hero-slider";
 import MovieShelf from "@/components/movie-shelf";
 import ContinueWatching from "@/components/continue-watching";
-import CustomCollections from "@/components/custom-collections";
 import Link from "next/link";
 import { Film, RefreshCw, Loader2 } from "lucide-react";
 
@@ -49,7 +48,7 @@ export default function HomeClient({ initialHomeData }: HomeClientProps) {
     const banners = bannerModule?.banner?.items || [];
 
     // Extract all content shelves containing subjects (Trending, Cinema, Series, Anime, etc.)
-    const shelves =
+    const rawShelves =
         homeData?.operatingList?.filter(
             (m) =>
                 m.subjects &&
@@ -58,6 +57,17 @@ export default function HomeClient({ initialHomeData }: HomeClientProps) {
                 m.type !== "FILTER" &&
                 m.type !== "CUSTOM",
         ) || [];
+
+    // Deduplicate shelves by clean title to avoid duplicate "Trending Now" sections
+    const seenTitles = new Set<string>();
+    const shelves = rawShelves.filter((shelf) => {
+        const titleKey = (shelf.title || "").trim().toLowerCase();
+        if (!titleKey || seenTitles.has(titleKey)) {
+            return false;
+        }
+        seenTitles.add(titleKey);
+        return true;
+    });
 
     return (
         <div className="pb-16 relative">
@@ -118,9 +128,6 @@ export default function HomeClient({ initialHomeData }: HomeClientProps) {
                     </button>
                 </div>
             )}
-
-            {/* 4. Custom Curated Collections */}
-            <CustomCollections />
         </div>
     );
 }

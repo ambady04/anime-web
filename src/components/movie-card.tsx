@@ -78,6 +78,14 @@ function MovieCard({
             ? `/watch/${subject.detailPath}?season=${bookmarkedSeason}&episode=${bookmarkedEpisode}`
             : `/watch/${subject.detailPath}`;
 
+    const imgRef = useRef<HTMLImageElement>(null);
+
+    useEffect(() => {
+        if (imgRef.current?.complete) {
+            setImageLoaded(true);
+        }
+    }, [imageUrl]);
+
     return (
         <motion.div
             ref={cardRef}
@@ -94,23 +102,30 @@ function MovieCard({
             onMouseLeave={handleMouseLeave}
         >
             <Link href={watchLink} className="absolute inset-0 block rounded-[20px] overflow-hidden">
-                {/* ── Poster image with blur-in loading ── */}
-                <div className="absolute inset-0" style={{ background: "#000000" }}>
+                {/* ── Poster image with smooth loading ── */}
+                <div className="absolute inset-0 bg-neutral-900">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
+                        ref={imgRef}
                         src={imageUrl}
                         alt={subject.title}
-                        className="w-full h-full object-cover transition-transform duration-700 ease-out"
+                        className="w-full h-full object-cover transition-all duration-500 ease-out"
                         style={{
-                            opacity: imageLoaded ? 1 : 0,
-                            transition: "opacity 0.5s ease, transform 0.7s ease",
+                            opacity: imageLoaded ? 1 : 0.85,
                             transform: isHovered ? "scale(1.08)" : "scale(1)",
                         }}
                         loading="lazy"
                         onLoad={() => setImageLoaded(true)}
+                        onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.src.includes("unsplash")) {
+                                target.src = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500&auto=format&fit=crop&q=80";
+                            }
+                            setImageLoaded(true);
+                        }}
                     />
                     {/* Shimmer while loading */}
-                    {!imageLoaded && <div className="absolute inset-0 shimmer-bg" />}
+                    {!imageLoaded && <div className="absolute inset-0 shimmer-bg pointer-events-none" />}
                 </div>
 
                 {/* ── Base gradient overlay (always visible) ── */}
