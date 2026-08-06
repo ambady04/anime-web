@@ -21,15 +21,11 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    // When deployed on Cloudflare Workers (or any edge host), use the current origin
-    if (typeof window !== "undefined") {
-        try {
-            const origin = window.location.origin;
-            // If the origin already includes '/api/video', avoid duplication
-            return `${origin}/api/video`;
-        } catch {}
+    // Route video requests directly to dedicated Vercel video proxy on production deployment.
+    // Upstream CDNs block Cloudflare Worker IPs, and Workers cannot stream binary video bodies.
+    if (typeof window !== "undefined" && window.location.hostname.includes("abisolutions.online")) {
+        return "https://api.abisolutions.online/api/video";
     }
-    // Fallback for local development
     return "/api/video";
 }
 
