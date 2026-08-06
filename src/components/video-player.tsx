@@ -1080,7 +1080,8 @@ export default function VideoPlayer({
         const videoDuration = videoRef.current.duration;
         setCurrentTime(current);
 
-        if (isLoading && current > 0) {
+        if (current > 0 || videoRef.current.readyState >= 2) {
+            if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
             setIsLoading(false);
             isInitialLoadRef.current = false;
         }
@@ -2294,7 +2295,10 @@ export default function VideoPlayer({
                               : "object-cover"
                     }`}
                     onPlay={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
                         setIsPlaying(true);
+                        setIsLoading(false);
                         setAutoRetryLabel("");
                         transientRetryCountRef.current = 0;
                     }}
@@ -2328,22 +2332,21 @@ export default function VideoPlayer({
                         }
                     }}
                     onWaiting={() => {
-                        // Only show loading spinner if video is genuinely stalled,
-                        // not for brief buffer gaps during normal playback
+                        // Only show loading spinner if video has NO frame available to render (readyState < 2)
+                        // and stays stalled for at least 1500ms
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.readyState < 3 &&
+                                videoRef.current.readyState < 2 &&
                                 !videoRef.current.paused
                             ) {
                                 setIsLoading(true);
                             }
-                        }, 600);
+                        }, 1500);
                     }}
                     onSeeking={() => {
-                        // Don't show spinner immediately — brief seeks clear fast
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         waitingTimeoutRef.current = setTimeout(() => {
@@ -2353,10 +2356,9 @@ export default function VideoPlayer({
                             ) {
                                 setIsLoading(true);
                             }
-                        }, 800);
+                        }, 1000);
                     }}
                     onSeeked={() => {
-                        // Always clear loading after seek completes — video has the frame ready
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         setIsLoading(false);
@@ -2368,13 +2370,18 @@ export default function VideoPlayer({
                         setIsLoading(false);
                     }}
                     onCanPlay={() => {
-                        // Source is ready — trigger the initial-seek effect which seeks and plays
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
                         setIsVideoLoaded(true);
                         setIsLoading(false);
                         isInitialLoadRef.current = false;
                         isRecoveringRef.current = false;
+                    }}
+                    onCanPlayThrough={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
                     }}
                     onPlaying={() => {
                         if (waitingTimeoutRef.current)
