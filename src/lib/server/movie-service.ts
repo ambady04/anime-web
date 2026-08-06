@@ -212,6 +212,38 @@ async function fetchFromPool<T>(
         if (cached) return cached;
     }
 
+    // 1. Ultra-fast Vercel Edge API primary fetch (prevents Cloudflare Worker Error 1102 CPU timeouts)
+    try {
+        let vUrl = "";
+        if (endpointPath.includes("/home")) {
+            vUrl = `https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`;
+        } else if (endpointPath.includes("/detail") && params.detailPath) {
+            vUrl = `https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`;
+        } else if (endpointPath.includes("/search") && body?.keyword) {
+            vUrl = `https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`;
+        }
+
+        if (vUrl) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1200);
+            try {
+                const vRes = await fetch(vUrl, { cache: "no-store", signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (vRes.ok) {
+                    const data = (await vRes.json()) as T;
+                    if (method === "GET") {
+                        apiCache.set(cacheKey, data, 15 * 60 * 1000); // 15 minute TTL
+                    }
+                    return data;
+                }
+            } catch {
+                clearTimeout(timeoutId);
+            }
+        }
+    } catch {
+        // Fall back to direct pool mirrors below
+    }
+
     let lastError: Error | null = null;
     const reqHeaders = useAuth ? await getHeaders(adult) : getPublicHeaders(adult);
 
@@ -225,11 +257,11 @@ async function fetchFromPool<T>(
         cache: "no-store",
     };
 
-    // Race top 2 primary mirror hosts with 1500ms timeout to keep Cloudflare Worker CPU/subrequests minimal
+    // 2. Fallback: Race top 2 primary mirror hosts with 1200ms timeout
     const primaryHosts = H5_HOSTS.slice(0, 2);
     const fetchHost = async (host: string): Promise<T> => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const timeoutId = setTimeout(() => controller.abort(), 1200);
         try {
             const res = await fetch(`${host}${fullPath}`, {
                 ...reqInit,
@@ -248,37 +280,12 @@ async function fetchFromPool<T>(
         const result = await Promise.any(primaryHosts.map((h) => fetchHost(h)));
         if (result) {
             if (method === "GET") {
-                apiCache.set(cacheKey, result, 10 * 60 * 1000); // 10 minute TTL
+                apiCache.set(cacheKey, result, 15 * 60 * 1000);
             }
             return result;
         }
-    } catch {
-        // Race across primary mirror hosts failed — proceed to Vercel fallback
-    }
-
-    // Fallback: try Vercel backend if mirror hosts are rate limited / blocked
-    try {
-        let vUrl = "";
-        if (endpointPath.includes("/home")) {
-            vUrl = `https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`;
-        } else if (endpointPath.includes("/detail") && params.detailPath) {
-            vUrl = `https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`;
-        } else if (endpointPath.includes("/search") && body?.keyword) {
-            vUrl = `https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`;
-        }
-
-        if (vUrl) {
-            const vRes = await fetch(vUrl, { cache: "no-store" });
-            if (vRes.ok) {
-                const data = (await vRes.json()) as T;
-                if (method === "GET") {
-                    apiCache.set(cacheKey, data, 5 * 60 * 1000);
-                }
-                return data;
-            }
-        }
-    } catch {
-        // Ignore fallback error
+    } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
     }
 
     throw lastError || new Error(`All media mirrors exhausted for ${endpointPath}`);
