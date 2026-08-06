@@ -294,6 +294,45 @@ export async function syncHistoryItemToCloud(uid: string, item: HistoryItem) {
 }
 
 /**
+ * Deletes a single history item from Firestore cloud
+ */
+export async function deleteHistoryItemFromCloud(uid: string, detailPath: string) {
+    try {
+        const db = await getDb();
+        const { doc, deleteDoc } = await import("firebase/firestore");
+        const docRef = doc(
+            db,
+            "users",
+            uid,
+            "history",
+            escapeKey(detailPath),
+        );
+        await deleteDoc(docRef);
+    } catch (e) {
+        console.error("[sync] Failed to delete history item from cloud", e);
+    }
+}
+
+/**
+ * Clears entire history collection from Firestore cloud
+ */
+export async function clearCloudHistory(uid: string) {
+    try {
+        const db = await getDb();
+        const { collection, getDocs, writeBatch } = await import("firebase/firestore");
+        const historyCol = collection(db, "users", uid, "history");
+        const snapshot = await getDocs(historyCol);
+        const batch = writeBatch(db);
+        snapshot.forEach((docSnap) => {
+            batch.delete(docSnap.ref);
+        });
+        await batch.commit();
+    } catch (e) {
+        console.error("[sync] Failed to clear cloud history", e);
+    }
+}
+
+/**
  * Syncs a single season's watched episodes array to Firestore
  */
 export async function syncWatchedEpisodesToCloud(

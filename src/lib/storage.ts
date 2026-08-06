@@ -11,6 +11,20 @@ export function getCurrentUid(): string | null {
     return _currentUid;
 }
 
+async function getOrFetchUid(): Promise<string | null> {
+    if (_currentUid) return _currentUid;
+    try {
+        const { ensureFirebase, getFirebaseAuth } = await import("./firebase");
+        await ensureFirebase();
+        const auth = getFirebaseAuth();
+        if (auth.currentUser) {
+            _currentUid = auth.currentUser.uid;
+            return _currentUid;
+        }
+    } catch {}
+    return null;
+}
+
 export interface HistoryItem {
     detailPath: string;
     title: string;
@@ -135,23 +149,23 @@ export const localStore = {
             invalidateStorageCache();
 
             // Sync to cloud every 15 seconds of progress or on completion
-            // (avoids excessive Firestore writes while still keeping cloud updated)
-            const uid = _currentUid;
-            if (uid) {
-                const shouldSync =
-                    item.progress >= 95 || // completed
-                    Math.floor(item.currentTime) % 15 === 0; // every 15s
-                if (shouldSync) {
-                    import("./sync").then(({ syncHistoryItemToCloud }) => {
-                        syncHistoryItemToCloud(uid, newItem).catch((err) => {
-                            console.error(
-                                "[sync] Background history save failed:",
-                                err,
-                            );
+            getOrFetchUid().then((uid) => {
+                if (uid) {
+                    const shouldSync =
+                        item.progress >= 95 || // completed
+                        Math.floor(item.currentTime) % 15 === 0; // every 15s
+                    if (shouldSync) {
+                        import("./sync").then(({ syncHistoryItemToCloud }) => {
+                            syncHistoryItemToCloud(uid, newItem).catch((err) => {
+                                console.error(
+                                    "[sync] Background history save failed:",
+                                    err,
+                                );
+                            });
                         });
-                    });
+                    }
                 }
-            }
+            });
         } catch (e) {
             console.error("Failed to save watch history", e);
         }
@@ -160,36 +174,25 @@ export const localStore = {
     removeHistoryItem: (detailPath: string) => {
         if (typeof window === "undefined") return;
         try {
-            const history = localStore.getHistory();
+            const rawData = localStorage.getItem("kixo_history");
+            const history: HistoryItem[] = rawData ? JSON.parse(rawData) : [];
             const updated = history.filter((h) => h.detailPath !== detailPath);
             localStorage.setItem("kixo_history", JSON.stringify(updated));
             invalidateStorageCache();
 
             // Background Cloud Sync
-            const uid = _currentUid;
-            if (uid) {
-                import("./firebase").then(
-                    async ({ ensureFirebase, getFirebaseDb }) => {
-                        await ensureFirebase();
-                        const db = getFirebaseDb();
-                        const { doc, deleteDoc } =
-                            await import("firebase/firestore");
-                        const docRef = doc(
-                            db,
-                            "users",
-                            uid,
-                            "history",
-                            encodeURIComponent(detailPath),
-                        );
-                        deleteDoc(docRef).catch((err: any) => {
+            getOrFetchUid().then((uid) => {
+                if (uid) {
+                    import("./sync").then(({ deleteHistoryItemFromCloud }) => {
+                        deleteHistoryItemFromCloud(uid, detailPath).catch((err) => {
                             console.error(
                                 "[sync] Background history delete failed:",
                                 err,
                             );
                         });
-                    },
-                );
-            }
+                    });
+                }
+            });
         } catch {}
     },
 
@@ -199,29 +202,18 @@ export const localStore = {
         invalidateStorageCache();
 
         // Background Cloud Sync
-        const uid = _currentUid;
-        if (uid) {
-            import("./firebase")
-                .then(async ({ ensureFirebase, getFirebaseDb }) => {
-                    await ensureFirebase();
-                    const db = getFirebaseDb();
-                    const { collection, getDocs, writeBatch } =
-                        await import("firebase/firestore");
-                    const historyCol = collection(db, "users", uid, "history");
-                    const snapshot = await getDocs(historyCol);
-                    const batch = writeBatch(db);
-                    snapshot.forEach((docSnap: any) => {
-                        batch.delete(docSnap.ref);
+        getOrFetchUid().then((uid) => {
+            if (uid) {
+                import("./sync").then(({ clearCloudHistory }) => {
+                    clearCloudHistory(uid).catch((err) => {
+                        console.error(
+                            "[sync] Background history clear failed:",
+                            err,
+                        );
                     });
-                    await batch.commit();
-                })
-                .catch((err: any) => {
-                    console.error(
-                        "[sync] Background history clear failed:",
-                        err,
-                    );
                 });
-        }
+            }
+        });
     },
 
     // Watchlist / Favorites
@@ -403,19 +395,20 @@ export const localStore = {
             localStorage.setItem(key, JSON.stringify(epsArr));
 
             // Only sync to cloud if this is a new mark (avoid duplicate writes)
-            const uid = _currentUid;
-            if (uid && !wasAlreadyWatched) {
-                import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
-                    syncWatchedEpisodesToCloud(
-                        uid,
-                        detailPath,
-                        season,
-                        epsArr,
-                    ).catch((err) => {
-                        console.error("[sync] Episode watch sync failed:", err);
+            getOrFetchUid().then((uid) => {
+                if (uid && !wasAlreadyWatched) {
+                    import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
+                        syncWatchedEpisodesToCloud(
+                            uid,
+                            detailPath,
+                            season,
+                            epsArr,
+                        ).catch((err) => {
+                            console.error("[sync] Episode watch sync failed:", err);
+                        });
                     });
-                });
-            }
+                }
+            });
         } catch {}
     },
 
@@ -433,17 +426,18 @@ export const localStore = {
             localStorage.setItem(key, JSON.stringify(epsArr));
 
             // Background Cloud Sync
-            const uid = _currentUid;
-            if (uid) {
-                import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
-                    syncWatchedEpisodesToCloud(
-                        uid,
-                        detailPath,
-                        season,
-                        epsArr,
-                    ).catch(() => {});
-                });
-            }
+            getOrFetchUid().then((uid) => {
+                if (uid) {
+                    import("./sync").then(({ syncWatchedEpisodesToCloud }) => {
+                        syncWatchedEpisodesToCloud(
+                            uid,
+                            detailPath,
+                            season,
+                            epsArr,
+                        ).catch(() => {});
+                    });
+                }
+            });
         } catch {}
     },
 

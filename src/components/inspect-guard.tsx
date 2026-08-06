@@ -28,8 +28,16 @@ export default function InspectGuard() {
             return;
         }
 
-        // 1. Disable Right-Click Context Menu
+        // 1. Disable Right-Click Context Menu (except for episode buttons / interactive elements)
         const handleContextMenu = (e: MouseEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (
+                target?.closest &&
+                (target.closest(".episode-btn") ||
+                    target.closest("[data-allow-contextmenu]"))
+            ) {
+                return;
+            }
             e.preventDefault();
         };
 

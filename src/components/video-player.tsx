@@ -487,9 +487,10 @@ export default function VideoPlayer({
         const referer = window.location.origin;
         const proxyBase = getVideoProxyBase();
         const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
+        const qualityVal = parseResolution(activeDownload.resolution);
         const src = useDirect
-            ? activeDownload.url
-            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream`;
+            ? `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`
+            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
 
         const setup = () => {
             const video = videoRef.current;
@@ -1217,18 +1218,20 @@ export default function VideoPlayer({
 
     // Resolution selector handles video source swapping
     const handleQualityChange = (quality: DownloadLink, keepAuto = false) => {
-        if (!videoRef.current) return;
         if (!keepAuto) {
             setIsAutoQuality(false);
         }
 
-        // Save current position and reset seek flags so initial-seek effect restores it after new source loads
-        setInitialSeekTime(videoRef.current.currentTime);
+        const currTime = videoRef.current?.currentTime || 0;
+        setInitialSeekTime(currTime > 0 ? currTime : initialSeekTime);
         setIsInitialSeekDone(false);
         setIsVideoLoaded(false);
-
         setIsLoading(true);
-        setActiveDownload(quality);
+
+        setActiveDownload(null);
+        setTimeout(() => {
+            setActiveDownload(quality);
+        }, 20);
         setShowQualityMenu(false);
     };
 
