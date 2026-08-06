@@ -465,6 +465,28 @@ export default function WatchClient({
         }
     };
 
+    const handleEpisodeContextMenu = (e: React.MouseEvent, epNum: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!subject?.detailPath) return;
+
+        if (watchedEpisodes.has(epNum)) {
+            localStore.markEpisodeUnwatched(subject.detailPath, selectedSeason, epNum);
+            setWatchedEpisodes((prev) => {
+                const next = new Set(prev);
+                next.delete(epNum);
+                return next;
+            });
+        } else {
+            localStore.markEpisodeWatched(subject.detailPath, selectedSeason, epNum);
+            setWatchedEpisodes((prev) => {
+                const next = new Set(prev);
+                next.add(epNum);
+                return next;
+            });
+        }
+    };
+
     const ratingNum = Number(subject?.imdbRatingValue || 0);
 
     return (
@@ -723,7 +745,13 @@ export default function WatchClient({
                                                 isCurrent
                                             }
                                             onClick={() => handleEpisodeChange(selectedSeason, epNum)}
-                                            className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer ${
+                                            onContextMenu={(e) => handleEpisodeContextMenu(e, epNum)}
+                                            title={
+                                                isWatched
+                                                    ? `Episode ${epNum} (Marked Watched - Right-click to unmark)`
+                                                    : `Episode ${epNum} (Right-click to mark as watched)`
+                                            }
+                                            className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer episode-btn ${
                                                 isCurrent
                                                     ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"
                                                     : isWatched
