@@ -117,12 +117,51 @@ async function fetchMirrorStream(
         const json: any = await res.json();
         const data = json.data || json;
 
-        const downloads = (data.downloads || []).filter(
-            (d: any) => d.url && String(d.url).trim(),
-        );
-        const captions = (data.captions || []).filter(
-            (c: any) => c.url && String(c.url).trim(),
-        );
+        const rawDownloads =
+            data.downloads ||
+            data.downloadList ||
+            data.resourceList ||
+            data.sources ||
+            data.playList ||
+            [];
+
+        const downloads: DownloadLink[] = rawDownloads
+            .map((d: any, idx: number) => {
+                const rawUrl =
+                    d.url ||
+                    d.playUrl ||
+                    d.downloadUrl ||
+                    d.videoUrl ||
+                    d.hlsUrl ||
+                    d.link ||
+                    (typeof d === "string" ? d : "");
+                if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
+                    return null;
+                return {
+                    id: String(d.id || d.resolution || idx),
+                    url: rawUrl.trim(),
+                    resolution: parseResolution(
+                        d.resolution || d.quality || d.name || 720,
+                    ),
+                    size: Number(d.size || d.fileSize || 0),
+                };
+            })
+            .filter((d: any): d is DownloadLink => d !== null);
+
+        const rawCaptions = data.captions || data.captionList || [];
+        const captions: Caption[] = rawCaptions
+            .map((c: any, idx: number) => {
+                const cUrl = c.url || c.link || "";
+                if (!cUrl || typeof cUrl !== "string" || !cUrl.trim())
+                    return null;
+                return {
+                    id: String(c.id || idx),
+                    lan: c.lan || c.language || "en",
+                    lanName: c.lanName || c.languageName || c.lan || "English",
+                    url: cUrl.trim(),
+                };
+            })
+            .filter((c: any): c is Caption => c !== null);
 
         if ((downloads.length > 0 || captions.length > 0) && data.hasResource !== false) {
             return {
@@ -160,7 +199,6 @@ export const streamService = {
         }
 
         // 0. Primary: Fetch stream data from Vercel API (api.abisolutions.online)
-        // Vercel server IP is not rate-limited by upstream API.
         try {
             const vUrl = new URL("https://api.abisolutions.online/api/stream");
             vUrl.searchParams.set("path", path);
@@ -209,7 +247,7 @@ export const streamService = {
             };
         }
 
-        const referers = ["https://videodownloader.site/", `https://h5.aoneroom.com/movies/${path}`];
+        const referers = ["https://videodownloader.site/"];
 
         const isEpisodic =
             subject.subjectType === 2 ||
@@ -233,13 +271,14 @@ export const streamService = {
         }
 
         const endpoints = [
-            "/wefeed-h5api-bff/subject/download", // V2 endpoint
-            "/wefeed-h5-bff/web/subject/download", // V1 endpoint
+            "/wefeed-h5api-bff/subject/download",
+            "/wefeed-h5-bff/web/subject/download",
         ];
 
-        // ── TIER 1: Race mirror tasks ──
+        // ── TIER 1: Race primary mirror tasks (bounded to top 3 mirrors to comply with subrequest limits) ──
+        const primaryMirrors = MIRRORS.slice(0, 3);
         const tier1Tasks: Promise<StreamData | null>[] = [];
-        for (const mirror of MIRRORS) {
+        for (const mirror of primaryMirrors) {
             for (const ref of referers) {
                 for (const epPath of endpoints) {
                     for (const [sAtt, eAtt] of attempts) {
