@@ -340,7 +340,40 @@ export const movieApi = {
         });
         const dlJson: any = await dlRes.json();
         const data = dlJson.data || dlJson;
-        let downloads: DownloadLink[] = data.downloads || [];
+        const parseDownloadLinks = (rawObj: any): DownloadLink[] => {
+            const raw =
+                rawObj?.downloads ||
+                rawObj?.downloadList ||
+                rawObj?.resourceList ||
+                rawObj?.sources ||
+                rawObj?.playList ||
+                [];
+            if (!Array.isArray(raw)) return [];
+            return raw
+                .map((d: any, idx: number) => {
+                    const rawUrl =
+                        d.url ||
+                        d.playUrl ||
+                        d.downloadUrl ||
+                        d.videoUrl ||
+                        d.hlsUrl ||
+                        d.link ||
+                        (typeof d === "string" ? d : "");
+                    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
+                        return null;
+                    return {
+                        id: String(d.id || d.resolution || idx),
+                        url: rawUrl.trim(),
+                        resolution: parseResolution(
+                            d.resolution || d.quality || d.name || 720,
+                        ),
+                        size: Number(d.size || d.fileSize || 0),
+                    };
+                })
+                .filter((d: any): d is DownloadLink => d !== null);
+        };
+
+        let downloads: DownloadLink[] = parseDownloadLinks(data);
 
         // Fallback to dub tracks if primary download is empty for series
         if (downloads.length === 0 && details.dubs && details.dubs.length > 0) {
@@ -360,8 +393,9 @@ export const movieApi = {
                     });
                     const dubJson: any = await dubDlRes.json();
                     const dubData = dubJson.data || dubJson;
-                    if (dubData.downloads && dubData.downloads.length > 0) {
-                        downloads = dubData.downloads;
+                    const dubDl = parseDownloadLinks(dubData);
+                    if (dubDl.length > 0) {
+                        downloads = dubDl;
                         break;
                     }
                 } catch {
@@ -372,7 +406,7 @@ export const movieApi = {
 
         return {
             downloads,
-            captions: data.captions || [],
+            captions: data.captions || data.captionList || [],
             hasResource: true,
             limited: Boolean(data.limited),
             limitedCode: data.limitedCode || "",
