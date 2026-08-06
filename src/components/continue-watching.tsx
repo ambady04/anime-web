@@ -112,36 +112,29 @@ export default function ContinueWatching() {
                                         className="absolute inset-0 flex items-center justify-center z-10"
                                         aria-label={`Resume ${item.title}`}
                                     >
-                                        <motion.div
-                                            className="w-11 h-11 rounded-full flex items-center justify-center"
+                                        <div
+                                            className="w-11 h-11 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300 shadow-xl"
                                             style={{
-                                                background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
-                                                boxShadow: "0 8px 32px rgba(255,0,85,0.6)",
+                                                background:
+                                                    "linear-gradient(135deg, var(--primary), var(--primary-dark))",
+                                                boxShadow:
+                                                    "0 8px 32px rgba(229, 9, 20, 0.6)",
                                             }}
-                                            initial={{ scale: 0.7, opacity: 0 }}
-                                            whileInView={{ scale: 0 }}
-                                            animate={{ scale: 0.7, opacity: 0 }}
-                                            whileHover={{ scale: 1, opacity: 1 }}
-                                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
                                         >
                                             <Play className="w-4 h-4 fill-white text-white translate-x-0.5" />
-                                        </motion.div>
+                                        </div>
                                     </Link>
 
                                     {/* Remove button */}
-                                    <motion.button
-                                        onClick={(e) => handleRemove(e, item.detailPath)}
-                                        className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center text-white z-20 cursor-pointer focus:outline-none"
-                                        style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 0, scale: 0.8 }}
-                                        whileHover={{ scale: 1.1, background: "rgba(255,45,85,0.85)", borderColor: "transparent" }}
-                                        whileInView={{ opacity: 0 }}
-                                        // Show on group hover — handled by parent group state via CSS group
+                                    <button
+                                        onClick={(e) =>
+                                            handleRemove(e, item.detailPath)
+                                        }
+                                        className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center text-white/90 hover:text-white bg-black/70 hover:bg-red-600 border border-white/10 hover:border-transparent opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 cursor-pointer shadow-md"
                                         title="Remove from history"
                                     >
-                                        <X className="w-3 h-3" />
-                                    </motion.button>
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
 
                                     {/* Progress bar */}
                                     <div className="absolute bottom-0 left-0 right-0 h-[3px] z-10" style={{ background: "rgba(255,255,255,0.1)" }}>
