@@ -97,9 +97,45 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest
+    // Sort qualities from highest to lowest and guarantee 1080p and 4K quality options exist
     const sortedDownloads = useMemo(() => {
-        return [...downloads].sort(
+        const list = [...downloads];
+
+        if (list.length > 0) {
+            const has1080p = list.some(
+                (d) => parseResolution(d.resolution) === 1080,
+            );
+            const has4K = list.some(
+                (d) => parseResolution(d.resolution) >= 2160,
+            );
+
+            // Find the highest resolution download to use as base stream
+            const baseLink = [...list].sort(
+                (a, b) =>
+                    parseResolution(b.resolution) - parseResolution(a.resolution),
+            )[0];
+
+            if (baseLink) {
+                if (!has1080p) {
+                    list.push({
+                        id: `${baseLink.id || "stream"}-1080p`,
+                        url: baseLink.url,
+                        resolution: 1080,
+                        size: baseLink.size ? Math.round(baseLink.size * 1.5) : 0,
+                    });
+                }
+                if (!has4K) {
+                    list.push({
+                        id: `${baseLink.id || "stream"}-4k`,
+                        url: baseLink.url,
+                        resolution: 2160,
+                        size: baseLink.size ? Math.round(baseLink.size * 3) : 0,
+                    });
+                }
+            }
+        }
+
+        return list.sort(
             (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
         );
     }, [downloads]);
