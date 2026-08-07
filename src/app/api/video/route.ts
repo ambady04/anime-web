@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         const urlParamIdx = fullReqUrl.indexOf("url=");
         if (urlParamIdx !== -1) {
             let rawVal = fullReqUrl.slice(urlParamIdx + 4);
-            for (const delim of ["&referer=", "&mode="]) {
+            for (const delim of ["&referer=", "&mode=", "&quality="]) {
                 const dIdx = rawVal.indexOf(delim);
                 if (dIdx !== -1) {
                     rawVal = rawVal.slice(0, dIdx);
