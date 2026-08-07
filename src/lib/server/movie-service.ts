@@ -212,20 +212,21 @@ async function fetchFromPool<T>(
         if (cached) return cached;
     }
 
-    // 1. Ultra-fast Vercel Edge API primary fetch (prevents Cloudflare Worker Error 1102 CPU timeouts)
+    // 1. Primary Render Backend API fetch
     try {
         let vUrl = "";
+        const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
         if (endpointPath.includes("/home")) {
-            vUrl = `https://api.abisolutions.online/api/home${adult ? "?adult=true" : ""}`;
+            vUrl = `${apiBase}/api/home${adult ? "?adult=true" : ""}`;
         } else if (endpointPath.includes("/detail") && params.detailPath) {
-            vUrl = `https://api.abisolutions.online/api/details?path=${encodeURIComponent(String(params.detailPath))}`;
+            vUrl = `${apiBase}/api/details?path=${encodeURIComponent(String(params.detailPath))}`;
         } else if (endpointPath.includes("/search") && body?.keyword) {
-            vUrl = `https://api.abisolutions.online/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`;
+            vUrl = `${apiBase}/api/search?q=${encodeURIComponent(String(body.keyword))}&page=${body.page || 1}`;
         }
 
         if (vUrl) {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1200);
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
             try {
                 const vRes = await fetch(vUrl, { cache: "no-store", signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -257,11 +258,11 @@ async function fetchFromPool<T>(
         cache: "no-store",
     };
 
-    // 2. Fallback: Race top 2 primary mirror hosts with 1200ms timeout
-    const primaryHosts = H5_HOSTS.slice(0, 2);
+    // 2. Fallback: Race top 5 primary mirror hosts with 6000ms timeout
+    const primaryHosts = H5_HOSTS.slice(0, 5);
     const fetchHost = async (host: string): Promise<T> => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1200);
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
         try {
             const res = await fetch(`${host}${fullPath}`, {
                 ...reqInit,
@@ -286,6 +287,28 @@ async function fetchFromPool<T>(
         }
     } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
+    }
+
+    // 3. Last resort: Try remaining hosts sequentially if mirror race timed out
+    for (const host of H5_HOSTS.slice(5)) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const res = await fetch(`${host}${fullPath}`, {
+                ...reqInit,
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+                const data = (await res.json()) as T;
+                if (method === "GET") {
+                    apiCache.set(cacheKey, data, 15 * 60 * 1000);
+                }
+                return data;
+            }
+        } catch {
+            // Try next
+        }
     }
 
     throw lastError || new Error(`All media mirrors exhausted for ${endpointPath}`);

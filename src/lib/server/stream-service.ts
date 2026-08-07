@@ -198,9 +198,10 @@ export const streamService = {
             return cached.data;
         }
 
-        // 0. Primary: Fetch stream data from Vercel API (api.abisolutions.online)
+        // 0. Primary: Fetch stream data from Render backend API
         try {
-            const vUrl = new URL("https://api.abisolutions.online/api/stream");
+            const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
+            const vUrl = new URL(`${apiBase}/api/stream`);
             vUrl.searchParams.set("path", path);
             if (season) vUrl.searchParams.set("season", String(season));
             if (episode) vUrl.searchParams.set("episode", String(episode));
@@ -232,9 +233,22 @@ export const streamService = {
         }
 
         // 1. Get subject details to retrieve subjectId and dub information
-        const details = await movieService.getDetails(path, adult);
+        let details: any = null;
+        try {
+            details = await movieService.getDetails(path, adult);
+        } catch {
+            // Details fetch failed — return empty stream structure cleanly
+            return {
+                downloads: [],
+                captions: [],
+                hasResource: false,
+                limited: false,
+                limitedCode: "",
+                stream_domain: "https://videodownloader.site/",
+            };
+        }
 
-        const subject = details.subject;
+        const subject = details?.subject;
 
         if (!subject || !subject.subjectId) {
             return {

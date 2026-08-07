@@ -89,7 +89,7 @@ export default function RootLayout({
                 <meta name="referrer" content="no-referrer" />
                 <link rel="preconnect" href="https://img.aoneroom.com" crossOrigin="anonymous" />
                 <link rel="preconnect" href="https://h5-api.aoneroom.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://api.abisolutions.online" crossOrigin="anonymous" />
+                <link rel="preconnect" href="https://anime-api-arlv.onrender.com" crossOrigin="anonymous" />
             </head>
             <body
                 className="min-h-full text-white flex flex-col relative"

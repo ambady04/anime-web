@@ -27,10 +27,21 @@ export async function GET(req: NextRequest) {
                 "Cloudflare-CDN-Cache-Control": "no-store",
             },
         });
-    } catch (err: any) {
-        return NextResponse.json(
-            { error: "failed_to_fetch_stream", message: err?.message || String(err) },
-            { status: 500 },
-        );
+    } catch {
+        return NextResponse.json({
+            downloads: [],
+            captions: [],
+            hasResource: false,
+            limited: false,
+            limitedCode: "",
+            stream_domain: "https://videodownloader.site/",
+        }, {
+            status: 200,
+            headers: {
+                "Cache-Control": "private, no-store, max-age=0",
+                "CDN-Cache-Control": "no-store",
+                "Cloudflare-CDN-Cache-Control": "no-store",
+            },
+        });
     }
 }
