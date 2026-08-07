@@ -49,53 +49,62 @@ export async function GET(req: NextRequest) {
 
 
         const rangeHeader = req.headers.get("range");
-
         let upstreamResp: Response | null = null;
 
-        // Strategy 1: Render Proxy API (bypasses Cloudflare IP blocks and handles chunked video ranges)
-        try {
-            const proxyBase =
-                process.env.NEXT_PUBLIC_VIDEO_PROXY_URL ||
-                "https://anime-api-arlv.onrender.com/api/video";
-            const renderProxyUrl = `${proxyBase.replace(/\/+$/, "")}?url=${encodeURIComponent(url)}`;
-            const renderHeaders: Record<string, string> = {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "*/*",
-            };
-            if (rangeHeader) renderHeaders["Range"] = rangeHeader;
+        // Strategy 1: Direct Edge CDN Fetch with Referer Rotation
+        // Cloudflare Edge Workers are distributed worldwide and have fast CDN access.
+        const refererCandidates = [
+            "https://videodownloader.site/",
+            "https://moviebox.ph/",
+            "https://fmoviesunblocked.net/",
+            "https://h5.aoneroom.com/",
+        ];
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-            const res = await fetch(renderProxyUrl, {
-                headers: renderHeaders,
-                signal: controller.signal,
-                cache: "no-store",
-            });
-            clearTimeout(timeoutId);
-            if (res.ok || res.status === 206) {
-                upstreamResp = res;
-            }
-        } catch {
-            // Proceed to direct CDN fallback below
-        }
-
-        // Strategy 2: Direct fetch fallback
-        if (!upstreamResp) {
+        for (const ref of refererCandidates) {
             try {
                 const directHeaders: Record<string, string> = {
                     "User-Agent":
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     Accept: "*/*",
-                    Referer: "https://videodownloader.site/",
+                    Referer: ref,
+                    Origin: ref.replace(/\/+$/, ""),
                 };
                 if (rangeHeader) directHeaders["Range"] = rangeHeader;
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
                 const res = await fetch(url, {
                     headers: directHeaders,
+                    signal: controller.signal,
+                    cache: "no-store",
+                });
+                clearTimeout(timeoutId);
+
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                    break;
+                }
+            } catch {
+                // Try next referer candidate
+            }
+        }
+
+        // Strategy 2: Render Proxy Fallback (if edge direct fetch failed)
+        if (!upstreamResp) {
+            try {
+                const renderProxyUrl = `https://anime-api-arlv.onrender.com/api/video?url=${encodeURIComponent(url)}`;
+                const renderHeaders: Record<string, string> = {
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    Accept: "*/*",
+                };
+                if (rangeHeader) renderHeaders["Range"] = rangeHeader;
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                const res = await fetch(renderProxyUrl, {
+                    headers: renderHeaders,
                     signal: controller.signal,
                     cache: "no-store",
                 });
@@ -104,7 +113,7 @@ export async function GET(req: NextRequest) {
                     upstreamResp = res;
                 }
             } catch {
-                // Direct fetch failed
+                // Both strategies failed
             }
         }
 

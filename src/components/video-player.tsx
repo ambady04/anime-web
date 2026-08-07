@@ -482,16 +482,14 @@ export default function VideoPlayer({
 
         let isCancelled = false;
         const referer = "https://videodownloader.site/";
-        const proxyMode = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        // Mode 0 (default): Server video proxy API (routes via Render Python backend)
-        // Mode 1+: Direct CDN link fallback
-        const useProxy = proxyMode === 0;
-        const src = useProxy
+        // Always route through video proxy (which handles edge CDN fetch + backend fallback)
+        const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
+        const src = isExternalUrl
             ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
-            : `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`;
+            : activeDownload.url;
 
         const setup = () => {
             const video = videoRef.current;
@@ -584,8 +582,10 @@ export default function VideoPlayer({
                         })
                         .catch(() => {
                             // Playback pending user click or browser autoplay policy
-                            if (!isCancelled && video.readyState >= 1) {
+                            if (!isCancelled) {
+                                setIsPlaying(false);
                                 setIsLoading(false);
+                                isInitialLoadRef.current = false;
                             }
                         });
                 }
@@ -640,32 +640,11 @@ export default function VideoPlayer({
                             hasInitiallyLoadedRef.current = true;
                         }
                     })
-                    .catch((err) => {
-                        // Play was rejected (autoplay policy, interrupted, etc.)
-                        // Only treat as real error if video hasn't started at all
-                        if (video.currentTime === 0 || video.readyState < 2) {
-                            // Retry once after a short delay — browser may need more buffer
-                            setTimeout(() => {
-                                video
-                                    .play()
-                                    .then(() => {
-                                        setIsPlaying(true);
-                                        setIsLoading(false);
-                                        if (!hasInitiallyLoadedRef.current) {
-                                            hasInitiallyLoadedRef.current = true;
-                                        }
-                                    })
-                                    .catch(() => {
-                                        // Show paused state — user can tap to play
-                                        setIsPlaying(false);
-                                        setIsLoading(false);
-                                    });
-                            }, 800);
-                        } else {
-                            // Video has buffered; rejection was benign (e.g., interrupted by seek)
-                            setIsPlaying(false);
-                            setIsLoading(false);
-                        }
+                    .catch(() => {
+                        // Play was rejected (browser autoplay policy, user interaction required)
+                        setIsPlaying(false);
+                        setIsLoading(false);
+                        isInitialLoadRef.current = false;
                     });
             } else {
                 // Old browser fallback
@@ -741,7 +720,7 @@ export default function VideoPlayer({
             setIsLoading(true);
             setPlayerError(false);
             setAutoRetryLabel("");
-        } else {
+        } else if (streamData && streamData.hasResource) {
             setActiveDownload(null);
             if (videoRef.current) {
                 videoRef.current.pause();
@@ -759,6 +738,11 @@ export default function VideoPlayer({
                 setPlayerError(true);
                 setAutoRetryLabel("");
             }
+        } else {
+            // Initial loading state while parent fetches streamData
+            setActiveDownload(null);
+            setIsLoading(true);
+            setPlayerError(false);
         }
 
         // Subtitles — pick the best match for the current audio language:
@@ -985,19 +969,6 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: Try server proxy if primary direct link failed for this URL
-        const currentProxyIndex = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
-        if (currentProxyIndex < 1) {
-            proxyFallbackIndexRef.current.set(activeDownload.url, currentProxyIndex + 1);
-            setAutoRetryLabel("Retrying with server proxy...");
-            setIsLoading(true);
-            setInitialSeekTime(videoRef.current?.currentTime || 0);
-            setIsInitialSeekDone(false);
-            setIsVideoLoaded(false);
-            setTimeout(() => setRetryTrigger((prev) => prev + 1), 200);
-            return;
-        }
-
         // Direct CDN playback failed for this quality. Mark it and try next.
         failedUrlsRef.current.add(activeDownload.url);
 
@@ -1065,8 +1036,7 @@ export default function VideoPlayer({
                           ) || freshSorted[0]
                         : freshSorted[0]; // highest available quality (4K/1080p)
 
-                setActiveDownload(null);
-                setTimeout(() => setActiveDownload(pick), 10);
+                setActiveDownload(pick);
             } else {
                 // API returned no streams
                 setPlayerError(true);
@@ -1094,11 +1064,11 @@ export default function VideoPlayer({
             stallTimerRef.current = setTimeout(() => {
                 const video = videoRef.current;
                 // Only escalate if the video is genuinely stalled (not loading/playing)
-                if (video && (video.readyState >= 2 || video.currentTime > 0 || !video.paused)) {
+                if (video && (video.readyState >= 1 || video.currentTime > 0 || !video.paused)) {
                     // Video has data or is playing — clear spinner
                     setIsLoading(false);
                     isInitialLoadRef.current = false;
-                } else if (!video || video.readyState < 2) {
+                } else if (!video || video.readyState === 0) {
                     handlePlayerError(new Error("Stream stall timeout"));
                 } else {
                     setIsLoading(false);

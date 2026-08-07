@@ -53,11 +53,17 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
     const isSameOrigin = url.origin === self.location.origin;
 
-    // ── VIDEO CDN (hakunaymatata.com) ─────────────────────────────────────────
+    // ── VIDEO CDN (hakunaymatata.com, aoneroom.com, moviebox.ph, etc.) ───────
     // Re-issue with correct Referer so the CDN hotlink protection passes.
     // The browser normally sends the page URL as Referer → CDN returns 429.
     // We override it to videodownloader.site which is in the CDN's allowlist.
-    if (!isSameOrigin && url.hostname.endsWith("hakunaymatata.com")) {
+    const isVideoCdnDomain =
+        !isSameOrigin &&
+        (url.hostname.includes("hakunaymatata.com") ||
+            url.hostname.includes("aoneroom.com") ||
+            url.hostname.includes("moviebox"));
+
+    if (isVideoCdnDomain) {
         const accept = event.request.headers.get("accept") || "";
         const isImage =
             accept.includes("image") ||
@@ -87,44 +93,7 @@ self.addEventListener("fetch", (event) => {
             return;
         }
 
-        // Video / subtitle / media — re-fetch with whitelisted Referer and inject CORS headers
-        // so HTML5 video element can play byte-range streams without CORS blocks.
-        event.respondWith(
-            (async () => {
-                try {
-                    const reqHeaders = new Headers();
-                    reqHeaders.set("Accept", event.request.headers.get("accept") || "*/*");
-
-                    const rangeHeader = event.request.headers.get("range");
-                    if (rangeHeader) {
-                        reqHeaders.set("Range", rangeHeader);
-                    }
-
-                    const response = await fetch(url.href, {
-                        method: "GET",
-                        headers: reqHeaders,
-                        referrer: VIDEO_REFERER,
-                        referrerPolicy: "unsafe-url",
-                        credentials: "omit",
-                    });
-
-                    // Add CORS headers so browser media engine can consume stream
-                    const resHeaders = new Headers(response.headers);
-                    resHeaders.set("Access-Control-Allow-Origin", "*");
-                    resHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
-                    resHeaders.set("Access-Control-Allow-Headers", "Range, Content-Type");
-                    resHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Type");
-
-                    return new Response(response.body, {
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: resHeaders,
-                    });
-                } catch (err) {
-                    return fetch(event.request);
-                }
-            })(),
-        );
+        // Pass non-image requests (all video streams route via /api/video proxy route)
         return;
     }
 

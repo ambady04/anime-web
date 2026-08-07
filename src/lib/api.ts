@@ -18,10 +18,10 @@ const getClientHeaders = (adult = false) => {
 };
 
 export function getVideoProxyBase(): string {
-    if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
-        return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
+    if (typeof window !== "undefined") {
+        return "/api/video";
     }
-    return "https://anime-api-arlv.onrender.com/api/video";
+    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-api-arlv.onrender.com/api/video";
 }
 
 export interface ImageModel {
