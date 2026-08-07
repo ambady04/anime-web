@@ -485,12 +485,9 @@ export default function VideoPlayer({
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        const isUseDirect = directFallbackUrlsRef.current.has(activeDownload.url);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
         const src = isExternalUrl
-            ? (isUseDirect
-                ? activeDownload.url
-                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`)
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : activeDownload.url;
 
         const setup = () => {
@@ -665,7 +662,6 @@ export default function VideoPlayer({
     // Mirrors native: reset seek flags, look up history, set initialSeekTime BEFORE load
     useEffect(() => {
         failedUrlsRef.current = new Set();
-        directFallbackUrlsRef.current = new Set();
         setRetryTrigger(0);
         refreshCountRef.current = 0;
         isRecoveringRef.current = false;
@@ -1011,18 +1007,6 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: Try direct CDN URL fallback for this quality before failing it
-        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
-            directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Switching to direct CDN link...");
-            setIsLoading(true);
-            setInitialSeekTime(videoRef.current?.currentTime || 0);
-            setIsInitialSeekDone(false);
-            setIsVideoLoaded(false);
-            setRetryTrigger((prev) => prev + 1);
-            return;
-        }
-
         // Direct CDN playback failed for this quality. Mark it and try next.
         failedUrlsRef.current.add(activeDownload.url);
 
@@ -1069,9 +1053,8 @@ export default function VideoPlayer({
             );
 
             if (freshStream.downloads && freshStream.downloads.length > 0) {
-                // Reset failed URLs and resume with fresh direct links
+                // Reset failed URLs and resume with fresh proxy links
                 failedUrlsRef.current = new Set();
-                directFallbackUrlsRef.current = new Set();
                 setRetryTrigger((prev) => prev + 1);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
@@ -2643,9 +2626,8 @@ export default function VideoPlayer({
                     </p>
                     <button
                         onClick={() => {
-                            // Full reset — clear failed URLs, reset fallback maps, fetch fresh signed stream tokens
+                            // Full reset — clear failed URLs and fetch fresh stream tokens
                             failedUrlsRef.current = new Set();
-                            directFallbackUrlsRef.current = new Set();
                             proxyFallbackIndexRef.current = new Map();
                             refreshCountRef.current = 0;
                             setPlayerError(false);
