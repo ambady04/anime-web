@@ -481,7 +481,7 @@ export default function VideoPlayer({
         if (!isHistoryChecked || !activeDownload) return;
 
         let isCancelled = false;
-        const referer = window.location.origin;
+        const referer = "https://videodownloader.site/";
         const proxyMode = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
         const proxyBase = getVideoProxyBase();
 
