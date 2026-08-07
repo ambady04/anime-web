@@ -105,7 +105,7 @@ self.addEventListener("fetch", (event) => {
                         headers,
                         referrer: VIDEO_REFERER,
                         referrerPolicy: "unsafe-url",
-                        mode: "cors",
+                        mode: "no-cors",
                         credentials: "omit",
                     });
                     return response;

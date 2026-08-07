@@ -11,8 +11,7 @@ export default function ClientProviders() {
     return (
         <>
             <AmbientOrbs />
-            <InspectGuard />
+            {/* <InspectGuard /> */}
         </>
     );
 }
-
