@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
             if (rangeHeader) renderHeaders["Range"] = rangeHeader;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
             const res = await fetch(renderProxyUrl, {
                 headers: renderHeaders,
