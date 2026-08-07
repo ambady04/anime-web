@@ -245,8 +245,20 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getHome(adult);
         }
-        // Skip the server-side /api/home route — Cloudflare Worker IPs are 429-blocked by upstream CDN.
-        // Go directly from the browser to the CDN instead.
+        try {
+            const data = await fetchFromApi<HomepageData>("/api/home", { adult });
+            if (data && data.operatingList) {
+                data.operatingList = data.operatingList.map((op) => ({
+                    ...op,
+                    subjects: stripCamSubjects(
+                        (op.subjects || []).filter((s) => Boolean(s.detailPath)),
+                    ),
+                }));
+                return data;
+            }
+        } catch {
+            // Direct browser fallback if backend API is unreachable
+        }
         const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/home?host=h5-api.aoneroom.com`, {
             headers: getClientHeaders(adult),
         });
@@ -268,7 +280,12 @@ export const movieApi = {
             const { movieService } = await import("./server/movie-service");
             return movieService.getDetails(path, adult);
         }
-        // Skip server-side /api/details route — Cloudflare Worker IPs are 429-blocked.
+        try {
+            const data = await fetchFromApi<ItemDetails>("/api/details", { path, adult });
+            if (data && data.subject) return data;
+        } catch {
+            // Direct browser fallback if backend API is unreachable
+        }
         const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(path)}`, {
             headers: getClientHeaders(adult),
         });

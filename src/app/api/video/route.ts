@@ -52,21 +52,24 @@ export async function GET(req: NextRequest) {
 
         let upstreamResp: Response | null = null;
 
-        // Strategy 1: Vercel Proxy API (bypasses Cloudflare IP blocks and handles chunked video ranges)
+        // Strategy 1: Render Proxy API (bypasses Cloudflare IP blocks and handles chunked video ranges)
         try {
-            const vercelProxyUrl = `https://api.abisolutions.online/api/video?url=${encodeURIComponent(url)}`;
-            const vercelHeaders: Record<string, string> = {
+            const proxyBase =
+                process.env.NEXT_PUBLIC_VIDEO_PROXY_URL ||
+                "https://anime-api-arlv.onrender.com/api/video";
+            const renderProxyUrl = `${proxyBase.replace(/\/+$/, "")}?url=${encodeURIComponent(url)}`;
+            const renderHeaders: Record<string, string> = {
                 "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 Accept: "*/*",
             };
-            if (rangeHeader) vercelHeaders["Range"] = rangeHeader;
+            if (rangeHeader) renderHeaders["Range"] = rangeHeader;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-            const res = await fetch(vercelProxyUrl, {
-                headers: vercelHeaders,
+            const res = await fetch(renderProxyUrl, {
+                headers: renderHeaders,
                 signal: controller.signal,
                 cache: "no-store",
             });
