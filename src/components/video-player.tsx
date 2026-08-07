@@ -485,10 +485,12 @@ export default function VideoPlayer({
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        // Always route through video proxy (which handles edge CDN fetch + backend fallback)
+        const isUseDirect = directFallbackUrlsRef.current.has(activeDownload.url);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
         const src = isExternalUrl
-            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
+            ? (isUseDirect
+                ? activeDownload.url
+                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`)
             : activeDownload.url;
 
         const setup = () => {
@@ -971,6 +973,18 @@ export default function VideoPlayer({
             setTimeout(() => {
                 isRecoveringRef.current = false;
             }, 1000);
+            setRetryTrigger((prev) => prev + 1);
+            return;
+        }
+
+        // Step 0: Try direct CDN URL fallback for this quality before failing it
+        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+            directFallbackUrlsRef.current.add(activeDownload.url);
+            setAutoRetryLabel("Switching to direct CDN link...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
             setRetryTrigger((prev) => prev + 1);
             return;
         }

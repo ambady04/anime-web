@@ -100,10 +100,8 @@ export async function GET(req: NextRequest) {
         }
 
         if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
-            return NextResponse.json(
-                { error: "cdn_rejected", status: upstreamResp?.status || 502 },
-                { status: 502, headers: { "Access-Control-Allow-Origin": "*" } },
-            );
+            // Redirect browser directly to raw CDN URL so browser fetches with user's residential IP
+            return NextResponse.redirect(url, { status: 307 });
         }
 
         const resHeaders = new Headers();
