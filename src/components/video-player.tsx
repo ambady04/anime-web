@@ -853,6 +853,24 @@ export default function VideoPlayer({
     // Convert SRT to WebVTT Blob URL
     const loadSubtitleTrack = useCallback(async (srtUrl: string) => {
         try {
+            if (!srtUrl) return;
+
+            // Guard: If CloudFront URL has Policy but lacks Key-Pair-Id or Signature, skip safely
+            if (
+                srtUrl.includes("cacdn.hakunaymatata.com") &&
+                srtUrl.includes("Policy=") &&
+                !srtUrl.includes("Key-Pair-Id=")
+            ) {
+                console.warn("Subtitle URL lacks CloudFront Key-Pair-Id, skipping subtitle track safely:", srtUrl);
+                setSubtitleUrl((prev) => {
+                    if (prev && prev.startsWith("blob:")) {
+                        URL.revokeObjectURL(prev);
+                    }
+                    return "";
+                });
+                return;
+            }
+
             // Route cross-origin subtitle URLs through proxy with whitelisted referer
             let fetchUrl = srtUrl;
             if (srtUrl.startsWith("http://") || srtUrl.startsWith("https://")) {
