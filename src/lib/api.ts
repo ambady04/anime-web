@@ -182,12 +182,13 @@ async function fetchFromApi<T>(
     const queryString = searchParams.toString();
     const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-    // Use the Vercel backend when configured — the Cloudflare Worker IPs are
-    // rate-limited by h5-api.aoneroom.com but Vercel Mumbai (bom1) is not.
-    const apiBase = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL)
+    // Use the Vercel/Render backend when configured
+    const rawApiBase = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL)
         ? process.env.NEXT_PUBLIC_API_URL
         : "";
-    const url = apiBase ? `${apiBase}${fullEndpoint}` : fullEndpoint;
+    const apiBase = rawApiBase.replace(/\/+$/, "");
+    const cleanEndpoint = fullEndpoint.startsWith("/") ? fullEndpoint : `/${fullEndpoint}`;
+    const url = apiBase ? `${apiBase}${cleanEndpoint}` : cleanEndpoint;
 
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
