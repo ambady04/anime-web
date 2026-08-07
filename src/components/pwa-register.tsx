@@ -8,34 +8,23 @@ export default function PWARegister() {
             return;
         }
 
-        // In development the service worker only causes trouble: it can serve stale
-        // JS/CSS chunks (Turbopack keeps chunk URLs stable while content changes),
-        // making code edits appear to have no effect. So in dev we actively remove
-        // any previously installed worker and wipe its caches, then bail out.
-        if (process.env.NODE_ENV !== "production") {
-            navigator.serviceWorker.getRegistrations().then((regs) => {
-                regs.forEach((reg) => reg.unregister());
-            });
-            if ("caches" in window) {
-                caches
-                    .keys()
-                    .then((keys) => keys.forEach((k) => caches.delete(k)));
-            }
-            return;
-        }
-
-        // Production: register the worker for offline support.
-        window.addEventListener("load", () => {
+        // Register service worker for video referrer interception & offline support
+        const registerWorker = () => {
             navigator.serviceWorker
                 .register("/sw.js")
                 .then((reg) => {
-                    // Proactively check for an updated worker on each load.
                     reg.update();
                 })
                 .catch((err) => {
                     console.error("Service Worker registration failed:", err);
                 });
-        });
+        };
+
+        if (document.readyState === "complete") {
+            registerWorker();
+        } else {
+            window.addEventListener("load", registerWorker);
+        }
     }, []);
 
     return null;

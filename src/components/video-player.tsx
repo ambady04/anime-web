@@ -485,11 +485,13 @@ export default function VideoPlayer({
         const proxyMode = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
         const proxyBase = getVideoProxyBase();
 
-        const useDirect = proxyMode >= 1 || directFallbackUrlsRef.current.has(activeDownload.url);
         const qualityVal = parseResolution(activeDownload.resolution);
-        const src = useDirect
-            ? `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`
-            : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
+        // Mode 0 (default): Direct CDN URL — intercepted by sw.js in browser with whitelisted Referer
+        // Mode 1+: Server proxy API fallback
+        const useProxy = proxyMode >= 1;
+        const src = useProxy
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
+            : `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`;
 
         const setup = () => {
             const video = videoRef.current;
@@ -983,11 +985,11 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: Try direct stream link if primary proxy failed for this URL
+        // Step 0: Try server proxy if primary direct link failed for this URL
         const currentProxyIndex = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
         if (currentProxyIndex < 1) {
             proxyFallbackIndexRef.current.set(activeDownload.url, currentProxyIndex + 1);
-            setAutoRetryLabel("Retrying with direct stream link...");
+            setAutoRetryLabel("Retrying with server proxy...");
             setIsLoading(true);
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
