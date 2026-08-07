@@ -90,22 +90,6 @@ export default function RootLayout({
                 <link rel="preconnect" href="https://img.aoneroom.com" crossOrigin="anonymous" />
                 <link rel="preconnect" href="https://h5-api.aoneroom.com" crossOrigin="anonymous" />
                 <link rel="preconnect" href="https://api.abisolutions.online" crossOrigin="anonymous" />
-                <script
-                    dangerouslySetInnerHTML={{
-                        __html: `
-              (function() {
-                try {
-                  var theme = localStorage.getItem('kixo_theme') || 'dark';
-                  if (theme === 'light') {
-                    document.documentElement.classList.add('light');
-                  } else {
-                    document.documentElement.classList.remove('light');
-                  }
-                } catch (e) {}
-              })();
-            `,
-                    }}
-                />
             </head>
             <body
                 className="min-h-full text-white flex flex-col relative"

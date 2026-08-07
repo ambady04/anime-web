@@ -486,9 +486,9 @@ export default function VideoPlayer({
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        // Mode 0 (default): Direct CDN URL — intercepted by sw.js in browser with whitelisted Referer
-        // Mode 1+: Server proxy API fallback
-        const useProxy = proxyMode >= 1;
+        // Mode 0 (default): Server video proxy API (routes via Render Python backend)
+        // Mode 1+: Direct CDN link fallback
+        const useProxy = proxyMode === 0;
         const src = useProxy
             ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`;
