@@ -485,12 +485,10 @@ export default function VideoPlayer({
         const proxyMode = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
         let proxyBase = getVideoProxyBase();
         if (proxyMode === 1) {
-            proxyBase = "https://api.abisolutions.online/api/video";
-        } else if (proxyMode === 2) {
             proxyBase = "/api/video";
         }
 
-        const useDirect = proxyMode >= 3 || directFallbackUrlsRef.current.has(activeDownload.url);
+        const useDirect = proxyMode >= 2 || directFallbackUrlsRef.current.has(activeDownload.url);
         const qualityVal = parseResolution(activeDownload.resolution);
         const src = useDirect
             ? `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`

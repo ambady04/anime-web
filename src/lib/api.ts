@@ -21,12 +21,7 @@ export function getVideoProxyBase(): string {
     if (process.env.NEXT_PUBLIC_VIDEO_PROXY_URL) {
         return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
     }
-    // Route video requests directly to dedicated Vercel video proxy on production deployment.
-    // Upstream CDNs block Cloudflare Worker IPs, and Workers cannot stream binary video bodies.
-    if (typeof window !== "undefined" && window.location.hostname.includes("abisolutions.online")) {
-        return "https://api.abisolutions.online/api/video";
-    }
-    return "/api/video";
+    return "https://anime-api-arlv.onrender.com/api/video";
 }
 
 export interface ImageModel {
