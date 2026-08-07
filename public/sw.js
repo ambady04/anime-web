@@ -87,30 +87,40 @@ self.addEventListener("fetch", (event) => {
             return;
         }
 
-        // Video / subtitle / other — re-fetch with correct Referer.
-        // Preserve the Range header so video seeking (byte-range requests) works.
+        // Video / subtitle / media — re-fetch with whitelisted Referer and inject CORS headers
+        // so HTML5 video element can play byte-range streams without CORS blocks.
         event.respondWith(
             (async () => {
-                const headers = new Headers();
-                headers.set("Accept", event.request.headers.get("accept") || "*/*");
-
-                const rangeHeader = event.request.headers.get("range");
-                if (rangeHeader) {
-                    headers.set("Range", rangeHeader);
-                }
-
                 try {
+                    const reqHeaders = new Headers();
+                    reqHeaders.set("Accept", event.request.headers.get("accept") || "*/*");
+
+                    const rangeHeader = event.request.headers.get("range");
+                    if (rangeHeader) {
+                        reqHeaders.set("Range", rangeHeader);
+                    }
+
                     const response = await fetch(url.href, {
                         method: "GET",
-                        headers,
+                        headers: reqHeaders,
                         referrer: VIDEO_REFERER,
                         referrerPolicy: "unsafe-url",
-                        mode: "no-cors",
                         credentials: "omit",
                     });
-                    return response;
-                } catch {
-                    // Fallback: pass through original request
+
+                    // Add CORS headers so browser media engine can consume stream
+                    const resHeaders = new Headers(response.headers);
+                    resHeaders.set("Access-Control-Allow-Origin", "*");
+                    resHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                    resHeaders.set("Access-Control-Allow-Headers", "Range, Content-Type");
+                    resHeaders.set("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges, Content-Type");
+
+                    return new Response(response.body, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: resHeaders,
+                    });
+                } catch (err) {
                     return fetch(event.request);
                 }
             })(),
