@@ -2609,20 +2609,15 @@ export default function VideoPlayer({
                     </p>
                     <button
                         onClick={() => {
-                            // Full reset — clear failed URLs, reset refresh count, restart from highest quality
+                            // Full reset — clear failed URLs, reset fallback maps, fetch fresh signed stream tokens
                             failedUrlsRef.current = new Set();
+                            directFallbackUrlsRef.current = new Set();
+                            proxyFallbackIndexRef.current = new Map();
                             refreshCountRef.current = 0;
                             setPlayerError(false);
-                            setAutoRetryLabel("");
+                            setAutoRetryLabel("Fetching fresh signed stream links...");
                             setIsLoading(true);
-                            const best = sortedDownloads[0];
-                            if (best) {
-                                setActiveDownload(null);
-                                setTimeout(() => setActiveDownload(best), 50);
-                            } else {
-                                // No downloads in current data â€” try fresh fetch
-                                refreshStreamData();
-                            }
+                            refreshStreamData();
                         }}
                         className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm transition-all"
                     >
