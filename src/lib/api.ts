@@ -142,6 +142,10 @@ export interface DownloadLink {
     url: string;
     resolution: number; // e.g. 360, 480, 720, 1080
     size: number; // bytes
+    /** Direct source URL (may be non-CloudFront, e.g. from v3 mobile API) */
+    source_url?: string;
+    /** Original CloudFront resourceLink from the API */
+    resource_link?: string;
 }
 
 export interface Caption {

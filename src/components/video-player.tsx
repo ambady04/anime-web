@@ -1007,8 +1007,31 @@ export default function VideoPlayer({
             return;
         }
 
-        // Direct CDN playback failed for this quality. Mark it and try next.
+        // Try alternate URL formats for this quality before giving up.
+        // The primary url may be source_url (direct); fallback to resource_link (CloudFront via proxy)
+        // or vice versa — whichever wasn't tried yet.
+        const altUrl = activeDownload.resource_link && activeDownload.resource_link !== activeDownload.url
+            ? activeDownload.resource_link
+            : (activeDownload.source_url && activeDownload.source_url !== activeDownload.url
+                ? activeDownload.source_url
+                : null);
+
+        if (altUrl && !failedUrlsRef.current.has(altUrl)) {
+            failedUrlsRef.current.add(activeDownload.url);
+            // Patch activeDownload to use the alternate URL
+            setAutoRetryLabel("Trying alternate stream URL...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            // Swap url to the alternate URL for the retry
+            setActiveDownload({ ...activeDownload, url: altUrl });
+            return;
+        }
+
+        // Both URLs failed. Mark the download fully failed and try next quality.
         failedUrlsRef.current.add(activeDownload.url);
+        if (altUrl) failedUrlsRef.current.add(altUrl);
 
         // Step 1: Try next available quality (only if in Auto Quality mode)
         const nextQuality = isAutoQuality
