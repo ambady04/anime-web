@@ -853,14 +853,14 @@ export default function VideoPlayer({
     // Convert SRT to WebVTT Blob URL
     const loadSubtitleTrack = useCallback(async (srtUrl: string) => {
         try {
-            // Route cross-origin subtitle URLs through proxy to bypass CORS restrictions
+            // Route cross-origin subtitle URLs through proxy with whitelisted referer
             let fetchUrl = srtUrl;
             if (srtUrl.startsWith("http://") || srtUrl.startsWith("https://")) {
                 try {
                     const targetOrigin = new URL(srtUrl).origin;
                     if (typeof window !== "undefined" && targetOrigin !== window.location.origin) {
                         const proxyBase = getVideoProxyBase();
-                        const referer = window.location.origin;
+                        const referer = "https://videodownloader.site/";
                         fetchUrl = `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`;
                     }
                 } catch {}
@@ -870,9 +870,20 @@ export default function VideoPlayer({
             if (!res.ok) throw new Error("Subtitles failed to load.");
             const srtText = await res.text();
 
+            const trimmedText = srtText.trim();
+            // Guard: If response is an XML or JSON error payload (e.g. CloudFront MissingKey), ignore safely
+            if (
+                trimmedText.startsWith("<?xml") ||
+                trimmedText.startsWith("<Error") ||
+                trimmedText.startsWith('{"error"') ||
+                trimmedText.includes("MissingKey") ||
+                trimmedText.includes("AccessDenied")
+            ) {
+                throw new Error("Subtitle response returned XML/JSON error payload");
+            }
+
             // Simple SRT to WebVTT formatting conversion if not already WebVTT
             let vttText = "";
-            const trimmedText = srtText.trim();
             if (trimmedText.startsWith("WEBVTT")) {
                 vttText = srtText;
             } else {
@@ -888,7 +899,7 @@ export default function VideoPlayer({
                 return objectUrl;
             });
         } catch (e) {
-            console.error("Subtitle parse error:", e);
+            console.warn("Subtitle load failed (ignored safely):", e);
             setSubtitleUrl((prev) => {
                 if (prev && prev.startsWith("blob:")) {
                     URL.revokeObjectURL(prev);
@@ -909,6 +920,11 @@ export default function VideoPlayer({
     };
 
     const handlePlayerError = (e: unknown) => {
+        // If the error target is not the video element itself (e.g. subtitle track element), ignore
+        if (e && typeof e === "object" && "target" in e && (e as any).target !== videoRef.current) {
+            return;
+        }
+
         const video = videoRef.current;
         if (video && (video.readyState >= 1 || video.currentTime > 0)) {
             setIsLoading(false);
@@ -2436,6 +2452,11 @@ export default function VideoPlayer({
                             srcLang={activeCaption.lan}
                             label={activeCaption.lanName}
                             default
+                            onError={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setSubtitleUrl("");
+                            }}
                         />
                     )}
                 </video>
