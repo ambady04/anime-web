@@ -907,6 +907,12 @@ export default function VideoPlayer({
     };
 
     const handlePlayerError = (e: unknown) => {
+        const video = videoRef.current;
+        if (video && (video.readyState >= 1 || video.currentTime > 0)) {
+            setIsLoading(false);
+            return;
+        }
+
         // Extract a useful error message from whatever was passed:
         // - Error objects have .message
         // - React SyntheticEvents / native Events: check videoRef.current.error (MediaError)

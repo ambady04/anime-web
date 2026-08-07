@@ -18,27 +18,7 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
     try {
-        let url = "";
-        const fullReqUrl = req.url;
-        const urlParamIdx = fullReqUrl.indexOf("url=");
-        if (urlParamIdx !== -1) {
-            let rawVal = fullReqUrl.slice(urlParamIdx + 4);
-            for (const delim of ["&referer=", "&mode=", "&quality="]) {
-                const dIdx = rawVal.indexOf(delim);
-                if (dIdx !== -1) {
-                    rawVal = rawVal.slice(0, dIdx);
-                }
-            }
-            try {
-                url = decodeURIComponent(rawVal);
-            } catch {
-                url = rawVal;
-            }
-        }
-
-        if (!url) {
-            url = req.nextUrl.searchParams.get("url") || "";
-        }
+        const url = req.nextUrl.searchParams.get("url") || "";
 
         if (!url) {
             return NextResponse.json(
@@ -47,12 +27,10 @@ export async function GET(req: NextRequest) {
             );
         }
 
-
-        const rangeHeader = req.headers.get("range");
+        const rangeHeader = req.headers.get("range") || "bytes=0-";
         let upstreamResp: Response | null = null;
 
-        // Strategy 1: Direct Edge CDN Fetch with Referer Rotation
-        // Cloudflare Edge Workers are distributed worldwide and have fast CDN access.
+        // Strategy 1: Parallel Referer Race (400ms response vs 56s sequential delay)
         const refererCandidates = [
             "https://videodownloader.site/",
             "https://moviebox.ph/",
@@ -60,33 +38,37 @@ export async function GET(req: NextRequest) {
             "https://h5.aoneroom.com/",
         ];
 
-        for (const ref of refererCandidates) {
-            try {
-                const directHeaders: Record<string, string> = {
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                    Accept: "*/*",
-                    Referer: ref,
-                    Origin: ref.replace(/\/+$/, ""),
-                };
-                if (rangeHeader) directHeaders["Range"] = rangeHeader;
+        const refererTasks = refererCandidates.map(async (ref) => {
+            const directHeaders: Record<string, string> = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                Accept: "*/*",
+                Referer: ref,
+                Origin: ref.replace(/\/+$/, ""),
+            };
+            if (rangeHeader) directHeaders["Range"] = rangeHeader;
 
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 12000);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            try {
                 const res = await fetch(url, {
                     headers: directHeaders,
                     signal: controller.signal,
                     cache: "no-store",
                 });
                 clearTimeout(timeoutId);
-
-                if (res.ok || res.status === 206) {
-                    upstreamResp = res;
-                    break;
-                }
-            } catch {
-                // Try next referer candidate
+                if (res.ok || res.status === 206) return res;
+                throw new Error(`Status ${res.status}`);
+            } catch (err) {
+                clearTimeout(timeoutId);
+                throw err;
             }
+        });
+
+        try {
+            upstreamResp = await Promise.any(refererTasks);
+        } catch {
+            // Edge direct fetch failed — proceed to Strategy 2 below
         }
 
         // Strategy 2: Render Proxy Fallback (if edge direct fetch failed)

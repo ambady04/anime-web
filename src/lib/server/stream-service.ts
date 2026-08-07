@@ -313,11 +313,16 @@ export const streamService = {
             }
         }
 
+        const validTask = async (task: Promise<StreamData | null>): Promise<StreamData> => {
+            const res = await task;
+            if (res && res.hasResource && (res.downloads.length > 0 || res.captions.length > 0)) {
+                return res;
+            }
+            throw new Error("No stream links in mirror response");
+        };
+
         try {
-            const results = await Promise.all(tier1Tasks);
-            const valid = results.find(
-                (r) => r && r.hasResource && (r.downloads.length > 0 || r.captions.length > 0),
-            );
+            const valid = await Promise.any(tier1Tasks.map((t) => validTask(t)));
             if (valid) {
                 return valid;
             }
