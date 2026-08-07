@@ -452,6 +452,7 @@ export default function VideoPlayer({
     // Track which qualities have failed so we don't re-try them
     const failedUrlsRef = useRef<Set<string>>(new Set());
     const directFallbackUrlsRef = useRef<Set<string>>(new Set());
+    const proxyFallbackIndexRef = useRef<Map<string, number>>(new Map());
     // Stall watchdog timer — fires if video stays in "loading" for too long
     const stallTimerRef = useRef<NodeJS.Timeout | null>(null);
     // True only during initial source load — prevents watchdog from firing on normal seek buffering
@@ -474,18 +475,22 @@ export default function VideoPlayer({
     const autoUpgradeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // ─── Source loading effect ───
-    // Plays video through a Cloudflare Worker proxy (free unlimited bandwidth).
-    // The CDN requires a specific Referer header that browsers can't set on
-    // Video source setup: The CDN requires a specific Referer header that browsers
-    // can't set on <video> requests, so we route through a proxy that adds it.
-    // If the proxy fails, we fall back to the direct CDN URL as a last resort.
+    // Plays video through a proxy. If a proxy fails, automatically steps through
+    // secondary proxies before falling back to direct CDN playback.
     useEffect(() => {
         if (!isHistoryChecked || !activeDownload) return;
 
         let isCancelled = false;
         const referer = window.location.origin;
-        const proxyBase = getVideoProxyBase();
-        const useDirect = directFallbackUrlsRef.current.has(activeDownload.url);
+        const proxyMode = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
+        let proxyBase = getVideoProxyBase();
+        if (proxyMode === 1) {
+            proxyBase = "https://api.abisolutions.online/api/video";
+        } else if (proxyMode === 2) {
+            proxyBase = "/api/video";
+        }
+
+        const useDirect = proxyMode >= 3 || directFallbackUrlsRef.current.has(activeDownload.url);
         const qualityVal = parseResolution(activeDownload.resolution);
         const src = useDirect
             ? `${activeDownload.url}${activeDownload.url.includes("?") ? "&" : "?"}q=${qualityVal}`
@@ -983,10 +988,16 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: If proxy failed for this URL, try direct CDN URL fallback
-        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
-            directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Retrying with direct stream link...");
+        // Step 0: Try multi-level proxy fallback before giving up on this stream URL
+        const currentProxyIndex = proxyFallbackIndexRef.current.get(activeDownload.url) || 0;
+        if (currentProxyIndex < 3) {
+            proxyFallbackIndexRef.current.set(activeDownload.url, currentProxyIndex + 1);
+            const labels = [
+                "Retrying with dedicated video proxy...",
+                "Retrying with local video proxy...",
+                "Retrying with direct stream link...",
+            ];
+            setAutoRetryLabel(labels[currentProxyIndex] || "Retrying stream link...");
             setIsLoading(true);
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);

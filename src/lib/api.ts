@@ -300,9 +300,10 @@ export const movieApi = {
             if (episode) params.episode = episode;
             if (adult) params.adult = adult;
             const res = await fetchFromApi<StreamData>("/api/stream", params);
-            if (res && res.downloads && res.downloads.length > 0) return res;
+            if (res && Array.isArray(res.downloads) && res.downloads.length > 0) return res;
+            throw new Error("Empty stream downloads from API backend");
         } catch {
-            // Direct browser fallback — Vercel API failed, try h5-api directly
+            // Direct browser fallback — Backend API failed or region blocked, try h5-api directly
         }
 
         const details = await movieApi.getDetails(path, adult);
