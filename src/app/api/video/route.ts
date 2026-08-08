@@ -114,10 +114,13 @@ export async function GET(req: NextRequest) {
         }
 
         if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
-            // All proxy strategies failed.
-            // Return 502 so the video player knows to refresh stream URLs.
-            // DO NOT redirect (307) — CloudFront cookie-protected URLs will return
-            // "MissingKey" if the browser hits them without session auth cookies.
+            // If proxy strategies failed on a NON-CloudFront URL (e.g. bcdnxw.hakunaymatata.com),
+            // redirect the browser to the direct CDN URL so the user's client IP can stream it directly.
+            if (!isCloudfrontUrl) {
+                return NextResponse.redirect(url, { status: 307 });
+            }
+
+            // For CloudFront cookie-protected URLs, return 502.
             return NextResponse.json(
                 {
                     error: "video_proxy_failed",
