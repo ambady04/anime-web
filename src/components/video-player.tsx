@@ -486,15 +486,9 @@ export default function VideoPlayer({
 
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
-        const isCloudFrontUrl =
-            activeDownload.url.includes("cacdn.hakunaymatata.com") ||
-            activeDownload.url.includes("cloudfront.net") ||
-            (activeDownload.url.includes("Policy=") && activeDownload.url.includes("Signature="));
 
         const src = isExternalUrl
-            ? (isCloudFrontUrl
-                ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
-                : activeDownload.url)
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
             : activeDownload.url;
 
         const setup = () => {

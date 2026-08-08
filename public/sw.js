@@ -13,7 +13,7 @@
 // those requests and re-issues them with the correct Referer so the CDN
 // hotlink protection passes — without needing any server-side proxy.
 
-const STATIC_CACHE = "kixo-static-v10";
+const STATIC_CACHE = "kixo-static-v11";
 const IMAGE_CACHE = "kixo-images-v1";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 const VIDEO_REFERER = "https://videodownloader.site/";
@@ -54,9 +54,7 @@ self.addEventListener("fetch", (event) => {
     const isSameOrigin = url.origin === self.location.origin;
 
     // ── VIDEO CDN (hakunaymatata.com, aoneroom.com, moviebox.ph, etc.) ───────
-    // Re-issue with correct Referer so the CDN hotlink protection passes.
-    // The browser normally sends the page URL as Referer → CDN returns 429.
-    // We override it to videodownloader.site which is in the CDN's allowlist.
+    // Image requests are cached; video stream requests route through /api/video proxy.
     const isVideoCdnDomain =
         !isSameOrigin &&
         (url.hostname.includes("hakunaymatata.com") ||
@@ -93,44 +91,7 @@ self.addEventListener("fetch", (event) => {
             return;
         }
 
-        // Stream video content directly with Referer override and stripped Content-Disposition
-        event.respondWith(
-            (async () => {
-                try {
-                    const reqHeaders = new Headers(event.request.headers);
-                    reqHeaders.set("Referer", VIDEO_REFERER);
-                    reqHeaders.delete("Origin");
-
-                    const modifiedReq = new Request(event.request, {
-                        headers: reqHeaders,
-                        mode: "cors",
-                        credentials: "omit",
-                    });
-
-                    const res = await fetch(modifiedReq);
-                    if (!res.ok && res.status !== 206) {
-                        return res;
-                    }
-
-                    // Strip Content-Disposition header so browser media element plays inline without download prompt / format rejection
-                    const cleanHeaders = new Headers(res.headers);
-                    cleanHeaders.delete("content-disposition");
-                    const contentType = cleanHeaders.get("content-type") || "";
-                    if (!contentType || contentType.includes("octet-stream") || contentType.includes("text/plain")) {
-                        cleanHeaders.set("content-type", "video/mp4");
-                    }
-                    cleanHeaders.set("access-control-allow-origin", "*");
-
-                    return new Response(res.body, {
-                        status: res.status,
-                        statusText: res.statusText,
-                        headers: cleanHeaders,
-                    });
-                } catch {
-                    return fetch(event.request);
-                }
-            })()
-        );
+        // Direct CDN video requests — let browser fetch normally (video player uses /api/video)
         return;
     }
 
