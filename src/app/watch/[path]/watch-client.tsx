@@ -21,7 +21,14 @@ import {
     RotateCcw,
     AlertTriangle,
 } from "lucide-react";
-import { movieApi, ItemDetails, StreamData, DubModel, isSeriesType, parseResolution } from "@/lib/api";
+import {
+    movieApi,
+    ItemDetails,
+    StreamData,
+    DubModel,
+    isSeriesType,
+    parseResolution,
+} from "@/lib/api";
 import { localStore, HistoryItem } from "@/lib/storage";
 import VideoPlayer from "@/components/video-player";
 import MovieShelf from "@/components/movie-shelf";
@@ -69,11 +76,16 @@ export default function WatchClient({
 }: WatchClientProps) {
     const router = useRouter();
     const { user } = useAuth();
-    const [details, setDetails] = useState<ItemDetails | null>(initialDetails || null);
-    const [stream, setStream] = useState<StreamData | null>(initialStream || null);
+    const [details, setDetails] = useState<ItemDetails | null>(
+        initialDetails || null,
+    );
+    const [stream, setStream] = useState<StreamData | null>(
+        initialStream || null,
+    );
     const [activeSeason, setActiveSeason] = useState<number>(initialSeason);
     const [activeEpisode, setActiveEpisode] = useState<number>(initialEpisode);
-    const [isLoadingData, setIsLoadingData] = useState<boolean>(!initialDetails);
+    const [isLoadingData, setIsLoadingData] =
+        useState<boolean>(!initialDetails);
     const [fetchError, setFetchError] = useState<string>("");
 
     const [isPageLoading, setIsPageLoading] = useState(false);
@@ -100,9 +112,20 @@ export default function WatchClient({
                     try {
                         d = await movieApi.getDetails(path);
                     } catch (detErr) {
-                        console.warn("getDetails failed, creating fallback metadata:", detErr);
+                        console.warn(
+                            "getDetails failed, creating fallback metadata:",
+                            detErr,
+                        );
                         const parts = path.split("-");
-                        const cleanTitle = (parts.length > 1 && parts[parts.length - 1].length >= 8 ? parts.slice(0, -1) : parts).join(" ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Media Content";
+                        const cleanTitle =
+                            (parts.length > 1 &&
+                            parts[parts.length - 1].length >= 8
+                                ? parts.slice(0, -1)
+                                : parts
+                            )
+                                .join(" ")
+                                .replace(/\b\w/g, (c) => c.toUpperCase()) ||
+                            "Media Content";
                         d = {
                             subject: {
                                 subjectId: "0",
@@ -119,7 +142,11 @@ export default function WatchClient({
                                 hasResource: true,
                             },
                             stars: [],
-                            resource: { seasons: [] },
+                            resource: {
+                                seasons: [],
+                                source: "",
+                                uploadBy: "",
+                            },
                             metadata: {} as any,
                             isForbid: false,
                             watchTimeLimit: 0,
@@ -132,8 +159,10 @@ export default function WatchClient({
                 }
 
                 const isSeries = isSeriesType(d?.subject?.subjectType);
-                const sNum = activeSeason || initialSeason || (isSeries ? 1 : 0);
-                const eNum = activeEpisode || initialEpisode || (isSeries ? 1 : 0);
+                const sNum =
+                    activeSeason || initialSeason || (isSeries ? 1 : 0);
+                const eNum =
+                    activeEpisode || initialEpisode || (isSeries ? 1 : 0);
                 if (isMounted) {
                     setActiveSeason(sNum);
                     setActiveEpisode(eNum);
@@ -147,7 +176,10 @@ export default function WatchClient({
                 }
             } catch (err: any) {
                 if (isMounted) {
-                    setFetchError(err?.message || "Failed to retrieve media playback link.");
+                    setFetchError(
+                        err?.message ||
+                            "Failed to retrieve media playback link.",
+                    );
                 }
             } finally {
                 if (isMounted) setIsLoadingData(false);
@@ -269,16 +301,24 @@ export default function WatchClient({
 
     const [selectedSeason, setSelectedSeason] = useState(activeSeason || 1);
 
-    const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(new Set());
+    const [watchedEpisodes, setWatchedEpisodes] = useState<Set<number>>(
+        new Set(),
+    );
     const [watchHistory, setWatchHistory] = useState<HistoryItem[]>([]);
 
     useEffect(() => {
         if (!subject?.detailPath) return;
-        setWatchedEpisodes(localStore.getWatchedEpisodes(subject.detailPath, selectedSeason));
+        setWatchedEpisodes(
+            localStore.getWatchedEpisodes(subject.detailPath, selectedSeason),
+        );
         setWatchHistory(localStore.getHistory());
 
         if (user) {
-            syncSeasonWatchedEpisodes(user.uid, subject.detailPath, selectedSeason)
+            syncSeasonWatchedEpisodes(
+                user.uid,
+                subject.detailPath,
+                selectedSeason,
+            )
                 .then((syncedEps) => setWatchedEpisodes(syncedEps))
                 .catch(() => {});
         }
@@ -426,7 +466,10 @@ export default function WatchClient({
             return rawGenre.map((g) => String(g).trim()).filter(Boolean);
         }
         if (typeof rawGenre === "string") {
-            return (rawGenre as string).split(",").map((g) => g.trim()).filter(Boolean);
+            return (rawGenre as string)
+                .split(",")
+                .map((g) => g.trim())
+                .filter(Boolean);
         }
         return [];
     }, [subject?.genre]);
@@ -436,16 +479,23 @@ export default function WatchClient({
             return (
                 <div className="max-w-md mx-auto my-32 p-8 rounded-3xl glass-panel border border-glass-border text-center shadow-2xl relative z-20">
                     <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4 animate-bounce" />
-                    <h2 className="text-xl font-bold text-foreground mb-2">Streaming Offline</h2>
+                    <h2 className="text-xl font-bold text-foreground mb-2">
+                        Streaming Offline
+                    </h2>
                     <p className="text-sm text-foreground/60 mb-6">
-                        This media link cannot be retrieved. It may be geo-restricted or temporarily unavailable on host mirrors.
+                        This media link cannot be retrieved. It may be
+                        geo-restricted or temporarily unavailable on host
+                        mirrors.
                     </p>
                     <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 font-mono text-left mb-6 overflow-x-auto">
                         {fetchError}
                     </div>
                     <div className="flex flex-col space-y-3">
                         <button
-                            onClick={() => { setDetails(null); setStream(null); }}
+                            onClick={() => {
+                                setDetails(null);
+                                setStream(null);
+                            }}
                             className="flex items-center justify-center space-x-2 bg-primary hover:opacity-90 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all cursor-pointer"
                         >
                             <span>Try Again</span>
@@ -468,20 +518,30 @@ export default function WatchClient({
                     Connecting Media Stream
                 </h2>
                 <p className="text-xs text-foreground/70 font-medium">
-                    Fetching details and high-speed video mirrors directly from edge nodes...
+                    Fetching details and high-speed video mirrors directly from
+                    edge nodes...
                 </p>
             </div>
         );
     }
 
     const handleEpisodeChange = async (se: number, ep: number) => {
-        if (loadingEpisode === ep && activeSeason === se && activeEpisode === ep) return;
+        if (
+            loadingEpisode === ep &&
+            activeSeason === se &&
+            activeEpisode === ep
+        )
+            return;
         setLoadingEpisode(ep);
         setActiveSeason(se);
         setActiveEpisode(ep);
 
         if (typeof window !== "undefined") {
-            window.history.pushState({}, "", `/watch/${path}?season=${se}&episode=${ep}`);
+            window.history.pushState(
+                {},
+                "",
+                `/watch/${path}?season=${se}&episode=${ep}`,
+            );
         }
         try {
             const newStream = await movieApi.getStream(path, se, ep);
@@ -499,14 +559,22 @@ export default function WatchClient({
         if (!subject?.detailPath) return;
 
         if (watchedEpisodes.has(epNum)) {
-            localStore.markEpisodeUnwatched(subject.detailPath, selectedSeason, epNum);
+            localStore.markEpisodeUnwatched(
+                subject.detailPath,
+                selectedSeason,
+                epNum,
+            );
             setWatchedEpisodes((prev) => {
                 const next = new Set(prev);
                 next.delete(epNum);
                 return next;
             });
         } else {
-            localStore.markEpisodeWatched(subject.detailPath, selectedSeason, epNum);
+            localStore.markEpisodeWatched(
+                subject.detailPath,
+                selectedSeason,
+                epNum,
+            );
             setWatchedEpisodes((prev) => {
                 const next = new Set(prev);
                 next.add(epNum);
@@ -531,7 +599,16 @@ export default function WatchClient({
                 {/* LEFT — Main Video Player & Content Info */}
                 <div className="flex-1 min-w-0 space-y-4">
                     <VideoPlayer
-                        streamData={stream || { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" }}
+                        streamData={
+                            stream || {
+                                downloads: [],
+                                captions: [],
+                                hasResource: false,
+                                limited: false,
+                                limitedCode: "",
+                                stream_domain: "https://videodownloader.site/",
+                            }
+                        }
                         title={cleanTitle(subject?.title || "")}
                         coverUrl={subject?.cover?.url || ""}
                         detailPath={subject?.detailPath || path}
@@ -540,12 +617,18 @@ export default function WatchClient({
                         episode={activeEpisode}
                         onNextEpisode={() => {
                             if (activeEpisode < totalEpisodes) {
-                                handleEpisodeChange(activeSeason, activeEpisode + 1);
+                                handleEpisodeChange(
+                                    activeSeason,
+                                    activeEpisode + 1,
+                                );
                             }
                         }}
                         onPrevEpisode={() => {
                             if (activeEpisode > 1) {
-                                handleEpisodeChange(activeSeason, activeEpisode - 1);
+                                handleEpisodeChange(
+                                    activeSeason,
+                                    activeEpisode - 1,
+                                );
                             }
                         }}
                     />
@@ -571,9 +654,25 @@ export default function WatchClient({
                                             {ratingNum.toFixed(1)}
                                         </span>
                                     )}
-                                    {subject?.releaseDate && <span>Released: {subject.releaseDate}</span>}
-                                    {Boolean(subject?.duration && subject.duration > 0) && <span>{Math.floor((subject?.duration || 0) / 60)} mins</span>}
-                                    {subject?.countryName && <span>{subject.countryName}</span>}
+                                    {subject?.releaseDate && (
+                                        <span>
+                                            Released: {subject.releaseDate}
+                                        </span>
+                                    )}
+                                    {Boolean(
+                                        subject?.duration &&
+                                        subject.duration > 0,
+                                    ) && (
+                                        <span>
+                                            {Math.floor(
+                                                (subject?.duration || 0) / 60,
+                                            )}{" "}
+                                            mins
+                                        </span>
+                                    )}
+                                    {subject?.countryName && (
+                                        <span>{subject.countryName}</span>
+                                    )}
                                 </div>
                             </div>
 
@@ -700,110 +799,137 @@ export default function WatchClient({
                 {/* RIGHT SIDEBAR — Episodes, Audio Languages & Specs */}
                 <div className="w-full xl:w-[340px] flex-shrink-0 space-y-4">
                     {/* Episodes Guide */}
-                    {isSeries && resource?.seasons && resource.seasons.length > 0 && (
-                        <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
-                                    Episodes ({totalEpisodes}) {activeEpisode > 0 && <span className="text-primary font-bold ml-1.5">• Ep {activeEpisode}</span>}
-                                </h3>
-
-                                {resource.seasons.length > 1 && (
-                                    <div
-                                        id="season-selector-container"
-                                        className="relative"
-                                    >
-                                        <button
-                                            onClick={() =>
-                                                setShowSeasonDropdown(
-                                                    !showSeasonDropdown,
-                                                )
-                                            }
-                                            className="flex items-center space-x-1 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1 rounded-lg text-xs font-bold text-foreground/80 cursor-pointer"
-                                        >
-                                            <span>Season {selectedSeason}</span>
-                                            <ChevronDown className="w-3 h-3" />
-                                        </button>
-
-                                        {showSeasonDropdown && (
-                                            <div className="absolute right-0 mt-1 w-36 py-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-                                                {resource.seasons.map((s) => (
-                                                    <button
-                                                        key={s.se}
-                                                        onClick={() => {
-                                                            setSelectedSeason(
-                                                                s.se,
-                                                            );
-                                                            setShowSeasonDropdown(
-                                                                false,
-                                                            );
-                                                        }}
-                                                        className={`w-full text-left px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                                                            s.se ===
-                                                            selectedSeason
-                                                                ? "bg-primary text-white"
-                                                                : "text-foreground/70 hover:bg-white/10"
-                                                        }`}
-                                                    >
-                                                        Season {s.se}
-                                                    </button>
-                                                ))}
-                                            </div>
+                    {isSeries &&
+                        resource?.seasons &&
+                        resource.seasons.length > 0 && (
+                            <div className="p-4 rounded-2xl glass-panel border border-glass-border shadow-xl space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-foreground/70">
+                                        Episodes ({totalEpisodes}){" "}
+                                        {activeEpisode > 0 && (
+                                            <span className="text-primary font-bold ml-1.5">
+                                                • Ep {activeEpisode}
+                                            </span>
                                         )}
-                                    </div>
-                                )}
-                            </div>
+                                    </h3>
 
-                            <div className="max-h-[460px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-5 gap-2">
-                                {Array.from(
-                                    { length: totalEpisodes },
-                                    (_, i) => i + 1,
-                                ).map((epNum) => {
-                                    const isCurrent =
-                                        selectedSeason === activeSeason &&
-                                        epNum === activeEpisode;
-                                    const isWatched = watchedEpisodes.has(epNum);
-                                    const isFiller = fillerEpisodes.has(epNum);
-
-                                    return (
-                                        <button
-                                            key={epNum}
-                                            ref={isCurrent ? activeEpRef : null}
-                                            disabled={
-                                                loadingEpisode === epNum ||
-                                                isCurrent
-                                            }
-                                            onClick={() => handleEpisodeChange(selectedSeason, epNum)}
-                                            onContextMenu={(e) => handleEpisodeContextMenu(e, epNum)}
-                                            title={
-                                                isWatched
-                                                    ? `Episode ${epNum} (Marked Watched - Right-click to unmark)`
-                                                    : `Episode ${epNum} (Right-click to mark as watched)`
-                                            }
-                                            className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer episode-btn ${
-                                                isCurrent
-                                                    ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"
-                                                    : isWatched
-                                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30"
-                                                    : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
-                                            }`}
+                                    {resource.seasons.length > 1 && (
+                                        <div
+                                            id="season-selector-container"
+                                            className="relative"
                                         >
-                                            {loadingEpisode === epNum ? (
-                                                <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto text-primary" />
-                                            ) : (
-                                                <span>{epNum}</span>
+                                            <button
+                                                onClick={() =>
+                                                    setShowSeasonDropdown(
+                                                        !showSeasonDropdown,
+                                                    )
+                                                }
+                                                className="flex items-center space-x-1 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1 rounded-lg text-xs font-bold text-foreground/80 cursor-pointer"
+                                            >
+                                                <span>
+                                                    Season {selectedSeason}
+                                                </span>
+                                                <ChevronDown className="w-3 h-3" />
+                                            </button>
+
+                                            {showSeasonDropdown && (
+                                                <div className="absolute right-0 mt-1 w-36 py-1 bg-neutral-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                                                    {resource.seasons.map(
+                                                        (s) => (
+                                                            <button
+                                                                key={s.se}
+                                                                onClick={() => {
+                                                                    setSelectedSeason(
+                                                                        s.se,
+                                                                    );
+                                                                    setShowSeasonDropdown(
+                                                                        false,
+                                                                    );
+                                                                }}
+                                                                className={`w-full text-left px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                                                                    s.se ===
+                                                                    selectedSeason
+                                                                        ? "bg-primary text-white"
+                                                                        : "text-foreground/70 hover:bg-white/10"
+                                                                }`}
+                                                            >
+                                                                Season {s.se}
+                                                            </button>
+                                                        ),
+                                                    )}
+                                                </div>
                                             )}
-                                            {isFiller && (
-                                                <span
-                                                    className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"
-                                                    title="Filler Episode"
-                                                />
-                                            )}
-                                        </button>
-                                    );
-                                })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="max-h-[460px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-5 gap-2">
+                                    {Array.from(
+                                        { length: totalEpisodes },
+                                        (_, i) => i + 1,
+                                    ).map((epNum) => {
+                                        const isCurrent =
+                                            selectedSeason === activeSeason &&
+                                            epNum === activeEpisode;
+                                        const isWatched =
+                                            watchedEpisodes.has(epNum);
+                                        const isFiller =
+                                            fillerEpisodes.has(epNum);
+
+                                        return (
+                                            <button
+                                                key={epNum}
+                                                ref={
+                                                    isCurrent
+                                                        ? activeEpRef
+                                                        : null
+                                                }
+                                                disabled={
+                                                    loadingEpisode === epNum ||
+                                                    isCurrent
+                                                }
+                                                onClick={() =>
+                                                    handleEpisodeChange(
+                                                        selectedSeason,
+                                                        epNum,
+                                                    )
+                                                }
+                                                onContextMenu={(e) =>
+                                                    handleEpisodeContextMenu(
+                                                        e,
+                                                        epNum,
+                                                    )
+                                                }
+                                                title={
+                                                    isWatched
+                                                        ? `Episode ${epNum} (Marked Watched - Right-click to unmark)`
+                                                        : `Episode ${epNum} (Right-click to mark as watched)`
+                                                }
+                                                className={`p-2 rounded-xl text-center text-xs font-bold transition-all relative group cursor-pointer episode-btn ${
+                                                    isCurrent
+                                                        ? "bg-primary text-white ring-2 ring-primary/50 shadow-lg shadow-primary/30"
+                                                        : isWatched
+                                                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30"
+                                                          : "bg-white/5 hover:bg-white/10 text-foreground/70 border border-white/5"
+                                                }`}
+                                            >
+                                                {loadingEpisode === epNum ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto text-primary" />
+                                                ) : (
+                                                    <span>{epNum}</span>
+                                                )}
+                                                {isFiller && (
+                                                    <span
+                                                        className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"
+                                                        title="Filler Episode"
+                                                    />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
                     {/* Audio Languages / Dubs Panel */}
                     {completeDubs.length > 0 && (
@@ -824,9 +950,7 @@ export default function WatchClient({
                                                 loadingAudio === dub.detailPath
                                             }
                                             onClick={() => {
-                                                setLoadingAudio(
-                                                    dub.detailPath,
-                                                );
+                                                setLoadingAudio(dub.detailPath);
                                                 router.push(
                                                     `/watch/${dub.detailPath}?season=${activeSeason}&episode=${activeEpisode}`,
                                                 );
@@ -846,7 +970,8 @@ export default function WatchClient({
                                                     Active
                                                 </span>
                                             )}
-                                            {loadingAudio === dub.detailPath && (
+                                            {loadingAudio ===
+                                                dub.detailPath && (
                                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
                                             )}
                                         </button>
@@ -864,7 +989,9 @@ export default function WatchClient({
                         <div className="space-y-2 text-xs">
                             {ratingNum > 0 && (
                                 <div className="flex items-center justify-between py-1 border-b border-white/5">
-                                    <span className="text-foreground/50 font-medium">IMDb Rating</span>
+                                    <span className="text-foreground/50 font-medium">
+                                        IMDb Rating
+                                    </span>
                                     <span className="font-bold text-amber-400 flex items-center gap-1">
                                         <Star className="w-3.5 h-3.5 fill-amber-400" />
                                         {ratingNum.toFixed(1)} / 10
@@ -873,20 +1000,32 @@ export default function WatchClient({
                             )}
                             {subject.countryName && (
                                 <div className="flex items-center justify-between py-1 border-b border-white/5">
-                                    <span className="text-foreground/50 font-medium">Country</span>
-                                    <span className="font-semibold text-foreground">{subject.countryName}</span>
+                                    <span className="text-foreground/50 font-medium">
+                                        Country
+                                    </span>
+                                    <span className="font-semibold text-foreground">
+                                        {subject.countryName}
+                                    </span>
                                 </div>
                             )}
                             {subject.releaseDate && (
                                 <div className="flex items-center justify-between py-1 border-b border-white/5">
-                                    <span className="text-foreground/50 font-medium">Release Year</span>
-                                    <span className="font-semibold text-foreground">{subject.releaseDate}</span>
+                                    <span className="text-foreground/50 font-medium">
+                                        Release Year
+                                    </span>
+                                    <span className="font-semibold text-foreground">
+                                        {subject.releaseDate}
+                                    </span>
                                 </div>
                             )}
                             {subject.duration > 0 && (
                                 <div className="flex items-center justify-between py-1">
-                                    <span className="text-foreground/50 font-medium">Duration</span>
-                                    <span className="font-semibold text-foreground">{Math.floor(subject.duration / 60)} mins</span>
+                                    <span className="text-foreground/50 font-medium">
+                                        Duration
+                                    </span>
+                                    <span className="font-semibold text-foreground">
+                                        {Math.floor(subject.duration / 60)} mins
+                                    </span>
                                 </div>
                             )}
                         </div>

@@ -135,6 +135,7 @@ export interface ItemDetails {
     watchTimeLimit: number;
     related: Subject[];
     dubs?: DubModel[];
+    postList?: { items?: any[] };
 }
 
 export interface DownloadLink {
