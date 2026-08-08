@@ -33,64 +33,32 @@ export async function GET(req: NextRequest) {
         const quality = req.nextUrl.searchParams.get("quality") || "";
         let upstreamResp: Response | null = null;
 
-        // Strategy 1: Route through Render backend proxy.
-        // The Render backend has the authenticated MovieBox session (account+token cookies)
-        // which are required to access CloudFront-protected CDN URLs.
-        // This MUST be the primary strategy — direct CDN fetch from Vercel/Cloudflare IPs
-        // will fail for cookie-auth CloudFront URLs, causing MissingKey errors.
-        try {
-            const renderBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
-            const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}`;
-            const renderHeaders: Record<string, string> = {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "*/*",
-            };
-            if (rangeHeader) renderHeaders["Range"] = rangeHeader;
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-            const res = await fetch(renderProxyUrl, {
-                headers: renderHeaders,
-                signal: controller.signal,
-                cache: "no-store",
-            });
-            clearTimeout(timeoutId);
-
-            if (res.ok || res.status === 206) {
-                upstreamResp = res;
-            }
-        } catch {
-            // Render backend unavailable — fall through to Strategy 2
-        }
-
-        // Strategy 2: Direct CDN fetch with referer rotation (for non-CloudFront / publicly accessible URLs)
-        // Skipped for CloudFront domains since they require session cookies the Vercel edge doesn't have.
-        const isCloudfrontUrl = url.includes("cacdn.hakunaymatata.com") ||
+        const isCloudfrontUrl =
+            url.includes("cacdn.hakunaymatata.com") ||
             url.includes("cloudfront.net") ||
             (url.includes("Policy=") && url.includes("Signature="));
 
-        if (!upstreamResp && !isCloudfrontUrl) {
+        // Strategy 1: For non-CloudFront direct MP4 CDN links (e.g. bcdnxw.hakunaymatata.com),
+        // fetch directly from Vercel Edge without Origin header. This bypasses rate limits & CORS issues in <10ms.
+        if (!isCloudfrontUrl) {
             const refererCandidates = [
+                referer,
                 "https://videodownloader.site/",
                 "https://moviebox.ph/",
-                "https://fmoviesunblocked.net/",
                 "https://h5.aoneroom.com/",
             ];
 
             const refererTasks = refererCandidates.map(async (ref) => {
                 const directHeaders: Record<string, string> = {
                     "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
                     Accept: "*/*",
                     Referer: ref,
-                    Origin: ref.replace(/\/+$/, ""),
                 };
                 if (rangeHeader) directHeaders["Range"] = rangeHeader;
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
                 try {
                     const res = await fetch(url, {
                         headers: directHeaders,
@@ -109,18 +77,44 @@ export async function GET(req: NextRequest) {
             try {
                 upstreamResp = await Promise.any(refererTasks);
             } catch {
-                // All direct fetches failed
+                // Direct Edge fetch failed — fall through to Render backend proxy
+            }
+        }
+
+        // Strategy 2: Route through Render backend proxy.
+        // Critical for CloudFront-protected URLs or as fallback for direct links.
+        if (!upstreamResp) {
+            try {
+                const renderBase = (
+                    process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com"
+                ).replace(/\/+$/, "");
+                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}`;
+                const renderHeaders: Record<string, string> = {
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    Accept: "*/*",
+                };
+                if (rangeHeader) renderHeaders["Range"] = rangeHeader;
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+                const res = await fetch(renderProxyUrl, {
+                    headers: renderHeaders,
+                    signal: controller.signal,
+                    cache: "no-store",
+                });
+                clearTimeout(timeoutId);
+
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                }
+            } catch {
+                // Backend proxy unavailable
             }
         }
 
         if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
-            // If proxy strategies failed on a NON-CloudFront URL (e.g. bcdnxw.hakunaymatata.com),
-            // redirect the browser to the direct CDN URL so the user's client IP can stream it directly.
-            if (!isCloudfrontUrl) {
-                return NextResponse.redirect(url, { status: 307 });
-            }
-
-            // For CloudFront cookie-protected URLs, return 502.
             return NextResponse.json(
                 {
                     error: "video_proxy_failed",
@@ -147,13 +141,16 @@ export async function GET(req: NextRequest) {
         }
 
         if (!resHeaders.has("accept-ranges")) resHeaders.set("accept-ranges", "bytes");
-        if (!resHeaders.has("content-type")) resHeaders.set("content-type", "video/mp4");
+        if (!resHeaders.has("content-type") || mode === "stream") resHeaders.set("content-type", mode === "subtitle" ? "text/vtt" : "video/mp4");
         resHeaders.set("Access-Control-Allow-Origin", "*");
         resHeaders.set(
             "Access-Control-Expose-Headers",
             "Content-Range, Content-Length, Accept-Ranges, Content-Type",
         );
         resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+
+        // Explicitly omit Content-Disposition header so browser plays stream inline without download prompt / rejection
+        resHeaders.delete("content-disposition");
 
         return new NextResponse(upstreamResp.body, {
             status: upstreamResp.status,

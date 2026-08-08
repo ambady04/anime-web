@@ -474,9 +474,6 @@ export default function VideoPlayer({
     // Auto quality upgrade: after initial low-quality playback starts, schedule an upgrade to HD
     const autoUpgradeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Track direct URLs that failed so we can retry them via proxy
-    const failedDirectUrlsRef = useRef<Set<string>>(new Set());
-
     // ─── Source loading effect ───
     // Plays video through a proxy. If a proxy fails, automatically steps through
     // secondary proxies before falling back to direct CDN playback.
@@ -490,20 +487,8 @@ export default function VideoPlayer({
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
-        // CloudFront URLs (cacdn.hakunaymatata.com / cloudfront.net / Policy+Signature) require the authenticated proxy.
-        // Direct CDN URLs (e.g. bcdnxw.hakunaymatata.com) allow native CORS and work best played directly by the browser to avoid datacenter IP rate limits (502 Bad Gateway).
-        const isCloudFrontUrl =
-            activeDownload.url.includes("cacdn.hakunaymatata.com") ||
-            activeDownload.url.includes("cloudfront.net") ||
-            (activeDownload.url.includes("Policy=") && activeDownload.url.includes("Signature="));
-
-        const useProxy =
-            isCloudFrontUrl || failedDirectUrlsRef.current.has(activeDownload.url);
-
         const src = isExternalUrl
-            ? (useProxy
-                ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
-                : activeDownload.url)
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : activeDownload.url;
 
         const setup = () => {
@@ -1019,24 +1004,6 @@ export default function VideoPlayer({
             setTimeout(() => {
                 isRecoveringRef.current = false;
             }, 1000);
-            setRetryTrigger((prev) => prev + 1);
-            return;
-        }
-
-        const isCloudFrontUrl =
-            activeDownload.url.includes("cacdn.hakunaymatata.com") ||
-            activeDownload.url.includes("cloudfront.net") ||
-            (activeDownload.url.includes("Policy=") && activeDownload.url.includes("Signature="));
-
-        // If direct CDN playback failed for a non-CloudFront URL, switch to proxy mode before giving up or switching qualities
-        if (!isCloudFrontUrl && !failedDirectUrlsRef.current.has(activeDownload.url)) {
-            failedDirectUrlsRef.current.add(activeDownload.url);
-            console.warn("Direct CDN stream failed, falling back to proxy stream:", activeDownload.url);
-            setAutoRetryLabel("Switching to proxy stream...");
-            setIsLoading(true);
-            setInitialSeekTime(videoRef.current?.currentTime || 0);
-            setIsInitialSeekDone(false);
-            setIsVideoLoaded(false);
             setRetryTrigger((prev) => prev + 1);
             return;
         }
