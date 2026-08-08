@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const rangeHeader = req.headers.get("range") || "";
+        const rangeHeader = req.headers.get("range") || "bytes=0-";
         const referer = req.nextUrl.searchParams.get("referer") || "https://videodownloader.site/";
         const mode = req.nextUrl.searchParams.get("mode") || "stream";
         const quality = req.nextUrl.searchParams.get("quality") || "";
@@ -38,8 +38,7 @@ export async function GET(req: NextRequest) {
             url.includes("cloudfront.net") ||
             (url.includes("Policy=") && url.includes("Signature="));
 
-        // Strategy 1: For non-CloudFront direct MP4 CDN links (e.g. bcdnxw.hakunaymatata.com),
-        // fetch directly from Vercel Edge without Origin header. This bypasses rate limits & CORS issues in <10ms.
+        // Strategy 1: Direct fetch from Vercel edge with Referer candidates & Range
         if (!isCloudfrontUrl) {
             const refererCandidates = [
                 referer || "https://videodownloader.site/",
@@ -57,8 +56,8 @@ export async function GET(req: NextRequest) {
                         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
                     Accept: "*/*",
                     Referer: ref,
+                    Range: rangeHeader,
                 };
-                if (rangeHeader) directHeaders["Range"] = rangeHeader;
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -79,20 +78,19 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // Strategy 2: Route through Render backend proxy.
-        // Critical for CloudFront-protected URLs or as fallback for direct links.
+        // Strategy 2: Render backend proxy fallback with Range headers
         if (!upstreamResp) {
             try {
                 const renderBase = (
                     process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com"
                 ).replace(/\/+$/, "");
-                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}`;
+                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
                 const renderHeaders: Record<string, string> = {
                     "User-Agent":
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     Accept: "*/*",
+                    Range: rangeHeader,
                 };
-                if (rangeHeader) renderHeaders["Range"] = rangeHeader;
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 20000);

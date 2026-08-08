@@ -1,19 +1,13 @@
-// ─── KIXO Service Worker v7 ───────────────────────────────────────────────────
+// ─── KIXO Service Worker v8 ───────────────────────────────────────────────────
 // Strategy:
-//   hakunaymatata.com (video CDN) → Intercept + re-issue with correct Referer
-//   hakunaymatata.com (images)    → Cache-First
-//   /api/*                        → Network-Only
-//   /_next/static/*               → Cache-First (hashed filenames, immutable)
-//   External CDN images           → Cache-First (poster URLs are static)
-//   Page navigations              → Network-First (fresh HTML, offline fallback)
-//
-// WHY: The video CDN (bcdnxw.hakunaymatata.com) only allows playback when
-// Referer is https://videodownloader.site/. Browsers send the page origin
-// as Referer by default, which the CDN rejects with 429. This SW intercepts
-// those requests and re-issues them with the correct Referer so the CDN
-// hotlink protection passes — without needing any server-side proxy.
+//   1. /api/video                  → Intercept & issue direct browser fetch to CDN with Referer header
+//   2. hakunaymatata.com (images)   → Cache-First
+//   3. /api/* (other)              → Network-Only
+//   4. /_next/static/*              → Cache-First (hashed filenames, immutable)
+//   5. External CDN images          → Cache-First (poster URLs are static)
+//   6. Page navigations             → Network-First (fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v11";
+const STATIC_CACHE = "kixo-static-v12";
 const IMAGE_CACHE = "kixo-images-v1";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 const VIDEO_REFERER = "https://videodownloader.site/";
@@ -53,8 +47,70 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
     const isSameOrigin = url.origin === self.location.origin;
 
-    // ── VIDEO CDN (hakunaymatata.com, aoneroom.com, moviebox.ph, etc.) ───────
-    // Image requests are cached; video stream requests route through /api/video proxy.
+    // ── 1. INTERCEPT /api/video SAME-ORIGIN STREAM REQUESTS ─────────────────────
+    // Intercept video proxy requests and issue direct browser fetch to CDN with Referer.
+    // Bypasses Vercel serverless timeouts/limits and server IP blocking on Hakunaymatata.
+    if (isSameOrigin && url.pathname === "/api/video") {
+        const targetUrl = url.searchParams.get("url");
+        if (targetUrl) {
+            event.respondWith(
+                (async () => {
+                    const refererUrl =
+                        url.searchParams.get("referer") || VIDEO_REFERER;
+                    const rangeHeader = event.request.headers.get("range");
+
+                    const fetchHeaders = new Headers();
+                    fetchHeaders.set(
+                        "User-Agent",
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+                    );
+                    fetchHeaders.set("Accept", "*/*");
+                    if (rangeHeader) {
+                        fetchHeaders.set("Range", rangeHeader);
+                    }
+
+                    try {
+                        const directReq = new Request(targetUrl, {
+                            method: "GET",
+                            headers: fetchHeaders,
+                            referrer: refererUrl,
+                            referrerPolicy: "unsafe-url",
+                            mode: "cors",
+                            credentials: "omit",
+                        });
+
+                        const res = await fetch(directReq);
+
+                        if (res.ok || res.status === 206) {
+                            const newHeaders = new Headers(res.headers);
+                            newHeaders.set("Access-Control-Allow-Origin", "*");
+                            newHeaders.set(
+                                "Access-Control-Expose-Headers",
+                                "Content-Range, Content-Length, Accept-Ranges, Content-Type",
+                            );
+                            if (!newHeaders.has("content-type")) {
+                                newHeaders.set("content-type", "video/mp4");
+                            }
+                            newHeaders.delete("content-disposition");
+
+                            return new Response(res.body, {
+                                status: res.status,
+                                statusText: res.statusText,
+                                headers: newHeaders,
+                            });
+                        }
+                    } catch {
+                        // Fallback to server endpoint if direct browser SW fetch fails
+                    }
+
+                    return fetch(event.request);
+                })(),
+            );
+            return;
+        }
+    }
+
+    // ── 2. VIDEO CDN DIRECT DOMAIN REQUESTS ──────────────────────────────────
     const isVideoCdnDomain =
         !isSameOrigin &&
         (url.hostname.includes("hakunaymatata.com") ||
@@ -68,7 +124,6 @@ self.addEventListener("fetch", (event) => {
             /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i.test(url.pathname);
 
         if (isImage) {
-            // Cache poster/thumbnail images from this CDN
             event.respondWith(
                 caches.open(IMAGE_CACHE).then(async (cache) => {
                     const cached = await cache.match(event.request);
@@ -79,7 +134,10 @@ self.addEventListener("fetch", (event) => {
                             cache
                                 .put(event.request, response.clone())
                                 .then(() =>
-                                    trimCache(IMAGE_CACHE, IMAGE_CACHE_MAX_ENTRIES),
+                                    trimCache(
+                                        IMAGE_CACHE,
+                                        IMAGE_CACHE_MAX_ENTRIES,
+                                    ),
                                 );
                         }
                         return response;
@@ -91,11 +149,35 @@ self.addEventListener("fetch", (event) => {
             return;
         }
 
-        // Direct CDN video requests — let browser fetch normally (video player uses /api/video)
+        // Direct media stream fetch: inject Referer header
+        const rangeHeader = event.request.headers.get("range");
+        const fetchHeaders = new Headers(event.request.headers);
+        if (rangeHeader) fetchHeaders.set("Range", rangeHeader);
+
+        event.respondWith(
+            (async () => {
+                try {
+                    const req = new Request(event.request.url, {
+                        method: "GET",
+                        headers: fetchHeaders,
+                        referrer: VIDEO_REFERER,
+                        referrerPolicy: "unsafe-url",
+                        mode: "cors",
+                    });
+                    const res = await fetch(req);
+                    if (res.ok || res.status === 206) {
+                        return res;
+                    }
+                } catch {
+                    // Ignore
+                }
+                return fetch(event.request);
+            })(),
+        );
         return;
     }
 
-    // ── OTHER EXTERNAL CDN IMAGES (aoneroom.com, tmdb.org) ────────────────────
+    // ── 3. OTHER EXTERNAL CDN IMAGES (aoneroom.com, tmdb.org) ─────────────────
     if (
         !isSameOrigin &&
         (url.hostname.includes("aoneroom.com") ||
@@ -117,7 +199,10 @@ self.addEventListener("fetch", (event) => {
                             cache
                                 .put(event.request, response.clone())
                                 .then(() =>
-                                    trimCache(IMAGE_CACHE, IMAGE_CACHE_MAX_ENTRIES),
+                                    trimCache(
+                                        IMAGE_CACHE,
+                                        IMAGE_CACHE_MAX_ENTRIES,
+                                    ),
                                 );
                         }
                         return response;
@@ -128,7 +213,6 @@ self.addEventListener("fetch", (event) => {
             );
             return;
         }
-        // Non-image from other CDN (subtitle files etc.) — pass through
         return;
     }
 
@@ -137,12 +221,12 @@ self.addEventListener("fetch", (event) => {
 
     const path = url.pathname;
 
-    // ── Network-Only: API routes ──────────────────────────────────────────────
-    if (path.startsWith("/api/") || path === "/sw.js") {
+    // ── 4. Network-Only API & Worker ──────────────────────────────────────────
+    if ((path.startsWith("/api/") && path !== "/api/video") || path === "/sw.js") {
         return;
     }
 
-    // ── Cache-First: versioned static assets ──────────────────────────────────
+    // ── 5. Cache-First: versioned static assets ───────────────────────────────
     if (path.startsWith("/_next/static/")) {
         event.respondWith(
             caches.open(STATIC_CACHE).then(async (cache) => {
@@ -158,7 +242,7 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // ── Network-First: HTML navigations ───────────────────────────────────────
+    // ── 6. Network-First: HTML navigations ────────────────────────────────────
     if (event.request.mode === "navigate") {
         event.respondWith(
             fetch(event.request).catch(() =>
@@ -168,7 +252,7 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // ── Cache-First: same-origin static (fonts, icons, manifest) ──────────────
+    // ── 7. Cache-First: same-origin static (fonts, icons, manifest) ───────────
     event.respondWith(
         caches.open(STATIC_CACHE).then(async (cache) => {
             const cached = await cache.match(event.request);
