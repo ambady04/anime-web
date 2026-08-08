@@ -13,7 +13,7 @@
 // those requests and re-issues them with the correct Referer so the CDN
 // hotlink protection passes — without needing any server-side proxy.
 
-const STATIC_CACHE = "kixo-static-v8";
+const STATIC_CACHE = "kixo-static-v10";
 const IMAGE_CACHE = "kixo-images-v1";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 const VIDEO_REFERER = "https://videodownloader.site/";

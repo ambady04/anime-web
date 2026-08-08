@@ -147,7 +147,9 @@ export async function GET(req: NextRequest) {
             "Access-Control-Expose-Headers",
             "Content-Range, Content-Length, Accept-Ranges, Content-Type",
         );
-        resHeaders.set("Cache-Control", "public, max-age=3600, s-maxage=3600");
+        resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+        resHeaders.set("Pragma", "no-cache");
+        resHeaders.set("Expires", "0");
 
         // Explicitly omit Content-Disposition header so browser plays stream inline without download prompt / rejection
         resHeaders.delete("content-disposition");

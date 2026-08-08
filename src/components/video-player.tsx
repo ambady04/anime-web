@@ -488,7 +488,7 @@ export default function VideoPlayer({
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
         const src = isExternalUrl
-            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
             : activeDownload.url;
 
         const setup = () => {
