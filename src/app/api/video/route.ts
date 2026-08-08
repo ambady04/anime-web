@@ -1,18 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+// Streaming video — ensure no body size limit truncates the response
+export const maxDuration = 60;
+
+const CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
+    "Access-Control-Expose-Headers":
+        "Content-Range, Content-Length, Accept-Ranges, Content-Type",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+};
 
 export async function OPTIONS() {
     return new NextResponse(null, {
         status: 204,
-        headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-            "Access-Control-Allow-Headers": "Range, Content-Type",
-            "Access-Control-Expose-Headers":
-                "Content-Range, Content-Length, Accept-Ranges, Content-Type",
-            "Access-Control-Max-Age": "86400",
-        },
+        headers: CORS_HEADERS,
+    });
+}
+
+export async function HEAD(req: NextRequest) {
+    // Some video players send a HEAD request first to check content-length/type.
+    // Forward it to the same GET logic but strip the body.
+    const getResponse = await GET(req);
+    return new NextResponse(null, {
+        status: getResponse.status,
+        headers: getResponse.headers,
     });
 }
 
@@ -138,11 +153,8 @@ export async function GET(req: NextRequest) {
 
         if (!resHeaders.has("accept-ranges")) resHeaders.set("accept-ranges", "bytes");
         if (!resHeaders.has("content-type") || mode === "stream") resHeaders.set("content-type", mode === "subtitle" ? "text/vtt" : "video/mp4");
-        resHeaders.set("Access-Control-Allow-Origin", "*");
-        resHeaders.set(
-            "Access-Control-Expose-Headers",
-            "Content-Range, Content-Length, Accept-Ranges, Content-Type",
-        );
+        // Apply CORS headers
+        Object.entries(CORS_HEADERS).forEach(([k, v]) => resHeaders.set(k, v));
         resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
         resHeaders.set("Pragma", "no-cache");
         resHeaders.set("Expires", "0");

@@ -17,10 +17,26 @@ const getClientHeaders = (adult = false) => {
     };
 };
 
+// Returns the absolute URL of the Vercel-hosted video proxy.
+// IMPORTANT: The /api/video route MUST run on Vercel (Node.js runtime) — NOT on
+// Cloudflare Workers. Cloudflare Workers cannot stream large video files:
+// they have a 128MB response body limit and do not support HTTP Range byte-serving.
+// Even when the frontend is served from Cloudflare, video requests must be routed
+// to Vercel's edge directly. Use NEXT_PUBLIC_VIDEO_PROXY_URL to configure this.
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
+        // Browser: always use the configured absolute Vercel proxy URL.
+        // Fallback to same-origin /api/video only if no absolute URL is configured
+        // (i.e. during local development where Vercel is unavailable).
+        const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
+        // If it's an absolute URL (starts with http), use it directly.
+        if (configuredUrl.startsWith("http")) {
+            return configuredUrl;
+        }
+        // Local dev fallback: same-origin relative path
         return "/api/video";
     }
+    // Server-side (SSR): use configured URL or Render backend
     return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-api-arlv.onrender.com/api/video";
 }
 
