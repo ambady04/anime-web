@@ -97,10 +97,38 @@ export default function WatchClient({
 
                 let d = details;
                 if (!d) {
-                    d = await movieApi.getDetails(path);
+                    try {
+                        d = await movieApi.getDetails(path);
+                    } catch (detErr) {
+                        console.warn("getDetails failed, creating fallback metadata:", detErr);
+                        const parts = path.split("-");
+                        const cleanTitle = (parts.length > 1 && parts[parts.length - 1].length >= 8 ? parts.slice(0, -1) : parts).join(" ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Media Content";
+                        d = {
+                            subject: {
+                                subjectId: "0",
+                                subjectType: 1,
+                                title: cleanTitle,
+                                description: "",
+                                releaseDate: "",
+                                duration: 0,
+                                genre: [],
+                                cover: { url: "" },
+                                countryName: "",
+                                imdbRatingValue: 0.0,
+                                detailPath: path,
+                                hasResource: true,
+                            },
+                            stars: [],
+                            resource: { seasons: [] },
+                            metadata: {} as any,
+                            isForbid: false,
+                            watchTimeLimit: 0,
+                            postList: { items: [] },
+                            related: [],
+                        };
+                    }
                     if (!isMounted) return;
                     setDetails(d);
-                    setIsLoadingData(false);
                 }
 
                 const isSeries = isSeriesType(d?.subject?.subjectType);
