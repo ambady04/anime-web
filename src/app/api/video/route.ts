@@ -42,13 +42,16 @@ export async function GET(req: NextRequest) {
         // fetch directly from Vercel Edge without Origin header. This bypasses rate limits & CORS issues in <10ms.
         if (!isCloudfrontUrl) {
             const refererCandidates = [
-                referer,
+                referer || "https://videodownloader.site/",
                 "https://videodownloader.site/",
                 "https://moviebox.ph/",
-                "https://h5.aoneroom.com/",
             ];
 
-            const refererTasks = refererCandidates.map(async (ref) => {
+            const tried = new Set<string>();
+            for (const ref of refererCandidates) {
+                if (tried.has(ref)) continue;
+                tried.add(ref);
+
                 const directHeaders: Record<string, string> = {
                     "User-Agent":
                         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
                 if (rangeHeader) directHeaders["Range"] = rangeHeader;
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 12000);
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
                 try {
                     const res = await fetch(url, {
                         headers: directHeaders,
@@ -66,18 +69,13 @@ export async function GET(req: NextRequest) {
                         cache: "no-store",
                     });
                     clearTimeout(timeoutId);
-                    if (res.ok || res.status === 206) return res;
-                    throw new Error(`Status ${res.status}`);
-                } catch (err) {
+                    if (res.ok || res.status === 206) {
+                        upstreamResp = res;
+                        break;
+                    }
+                } catch {
                     clearTimeout(timeoutId);
-                    throw err;
                 }
-            });
-
-            try {
-                upstreamResp = await Promise.any(refererTasks);
-            } catch {
-                // Direct Edge fetch failed — fall through to Render backend proxy
             }
         }
 
