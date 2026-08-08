@@ -17,28 +17,33 @@ const getClientHeaders = (adult = false) => {
     };
 };
 
-// Returns the absolute URL of the Vercel-hosted video proxy.
-// IMPORTANT: The /api/video route MUST run on Vercel (Node.js runtime) — NOT on
-// Cloudflare Workers. Cloudflare Workers cannot stream large video files:
-// they have a 128MB response body limit and do not support HTTP Range byte-serving.
-// Even when the frontend is served from Cloudflare, video requests must be routed
-// to Vercel's edge directly. Use NEXT_PUBLIC_VIDEO_PROXY_URL to configure this.
+// Returns the URL of the Vercel-hosted video proxy.
+// IMPORTANT: The /api/video route MUST run on Vercel (Node.js/AWS runtime) — NOT on
+// Cloudflare Workers. Cloudflare Workers return 502 when proxying bcdn.hakunaymatata.com
+// because the CDN blocks Cloudflare's shared IP ranges.
+//
+// Tested results:
+//   anime-web-nu.vercel.app/api/video  → HTTP 206 ✓  (Vercel AWS IPs are allowed by CDN)
+//   kixo.abisolutions.online/api/video → HTTP 502 ✗  (Cloudflare Worker, CDN blocks it)
+//   api.abisolutions.online/api/video  → HTTP 404 ✗  (wrong Vercel project/domain)
+//
+// The NEXT_PUBLIC_VIDEO_PROXY_URL env var overrides this — set it in your Vercel dashboard.
+const VERCEL_VIDEO_PROXY_FALLBACK = "https://anime-web-nu.vercel.app/api/video";
+
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
-        // Browser: always use the configured absolute Vercel proxy URL.
-        // Fallback to same-origin /api/video only if no absolute URL is configured
-        // (i.e. during local development where Vercel is unavailable).
+        // Browser: use configured env var if it's an absolute Vercel URL, else hardcoded fallback.
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
-        // If it's an absolute URL (starts with http), use it directly.
         if (configuredUrl.startsWith("http")) {
             return configuredUrl;
         }
-        // Local dev fallback: same-origin relative path
-        return "/api/video";
+        // Always use the Vercel proxy — never same-origin /api/video when deployed on Cloudflare.
+        return VERCEL_VIDEO_PROXY_FALLBACK;
     }
     // Server-side (SSR): use configured URL or Render backend
     return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-api-arlv.onrender.com/api/video";
 }
+
 
 export interface ImageModel {
     url: string;
