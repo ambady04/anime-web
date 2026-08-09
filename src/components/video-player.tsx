@@ -97,44 +97,14 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest, up to 1080p maximum
+    // Sort qualities from highest to lowest
     const sortedDownloads = useMemo(() => {
-        // Filter out any qualities above 1080p
         const list = downloads.filter(
             (d) => parseResolution(d.resolution) <= 1080,
         );
+        const sourceList = list.length > 0 ? list : downloads;
 
-        if (list.length > 0) {
-            const has1080p = list.some(
-                (d) => parseResolution(d.resolution) === 1080,
-            );
-
-            // Find the highest resolution download to use as base stream
-            const baseLink = [...list].sort(
-                (a, b) =>
-                    parseResolution(b.resolution) - parseResolution(a.resolution),
-            )[0];
-
-            if (baseLink && !has1080p) {
-                list.push({
-                    id: `${baseLink.id || "stream"}-1080p`,
-                    url: baseLink.url,
-                    resolution: 1080,
-                    size: baseLink.size ? Math.round(baseLink.size * 1.5) : 0,
-                });
-            }
-        } else if (downloads.length > 0) {
-            // Fallback if all streams in downloads were above 1080p
-            const baseLink = downloads[0];
-            list.push({
-                id: `${baseLink.id || "stream"}-1080p`,
-                url: baseLink.url,
-                resolution: 1080,
-                size: baseLink.size || 0,
-            });
-        }
-
-        return list.sort(
+        return [...sourceList].sort(
             (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
         );
     }, [downloads]);
