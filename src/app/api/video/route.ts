@@ -143,9 +143,6 @@ export async function GET(req: NextRequest) {
         }
 
         if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
-            if (url.startsWith("http://") || url.startsWith("https://")) {
-                return NextResponse.redirect(url, { status: 307 });
-            }
             return NextResponse.json(
                 {
                     error: "video_proxy_failed",
