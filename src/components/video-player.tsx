@@ -457,8 +457,10 @@ export default function VideoPlayer({
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
-        const useDirectCdn = directFallbackUrlsRef.current.has(activeDownload.url);
-        const src = isExternalUrl && !useDirectCdn
+        // Primary stream source is direct CDN URL (intercepted by Service Worker v17 on client residential IP)
+        // Fall back to serverless video proxy if direct client stream fails
+        const useProxy = directFallbackUrlsRef.current.has(activeDownload.url);
+        const src = isExternalUrl && useProxy
             ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
             : activeDownload.url;
 
