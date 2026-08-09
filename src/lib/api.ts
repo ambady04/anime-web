@@ -30,17 +30,11 @@ const getClientHeaders = (adult = false) => {
 // Returns the URL of the video proxy endpoint.
 // In the browser on Vercel deployment, defaults to relative `/api/video` on the deployment's own domain.
 export function getVideoProxyBase(): string {
-    if (typeof window !== "undefined") {
-        const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
-        if (configuredUrl) {
-            return configuredUrl;
-        }
-        if (window.location.hostname.includes("abisolutions.online")) {
-            return "https://anime-web-nu.vercel.app/api/video";
-        }
-        return "/api/video";
+    const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL;
+    if (configuredUrl) {
+        return configuredUrl;
     }
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-web-nu.vercel.app/api/video";
+    return "https://anime-api-arlv.onrender.com/api/video";
 }
 
 
