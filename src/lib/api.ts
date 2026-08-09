@@ -35,10 +35,12 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
+        if (window.location.hostname.includes("abisolutions.online")) {
+            return "https://anime-web-nu.vercel.app/api/video";
+        }
         return "/api/video";
     }
-    // Server-side (SSR): use configured URL or Render backend
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-api-arlv.onrender.com/api/video";
+    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-web-nu.vercel.app/api/video";
 }
 
 
