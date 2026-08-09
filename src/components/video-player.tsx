@@ -2465,7 +2465,6 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
-                    {...({ referrerPolicy: "no-referrer" } as any)}
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
