@@ -27,18 +27,15 @@ const getClientHeaders = (adult = false) => {
 //   kixo.abisolutions.online/api/video → HTTP 502 ✗  (Cloudflare Worker, CDN blocks it)
 //   api.abisolutions.online/api/video  → HTTP 404 ✗  (wrong Vercel project/domain)
 //
-// The NEXT_PUBLIC_VIDEO_PROXY_URL env var overrides this — set it in your Vercel dashboard.
-const VERCEL_VIDEO_PROXY_FALLBACK = "https://anime-web-nu.vercel.app/api/video";
-
+// Returns the URL of the video proxy endpoint.
+// In the browser on Vercel deployment, defaults to relative `/api/video` on the deployment's own domain.
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
-        // Browser: use configured env var if it's an absolute Vercel URL, else hardcoded fallback.
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
-        if (configuredUrl.startsWith("http")) {
+        if (configuredUrl) {
             return configuredUrl;
         }
-        // Always use the Vercel proxy — never same-origin /api/video when deployed on Cloudflare.
-        return VERCEL_VIDEO_PROXY_FALLBACK;
+        return "/api/video";
     }
     // Server-side (SSR): use configured URL or Render backend
     return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-api-arlv.onrender.com/api/video";

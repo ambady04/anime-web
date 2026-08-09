@@ -48,48 +48,43 @@ export async function GET(req: NextRequest) {
         const quality = req.nextUrl.searchParams.get("quality") || "";
         let upstreamResp: Response | null = null;
 
-        const isCloudfrontUrl =
-            url.includes("cacdn.hakunaymatata.com") ||
-            url.includes("cloudfront.net") ||
-            (url.includes("Policy=") && url.includes("Signature="));
+        // Strategy 1: Direct fetch from Vercel edge/serverless with Referer candidates & Range
+        const refererCandidates = [
+            referer || "https://videodownloader.site/",
+            "https://videodownloader.site/",
+            "https://h5.aoneroom.com/",
+            "https://moviebox.ph/",
+            "https://fmoviesunblocked.net/",
+        ];
 
-        // Strategy 1: Direct fetch from Vercel edge with Referer candidates & Range
-        if (!isCloudfrontUrl) {
-            const refererCandidates = [
-                referer || "https://videodownloader.site/",
-                "https://videodownloader.site/",
-                "https://moviebox.ph/",
-            ];
+        const tried = new Set<string>();
+        for (const ref of refererCandidates) {
+            if (tried.has(ref)) continue;
+            tried.add(ref);
 
-            const tried = new Set<string>();
-            for (const ref of refererCandidates) {
-                if (tried.has(ref)) continue;
-                tried.add(ref);
+            const directHeaders: Record<string, string> = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                Accept: "*/*",
+                Referer: ref,
+                Range: rangeHeader,
+            };
 
-                const directHeaders: Record<string, string> = {
-                    "User-Agent":
-                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-                    Accept: "*/*",
-                    Referer: ref,
-                    Range: rangeHeader,
-                };
-
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-                try {
-                    const res = await fetch(url, {
-                        headers: directHeaders,
-                        signal: controller.signal,
-                        cache: "no-store",
-                    });
-                    clearTimeout(timeoutId);
-                    if (res.ok || res.status === 206) {
-                        upstreamResp = res;
-                        break;
-                    }
-                } catch {
-                    clearTimeout(timeoutId);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 12000);
+            try {
+                const res = await fetch(url, {
+                    headers: directHeaders,
+                    signal: controller.signal,
+                    cache: "no-store",
+                });
+                clearTimeout(timeoutId);
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                    break;
                 }
+            } catch {
+                clearTimeout(timeoutId);
             }
         }
 
