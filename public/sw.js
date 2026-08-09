@@ -1,12 +1,12 @@
-// ─── KIXO Service Worker v15 ─────────────────────────────────────────────────
+// ─── KIXO Service Worker v16 ─────────────────────────────────────────────────
 // Strategy:
 //   1. /api/*                        → Network-Only (Pass through directly to Vercel API routes)
 //   2. External CDN images           → Cache-First (Poster thumbnails)
-//   3. /_next/static/*               → Cache-First (Hashed static assets)
+//   3. /_next/static/*               → Network-First (Fresh JS/CSS bundles on new deployments)
 //   4. Page navigations              → Network-First (Fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v15";
-const IMAGE_CACHE = "kixo-images-v1";
+const STATIC_CACHE = "kixo-static-v16";
+const IMAGE_CACHE = "kixo-images-v2";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 
 self.addEventListener("install", (event) => {
@@ -86,18 +86,18 @@ self.addEventListener("fetch", (event) => {
 
     const path = url.pathname;
 
-    // ── 3. Cache-First: versioned static assets ───────────────────────────────
+    // ── 3. Network-First: versioned static assets (Fresh JS/CSS bundles) ─────────
     if (path.startsWith("/_next/static/")) {
         event.respondWith(
-            caches.open(STATIC_CACHE).then(async (cache) => {
-                const cached = await cache.match(event.request);
-                if (cached) return cached;
-                const response = await fetch(event.request);
-                if (response.ok) {
-                    cache.put(event.request, response.clone());
-                }
-                return response;
-            }),
+            fetch(event.request)
+                .then((response) => {
+                    if (response.ok) {
+                        const copy = response.clone();
+                        caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(event.request).then((r) => r || Response.error())),
         );
         return;
     }
