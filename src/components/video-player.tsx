@@ -458,7 +458,7 @@ export default function VideoPlayer({
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
         const src = isExternalUrl
-            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
+            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : activeDownload.url;
 
         const setup = () => {
@@ -539,8 +539,11 @@ export default function VideoPlayer({
                 }
             } else {
                 // Progressive MP4 / WebM
-                video.src = src;
-                video.load();
+                const currentSrcAttr = video.getAttribute("src") || video.src;
+                if (!currentSrcAttr || !currentSrcAttr.includes(encodeURIComponent(activeDownload.url))) {
+                    video.src = src;
+                    video.load();
+                }
                 const playPromise = video.play();
                 if (playPromise !== undefined) {
                     playPromise
@@ -983,18 +986,6 @@ export default function VideoPlayer({
             return;
         }
 
-        // Step 0: If proxy failed for this URL, try loading the direct CDN URL from client IP
-        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
-            directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Trying direct stream connection...");
-            setIsLoading(true);
-            setInitialSeekTime(videoRef.current?.currentTime || 0);
-            setIsInitialSeekDone(false);
-            setIsVideoLoaded(false);
-            setRetryTrigger((prev) => prev + 1);
-            return;
-        }
-
         // Try alternate URL formats for this quality before giving up.
         // The primary url may be source_url (direct); fallback to resource_link (CloudFront via proxy)
         // or vice versa — whichever wasn't tried yet.
@@ -1274,6 +1265,9 @@ export default function VideoPlayer({
         const video = videoRef.current;
         if (!video) return;
         if (video.paused) {
+            if (video.readyState === 0) {
+                video.load();
+            }
             const playPromise = video.play();
             if (playPromise !== undefined) {
                 playPromise
@@ -1281,7 +1275,9 @@ export default function VideoPlayer({
                         setIsPlaying(true);
                     })
                     .catch((err) => {
-                        console.warn("Play interaction error:", err);
+                        if (err?.name !== "NotSupportedError" && err?.name !== "AbortError") {
+                            console.warn("Play interaction notice:", err);
+                        }
                         setIsPlaying(false);
                     });
             }
