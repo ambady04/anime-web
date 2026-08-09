@@ -936,6 +936,11 @@ export default function VideoPlayer({
             errorMsg = String(e);
         }
 
+        // GUARD: Ignore error events if video src is empty, missing, or uninitialized (e.g. from removeAttribute or load reset)
+        if (!video || !video.src || video.src === "" || video.src === window.location.href || !video.currentSrc) {
+            return;
+        }
+
         // GUARD: If we're already in recovery mode, ensure we clear it after a short delay so error recovery never locks up
         if (isRecoveringRef.current) {
             setTimeout(() => {
@@ -954,12 +959,12 @@ export default function VideoPlayer({
         // any subsequent error during skip/seek is transient (e.g., network timeout during range request).
         // Try reloading the current URL and restoring time rather than swapping to a new URL/quality/mode.
         if (
-            videoRef.current &&
-            videoRef.current.currentTime > 2 &&
+            video &&
+            video.currentTime > 2 &&
             transientRetryCountRef.current < 3
         ) {
             transientRetryCountRef.current += 1;
-            const restoreTime = videoRef.current.currentTime;
+            const restoreTime = video.currentTime;
 
             console.warn(
                 `Transient playback error (attempt ${transientRetryCountRef.current}/3):`,
@@ -1062,6 +1067,7 @@ export default function VideoPlayer({
             if (freshStream.downloads && freshStream.downloads.length > 0) {
                 // Reset failed URLs and resume with fresh proxy links
                 failedUrlsRef.current = new Set();
+                directFallbackUrlsRef.current = new Set();
                 setRetryTrigger((prev) => prev + 1);
                 setAutoRetryLabel("Fresh links found! Resuming...");
 
