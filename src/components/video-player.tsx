@@ -457,8 +457,7 @@ export default function VideoPlayer({
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
-        const useDirectUrl = directFallbackUrlsRef.current.has(activeDownload.url);
-        const src = isExternalUrl && !useDirectUrl
+        const src = isExternalUrl
             ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
             : activeDownload.url;
 
@@ -2465,6 +2464,7 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
+                    crossOrigin="anonymous"
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
