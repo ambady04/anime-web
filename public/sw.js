@@ -1,12 +1,13 @@
-// ─── KIXO Service Worker v16 ─────────────────────────────────────────────────
+// ─── KIXO Service Worker v17 ─────────────────────────────────────────────────
 // Strategy:
 //   1. /api/*                        → Network-Only (Pass through directly to Vercel API routes)
+//   1.5 External CDN Videos          → Intercept & Attach valid Referer on client residential IP
 //   2. External CDN images           → Cache-First (Poster thumbnails)
 //   3. /_next/static/*               → Network-First (Fresh JS/CSS bundles on new deployments)
 //   4. Page navigations              → Network-First (Fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v16";
-const IMAGE_CACHE = "kixo-images-v2";
+const STATIC_CACHE = "kixo-static-v17";
+const IMAGE_CACHE = "kixo-images-v3";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 
 self.addEventListener("install", (event) => {
@@ -47,6 +48,38 @@ self.addEventListener("fetch", (event) => {
     // ── 1. ALL API ROUTES & SERVICE WORKER → Network-Only (No SW interception) ───
     if (isSameOrigin && (url.pathname.startsWith("/api/") || url.pathname === "/sw.js")) {
         return;
+    }
+
+    // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Intercept & inject valid Referer header ─
+    if (!isSameOrigin && (url.hostname.includes("hakunaymatata.com") || url.hostname.includes("aoneroom.com"))) {
+        const isVideo =
+            /\.(mp4|m3u8|ts|webm)(\?|$)/i.test(url.pathname) ||
+            url.pathname.includes("/bt/") ||
+            url.pathname.includes("/resource/");
+
+        if (isVideo) {
+            event.respondWith(
+                (async () => {
+                    const reqHeaders = new Headers(event.request.headers);
+                    reqHeaders.set("Referer", "https://videodownloader.site/");
+                    reqHeaders.set("Origin", "https://videodownloader.site");
+
+                    const modifiedReq = new Request(event.request, {
+                        headers: reqHeaders,
+                        mode: "cors",
+                        credentials: "omit",
+                    });
+
+                    try {
+                        const response = await fetch(modifiedReq);
+                        return response;
+                    } catch {
+                        return fetch(event.request);
+                    }
+                })()
+            );
+            return;
+        }
     }
 
     // ── 2. EXTERNAL CDN IMAGES (hakunaymatata.com, aoneroom.com, tmdb.org) ───────
