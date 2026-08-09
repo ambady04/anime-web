@@ -169,7 +169,15 @@ export default function WatchClient({
                 }
 
                 let s = stream;
-                if (!s) {
+                const isExpired = (st: any) => {
+                    if (!st?.downloads?.[0]?.url) return false;
+                    const match = st.downloads[0].url.match(/[?&]t=(\d+)/);
+                    if (!match) return false;
+                    const urlTime = parseInt(match[1], 10);
+                    const now = Math.floor(Date.now() / 1000);
+                    return now - urlTime > 300; // Older than 5 minutes
+                };
+                if (!s || isExpired(s)) {
                     s = await movieApi.getStream(path, sNum, eNum);
                     if (!isMounted) return;
                     setStream(s);

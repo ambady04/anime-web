@@ -1026,8 +1026,8 @@ export default function VideoPlayer({
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
             setTimeout(() => setActiveDownload(nextQuality), 200);
-        } else if (refreshCountRef.current < 2) {
-            // Step 2: All qualities failed — fetch fresh stream URLs from API
+        } else if (refreshCountRef.current < 5) {
+            // Step 2: All qualities failed / expired — fetch fresh stream URLs from API
             refreshCountRef.current += 1;
             setAutoRetryLabel("Fetching fresh stream links...");
             setIsLoading(true);

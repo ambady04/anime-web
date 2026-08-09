@@ -70,43 +70,76 @@ export async function GET(req: NextRequest) {
         const quality = req.nextUrl.searchParams.get("quality") || "";
         let upstreamResp: Response | null = null;
 
-        // Strategy 1: Direct fetch from Vercel edge/serverless with Referer candidates & Range
+        const USER_AGENTS = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+        ];
+
+        // Build candidate CDN URLs: try bcdn first, then cacdn
+        const urlsToTry: string[] = [url];
+        if (url.includes("hakunaymatata.com")) {
+            try {
+                const hostPart = url.split("://")[1].split("/")[0];
+                const currentSub = hostPart.split(".hakunaymatata.com")[0];
+                for (const sub of ["bcdn", "cacdn"]) {
+                    if (sub !== currentSub) {
+                        const alt = url.replace(`://${currentSub}.hakunaymatata.com`, `://${sub}.hakunaymatata.com`);
+                        if (!urlsToTry.includes(alt)) urlsToTry.push(alt);
+                    }
+                }
+            } catch {
+                // Ignore parse errors
+            }
+        }
+
+        // Strategy 1: Direct fetch from Vercel edge/serverless with primary Referer candidates & Range
         const refererCandidates = [
             referer || "https://videodownloader.site/",
             "https://videodownloader.site/",
             "https://h5.aoneroom.com/",
-            "https://moviebox.ph/",
-            "https://fmoviesunblocked.net/",
         ];
 
         const tried = new Set<string>();
-        for (const ref of refererCandidates) {
-            if (tried.has(ref)) continue;
-            tried.add(ref);
+        outer: for (const targetUrl of urlsToTry) {
+            for (const ref of refererCandidates) {
+                const key = `${targetUrl}|${ref}`;
+                if (tried.has(key)) continue;
+                tried.add(key);
 
-            const directHeaders: Record<string, string> = {
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                Accept: "*/*",
-                Referer: ref,
-                Range: rangeHeader,
-            };
+                const directHeaders: Record<string, string> = {
+                    "User-Agent": USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
+                    Accept: "*/*",
+                    "Accept-Encoding": "identity",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    Referer: ref,
+                    Origin: ref.replace(/\/$/, ""),
+                    "Sec-Fetch-Dest": "video",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Site": "cross-site",
+                    Range: rangeHeader,
+                };
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 12000);
-            try {
-                const res = await fetch(url, {
-                    headers: directHeaders,
-                    signal: controller.signal,
-                    cache: "no-store",
-                });
-                clearTimeout(timeoutId);
-                if (res.ok || res.status === 206) {
-                    upstreamResp = res;
-                    break;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
+                try {
+                    const res = await fetch(targetUrl, {
+                        headers: directHeaders,
+                        signal: controller.signal,
+                        cache: "no-store",
+                    });
+                    clearTimeout(timeoutId);
+                    if (res.ok || res.status === 206) {
+                        upstreamResp = res;
+                        break outer;
+                    }
+                    if (res.status === 429) {
+                        // Rate limited on this domain — break to try alt domain candidate
+                        break;
+                    }
+                } catch {
+                    clearTimeout(timeoutId);
                 }
-            } catch {
-                clearTimeout(timeoutId);
             }
         }
 
@@ -116,11 +149,14 @@ export async function GET(req: NextRequest) {
                 const renderBase = (
                     process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com"
                 ).replace(/\/+$/, "");
-                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
+                // Pass the primary (bcdn non-xw) URL to the Render backend too
+                const proxyUrl = urlsToTry[0] || url;
+                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(proxyUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
                 const renderHeaders: Record<string, string> = {
                     "User-Agent":
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                     Accept: "*/*",
+                    // Pass Range both as HTTP header AND query param (backend reads from header)
                     Range: rangeHeader,
                 };
 
