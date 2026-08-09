@@ -33,7 +33,29 @@ export async function HEAD(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
-        const url = req.nextUrl.searchParams.get("url") || "";
+        const fullReqUrl = req.url;
+        let url = "";
+        if (fullReqUrl.includes("url=")) {
+            const afterUrl = fullReqUrl.slice(fullReqUrl.indexOf("url=") + 4);
+            let cutIndex = afterUrl.length;
+            for (const p of ["&referer=", "&mode=", "&quality=", "&_t="]) {
+                const idx = afterUrl.indexOf(p);
+                if (idx !== -1 && idx < cutIndex) {
+                    cutIndex = idx;
+                }
+            }
+            const rawVal = afterUrl.slice(0, cutIndex);
+            try {
+                url = decodeURIComponent(rawVal);
+            } catch {
+                url = rawVal;
+            }
+            if (!url.startsWith("http")) {
+                url = req.nextUrl.searchParams.get("url") || "";
+            }
+        } else {
+            url = req.nextUrl.searchParams.get("url") || "";
+        }
 
         if (!url) {
             return NextResponse.json(
