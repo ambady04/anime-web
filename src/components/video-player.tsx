@@ -457,7 +457,8 @@ export default function VideoPlayer({
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
 
-        const src = isExternalUrl
+        const useDirectCdn = directFallbackUrlsRef.current.has(activeDownload.url);
+        const src = isExternalUrl && !useDirectCdn
             ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`
             : activeDownload.url;
 
@@ -974,6 +975,18 @@ export default function VideoPlayer({
             setTimeout(() => {
                 isRecoveringRef.current = false;
             }, 1000);
+            setRetryTrigger((prev) => prev + 1);
+            return;
+        }
+
+        // Step 0: If proxy failed for this URL, try loading the direct CDN URL from client IP
+        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+            directFallbackUrlsRef.current.add(activeDownload.url);
+            setAutoRetryLabel("Trying direct stream connection...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
             setRetryTrigger((prev) => prev + 1);
             return;
         }
