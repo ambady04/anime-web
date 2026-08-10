@@ -2433,7 +2433,6 @@ export default function VideoPlayer({
                         className="w-full h-full border-0 relative z-10"
                         allowFullScreen
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                         onLoad={() => {
                             setIsLoading(false);
                             setAutoRetryLabel("");
