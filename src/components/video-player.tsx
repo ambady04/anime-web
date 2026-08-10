@@ -97,16 +97,19 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest
+    // Sort qualities from highest to lowest — prioritizing native direct MP4 streams first!
     const sortedDownloads = useMemo(() => {
         const list = downloads.filter(
             (d) => parseResolution(d.resolution) <= 1080,
         );
         const sourceList = list.length > 0 ? list : downloads;
 
-        return [...sourceList].sort(
-            (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
-        );
+        return [...sourceList].sort((a, b) => {
+            const aEmbed = (a as any).isEmbed ? 1 : 0;
+            const bEmbed = (b as any).isEmbed ? 1 : 0;
+            if (aEmbed !== bEmbed) return aEmbed - bEmbed; // Native direct MP4 streams ALWAYS come first
+            return parseResolution(b.resolution) - parseResolution(a.resolution);
+        });
     }, [downloads]);
 
     // States
