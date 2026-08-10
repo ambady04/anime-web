@@ -2430,32 +2430,8 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video / Embed Player Node */}
-            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc") || activeDownload.url.includes("vidsrc.to")) ? (
-                <div className="relative w-full h-full">
-                    <iframe
-                        src={activeDownload.url}
-                        className="w-full h-full border-0 relative z-10"
-                        allowFullScreen
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                        onLoad={() => {
-                            setIsLoading(false);
-                            setAutoRetryLabel("");
-                        }}
-                    />
-                    {showEmbedOverlay && (
-                        <div
-                            className="absolute inset-0 z-30 cursor-pointer bg-transparent"
-                            title="Click to start playback (Ad Shield Protected)"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setShowEmbedOverlay(false);
-                            }}
-                        />
-                    )}
-                </div>
-            ) : activeDownload && !playerError ? (
+            {/* Video Player Node */}
+            {activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
@@ -2756,15 +2732,14 @@ export default function VideoPlayer({
                 </div>
             )}
 
-            {/* Custom Overlay Controls HUD — rendered ONLY for native direct video streams, NOT for iframe embeds */}
-            {!((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
-                <div
-                    className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
-                        showControls
-                            ? "opacity-100"
-                            : "opacity-0 pointer-events-none"
-                    } ${isPlaying && !showControls ? "cursor-none" : ""}`}
-                >
+            {/* Custom Overlay Controls HUD */}
+            <div
+                className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+                    showControls
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none"
+                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+            >
                 {/* Top bar info */}
                 <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
                     <div className="text-white drop-shadow-md">
@@ -3878,7 +3853,6 @@ export default function VideoPlayer({
                     </div>
                 </div>
             </div>
-            )}
         </div>
     );
 }
