@@ -2364,8 +2364,7 @@ export default function VideoPlayer({
                     src={activeDownload.url}
                     className="w-full h-full border-0 relative z-10"
                     allowFullScreen
-                    allow="autoplay; encrypted-media; picture-in-picture"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                     onLoad={() => {
                         setIsLoading(false);
                         setAutoRetryLabel("");
@@ -2505,9 +2504,8 @@ export default function VideoPlayer({
             ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
-                 container's onTouchStart/onTouchEnd. Using pointer-events-none
-                 on mobile prevents double-firing of click/dblclick handlers. */}
-            {!playerError && (
+                 container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
+            {!playerError && !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
                 <div
                     className={`absolute inset-0 z-10 ${
                         isPlaying && !showControls
@@ -2675,14 +2673,18 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0  from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+                className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
-                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+                } ${isPlaying && !showControls ? "cursor-none" : ""} ${
+                    ((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc"))
+                        ? "pointer-events-none"
+                        : ""
+                }`}
             >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
                     <div className="text-white drop-shadow-md">
                         <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
                             {title}
@@ -2695,20 +2697,21 @@ export default function VideoPlayer({
                     </div>
                 </div>
 
-                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open or embed active) */}
                 {!isPlaying &&
                     !isLoading &&
                     !showSubtitleMenu &&
                     !showAudioMenu &&
                     !showQualityMenu &&
                     !showSpeedMenu &&
-                    !showRatioMenu && (
+                    !showRatioMenu &&
+                    !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 togglePlay();
                             }}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
                         >
                             <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
                         </button>
@@ -2716,7 +2719,7 @@ export default function VideoPlayer({
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
-                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6"
+                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto"
                     data-controls-panel
                 >
                     <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">
