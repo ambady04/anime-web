@@ -1017,8 +1017,11 @@ export default function VideoPlayer({
             ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
             : undefined;
         if (nextQuality) {
+            const isNextEmbed = (nextQuality as any).isEmbed || nextQuality.url.includes("autoembed.co") || nextQuality.url.includes("2embed.cc");
             setAutoRetryLabel(
-                `Auto-switching to ${nextQuality.resolution}p...`,
+                isNextEmbed
+                    ? `Auto-switching to ${(nextQuality as any).name || "Web Embed Server"}...`
+                    : `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
             );
             setIsLoading(true);
             // Save current position so initial-seek effect restores it after new source loads
@@ -1033,14 +1036,22 @@ export default function VideoPlayer({
             setIsLoading(true);
             refreshStreamData();
         } else {
-            // Step 3: Everything exhausted — show error screen
-            console.error(
-                "Video player: all stream qualities failed:",
-                errorMsg,
-            );
-            setPlayerError(true);
-            setIsLoading(false);
-            setAutoRetryLabel("");
+            // Step 3: Check if an embed fallback exists before showing error screen
+            const embedFallback = sortedDownloads.find((d) => (d as any).isEmbed || d.url.includes("autoembed.co") || d.url.includes("2embed.cc"));
+            if (embedFallback && activeDownload?.id !== embedFallback.id) {
+                setAutoRetryLabel("Switching to Web Embed Server...");
+                setIsLoading(true);
+                setPlayerError(false);
+                setTimeout(() => setActiveDownload(embedFallback), 200);
+            } else {
+                console.error(
+                    "Video player: all stream qualities failed:",
+                    errorMsg,
+                );
+                setPlayerError(true);
+                setIsLoading(false);
+                setAutoRetryLabel("");
+            }
         }
     };
 
@@ -2347,8 +2358,20 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Node */}
-            {activeDownload && !playerError && (
+            {/* Video / Embed Player Node */}
+            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc")) ? (
+                <iframe
+                    src={activeDownload.url}
+                    className="w-full h-full border-0 relative z-10"
+                    allowFullScreen
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                    onLoad={() => {
+                        setIsLoading(false);
+                        setAutoRetryLabel("");
+                    }}
+                />
+            ) : activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
@@ -2479,7 +2502,7 @@ export default function VideoPlayer({
                         />
                     )}
                 </video>
-            )}
+            ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
                  container's onTouchStart/onTouchEnd. Using pointer-events-none
