@@ -1083,8 +1083,10 @@ export default function VideoPlayer({
         if (altUrl) failedUrlsRef.current.add(altUrl);
 
         // Step 1: Try next available quality (only if in Auto Quality mode)
+        // Prioritize native direct MP4 streams (!isEmbed) FIRST before attempting web embeds
         const nextQuality = isAutoQuality
-            ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
+            ? (sortedDownloads.find((d) => !(d as any).isEmbed && !failedUrlsRef.current.has(d.url)) ||
+               sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url)))
             : undefined;
         if (nextQuality) {
             const isNextEmbed = (nextQuality as any).isEmbed || nextQuality.url.includes("autoembed.co") || nextQuality.url.includes("2embed.cc");
