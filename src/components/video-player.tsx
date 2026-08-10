@@ -208,6 +208,11 @@ export default function VideoPlayer({
         }
         return "geist";
     });
+    const [showEmbedOverlay, setShowEmbedOverlay] = useState(true);
+
+    useEffect(() => {
+        setShowEmbedOverlay(true);
+    }, [activeDownload?.id, activeDownload?.url]);
 
     // Ad Shield Protection — Blocks popup windows, dynamic anchor ad clicks, and unwanted site redirects
     useEffect(() => {
@@ -2421,17 +2426,30 @@ export default function VideoPlayer({
             />
 
             {/* Video / Embed Player Node */}
-            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc")) ? (
-                <iframe
-                    src={activeDownload.url}
-                    className="w-full h-full border-0 relative z-10"
-                    allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                    onLoad={() => {
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                    }}
-                />
+            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc") || activeDownload.url.includes("vidsrc.to")) ? (
+                <div className="relative w-full h-full">
+                    <iframe
+                        src={activeDownload.url}
+                        className="w-full h-full border-0 relative z-10"
+                        allowFullScreen
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        onLoad={() => {
+                            setIsLoading(false);
+                            setAutoRetryLabel("");
+                        }}
+                    />
+                    {showEmbedOverlay && (
+                        <div
+                            className="absolute inset-0 z-30 cursor-pointer bg-transparent"
+                            title="Click to start playback (Ad Shield Protected)"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowEmbedOverlay(false);
+                            }}
+                        />
+                    )}
+                </div>
             ) : activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
