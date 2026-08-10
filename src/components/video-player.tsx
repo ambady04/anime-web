@@ -2431,17 +2431,30 @@ export default function VideoPlayer({
             />
 
             {/* Video / Embed Player Node */}
-            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc") || activeDownload.url.includes("vidsrc.to")) ? (
-                <iframe
-                    src={activeDownload.url}
-                    className="w-full h-full border-0 relative z-10"
-                    allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                    onLoad={() => {
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                    }}
-                />
+            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("vidsrc.to")) ? (
+                <div className="relative w-full h-full">
+                    <iframe
+                        src={activeDownload.url}
+                        className="w-full h-full border-0 relative z-10"
+                        allowFullScreen
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        onLoad={() => {
+                            setIsLoading(false);
+                            setAutoRetryLabel("");
+                        }}
+                    />
+                    {showEmbedOverlay && (
+                        <div
+                            className="absolute inset-0 z-30 cursor-pointer bg-transparent"
+                            title="Click to start playback"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setShowEmbedOverlay(false);
+                            }}
+                        />
+                    )}
+                </div>
             ) : activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
@@ -2744,7 +2757,7 @@ export default function VideoPlayer({
             )}
 
             {/* Custom Overlay Controls HUD — rendered ONLY for native direct video streams, NOT for iframe embeds */}
-            {!((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc") || activeDownload?.url.includes("vidsrc.to")) && (
+            {!((activeDownload as any)?.isEmbed || activeDownload?.url.includes("vidsrc.to")) && (
                 <div
                     className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                         showControls
