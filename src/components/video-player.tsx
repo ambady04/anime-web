@@ -221,23 +221,25 @@ export default function VideoPlayer({
     useEffect(() => {
         if (typeof window === "undefined") return;
 
-        const originalOpen = window.open;
-        window.open = function (...args: any[]) {
+        const blockOpen = function (...args: any[]) {
             console.warn("[Ad Shield] Blocked popup window.open:", args);
             return null;
         };
+        window.open = blockOpen;
 
-        const originalAnchorClick = HTMLAnchorElement.prototype.click;
-        HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-            if (
-                this.target === "_blank" ||
-                (this.href && !this.href.includes(window.location.hostname))
-            ) {
-                console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
-                return;
-            }
-            return originalAnchorClick.apply(this, arguments as any);
-        };
+        if (typeof HTMLAnchorElement !== "undefined") {
+            const originalAnchorClick = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+                if (
+                    this.target === "_blank" ||
+                    (this.href && !this.href.includes(window.location.hostname))
+                ) {
+                    console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
+                    return;
+                }
+                return originalAnchorClick.apply(this, arguments as any);
+            };
+        }
 
         const blockAdEvent = (e: Event) => {
             const target = e.target as HTMLElement | null;
@@ -269,8 +271,6 @@ export default function VideoPlayer({
         window.addEventListener("beforeunload", handleBeforeUnload);
 
         return () => {
-            window.open = originalOpen;
-            HTMLAnchorElement.prototype.click = originalAnchorClick;
             document.removeEventListener("click", blockAdEvent, true);
             document.removeEventListener("touchstart", blockAdEvent, true);
             document.removeEventListener("touchend", blockAdEvent, true);
