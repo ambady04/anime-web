@@ -96,21 +96,13 @@ export default function RootLayout({
 (function() {
   if (typeof window === 'undefined') return;
 
-  // 1. Permanently freeze window.open across all global scope references
+  // 1. Block window.open across global scope references
   var blockOpen = function() {
     console.warn("[Ad Shield] Blocked popup window.open attempt");
     return null;
   };
 
-  try {
-    Object.defineProperty(window, 'open', {
-      value: blockOpen,
-      writable: false,
-      configurable: false
-    });
-  } catch(e) {
-    try { window.open = blockOpen; } catch(err) {}
-  }
+  try { window.open = blockOpen; } catch(e) {}
   try { if (window.top && window.top !== window) window.top.open = blockOpen; } catch(e) {}
   try { if (window.parent && window.parent !== window) window.parent.open = blockOpen; } catch(e) {}
   try { if (typeof self !== 'undefined') self.open = blockOpen; } catch(e) {}
