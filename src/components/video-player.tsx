@@ -2420,19 +2420,8 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video / Embed Player Node */}
-            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc")) ? (
-                <iframe
-                    src={activeDownload.url}
-                    className="w-full h-full border-0 relative z-10"
-                    allowFullScreen
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                    onLoad={() => {
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                    }}
-                />
-            ) : activeDownload && !playerError ? (
+            {/* Video Node */}
+            {activeDownload && !playerError && (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
@@ -2563,11 +2552,12 @@ export default function VideoPlayer({
                         />
                     )}
                 </video>
-            ) : null}
+            )}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
-                 container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
-            {!playerError && !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
+                 container's onTouchStart/onTouchEnd. Using pointer-events-none
+                 on mobile prevents double-firing of click/dblclick handlers. */}
+            {!playerError && (
                 <div
                     className={`absolute inset-0 z-10 ${
                         isPlaying && !showControls
@@ -2739,14 +2729,10 @@ export default function VideoPlayer({
                     showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
-                } ${isPlaying && !showControls ? "cursor-none" : ""} ${
-                    ((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc"))
-                        ? "pointer-events-none"
-                        : ""
-                }`}
+                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
             >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
                     <div className="text-white drop-shadow-md">
                         <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
                             {title}
@@ -2759,15 +2745,14 @@ export default function VideoPlayer({
                     </div>
                 </div>
 
-                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open or embed active) */}
+                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
                 {!isPlaying &&
                     !isLoading &&
                     !showSubtitleMenu &&
                     !showAudioMenu &&
                     !showQualityMenu &&
                     !showSpeedMenu &&
-                    !showRatioMenu &&
-                    !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
+                    !showRatioMenu && (
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

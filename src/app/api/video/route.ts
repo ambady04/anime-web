@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
             try {
                 const hostPart = url.split("://")[1].split("/")[0];
                 const currentSub = hostPart.split(".hakunaymatata.com")[0];
-                for (const sub of ["bcdn", "cacdn"]) {
+                for (const sub of ["bcdnxw", "bcdn", "cacdn"]) {
                     if (sub !== currentSub) {
                         const alt = url.replace(`://${currentSub}.hakunaymatata.com`, `://${sub}.hakunaymatata.com`);
                         if (!urlsToTry.includes(alt)) urlsToTry.push(alt);
