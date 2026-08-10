@@ -2420,8 +2420,19 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Node */}
-            {activeDownload && !playerError && (
+            {/* Video / Embed Player Node */}
+            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("autoembed.co") || activeDownload.url.includes("2embed.cc")) ? (
+                <iframe
+                    src={activeDownload.url}
+                    className="w-full h-full border-0 relative z-10"
+                    allowFullScreen
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    onLoad={() => {
+                        setIsLoading(false);
+                        setAutoRetryLabel("");
+                    }}
+                />
+            ) : activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
@@ -2552,12 +2563,11 @@ export default function VideoPlayer({
                         />
                     )}
                 </video>
-            )}
+            ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
-                 container's onTouchStart/onTouchEnd. Using pointer-events-none
-                 on mobile prevents double-firing of click/dblclick handlers. */}
-            {!playerError && (
+                 container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
+            {!playerError && !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
                 <div
                     className={`absolute inset-0 z-10 ${
                         isPlaying && !showControls
