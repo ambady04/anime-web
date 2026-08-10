@@ -209,6 +209,68 @@ export default function VideoPlayer({
         return "geist";
     });
 
+    // Ad Shield Protection — Blocks popup windows, dynamic anchor ad clicks, and unwanted site redirects
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+
+        const originalOpen = window.open;
+        window.open = function (...args: any[]) {
+            console.warn("[Ad Shield] Blocked popup window.open:", args);
+            return null;
+        };
+
+        const originalAnchorClick = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+            if (
+                this.target === "_blank" ||
+                (this.href && !this.href.includes(window.location.hostname))
+            ) {
+                console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
+                return;
+            }
+            return originalAnchorClick.apply(this, arguments as any);
+        };
+
+        const blockAdEvent = (e: Event) => {
+            const target = e.target as HTMLElement | null;
+            const link = target?.closest?.("a");
+            if (
+                link &&
+                (link.target === "_blank" ||
+                    (link.href && !link.href.includes(window.location.hostname)))
+            ) {
+                console.warn("[Ad Shield] Intercepted ad redirect/click:", link.href);
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        document.addEventListener("click", blockAdEvent, true);
+        document.addEventListener("touchstart", blockAdEvent, true);
+        document.addEventListener("touchend", blockAdEvent, true);
+        document.addEventListener("pointerdown", blockAdEvent, true);
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (document.activeElement && document.activeElement.tagName === "IFRAME") {
+                e.preventDefault();
+                e.returnValue = "Stream Protection: Prevent external redirect";
+                return e.returnValue;
+            }
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
+        return () => {
+            window.open = originalOpen;
+            HTMLAnchorElement.prototype.click = originalAnchorClick;
+            document.removeEventListener("click", blockAdEvent, true);
+            document.removeEventListener("touchstart", blockAdEvent, true);
+            document.removeEventListener("touchend", blockAdEvent, true);
+            document.removeEventListener("pointerdown", blockAdEvent, true);
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+        };
+    }, []);
+
     // Mobile gesture states
     const [gestureIndicator, setGestureIndicator] = useState<{
         type: "volume" | "brightness" | "seek" | null;
