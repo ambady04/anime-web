@@ -237,6 +237,16 @@ export default function VideoPlayer({
         return "geist";
     });
     const [isAdShieldActive, setIsAdShieldActive] = useState(true);
+    const [isRelayingClick, setIsRelayingClick] = useState(false);
+
+    const handleEmbedPlayClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsRelayingClick(true);
+        setTimeout(() => {
+            setIsRelayingClick(false);
+        }, 600);
+    };
 
     useEffect(() => {
         setIsAdShieldActive(true);
@@ -2474,11 +2484,12 @@ export default function VideoPlayer({
                     />
                     {isAdShieldActive && (
                         <div
-                            className="absolute inset-0 z-30 cursor-pointer bg-transparent"
-                            title="Ad Shield Active — Double-click for Fullscreen"
+                            className={`absolute inset-0 z-30 cursor-pointer bg-transparent ${
+                                isRelayingClick ? "pointer-events-none" : "pointer-events-auto"
+                            }`}
+                            title="Ad Shield Active — Click to Play / Double-click for Fullscreen"
                             onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
+                                handleEmbedPlayClick(e);
                                 triggerControlsVisibility();
                             }}
                             onDoubleClick={(e) => {
@@ -2859,11 +2870,16 @@ export default function VideoPlayer({
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                togglePlay();
+                                if (activeDownload && isEmbedStream(activeDownload)) {
+                                    handleEmbedPlayClick(e);
+                                } else {
+                                    togglePlay();
+                                }
                             }}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-110 active:scale-95 z-50 cursor-pointer pointer-events-auto border-2 border-white/20"
+                            title="Click to start video playback"
                         >
-                            <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
+                            <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-white translate-x-0.5" />
                         </button>
                     )}
 
