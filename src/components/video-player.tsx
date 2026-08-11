@@ -2469,38 +2469,8 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video / Embed Player Node */}
-            {activeDownload && isEmbedStream(activeDownload) ? (
-                <div className="relative w-full h-full">
-                    <iframe
-                        src={getEmbedSrcUrl(activeDownload.url)}
-                        className="w-full h-full border-0 relative z-10"
-                        allowFullScreen
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                        onLoad={() => {
-                            setIsLoading(false);
-                            setAutoRetryLabel("");
-                        }}
-                    />
-                    {isAdShieldActive && (
-                        <div
-                            className={`absolute inset-0 z-30 cursor-pointer bg-transparent ${
-                                isRelayingClick ? "pointer-events-none" : "pointer-events-auto"
-                            }`}
-                            title="Ad Shield Active — Click to Play / Double-click for Fullscreen"
-                            onClick={(e) => {
-                                handleEmbedPlayClick(e);
-                                triggerControlsVisibility();
-                            }}
-                            onDoubleClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toggleFullscreen();
-                            }}
-                        />
-                    )}
-                </div>
-            ) : activeDownload && !playerError ? (
+            {/* Video Player Node — ALWAYS Kixo's signature native red player */}
+            {activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
@@ -2801,87 +2771,46 @@ export default function VideoPlayer({
                 </div>
             )}
 
-            {/* Unlocked Re-enable Ad Shield Badge for Embeds */}
-            {activeDownload && isEmbedStream(activeDownload) && !isAdShieldActive && (
-                <div className="absolute top-4 right-4 z-50 pointer-events-auto">
+            {/* Custom Overlay Controls HUD */}
+            <div
+                className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-40 flex flex-col justify-between transition-opacity duration-300 ${
+                    showControls
+                        ? "opacity-100"
+                        : "opacity-0 pointer-events-none"
+                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+            >
+            {/* Top bar info */}
+            <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
+                <div className="text-white drop-shadow-md">
+                    <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
+                        {title}
+                    </h2>
+                    {isSeries && season && episode && (
+                        <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
+                            Season {season} • Episode {episode}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+            {!isPlaying &&
+                !isLoading &&
+                !showSubtitleMenu &&
+                !showAudioMenu &&
+                !showQualityMenu &&
+                !showSpeedMenu &&
+                !showRatioMenu && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            setIsAdShieldActive(true);
+                            togglePlay();
                         }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 text-[11px] font-bold shadow-xl backdrop-blur-md cursor-pointer transition-all"
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
                     >
-                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                        <span>Re-enable Ad Shield</span>
+                        <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
                     </button>
-                </div>
-            )}
-
-            {/* Custom Overlay Controls HUD — rendered for native video AND embed streams when Ad Shield is active */}
-            {(!isEmbedStream(activeDownload) || isAdShieldActive) && (
-                <div
-                    className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-40 flex flex-col justify-between transition-opacity duration-300 ${
-                        showControls
-                            ? "opacity-100"
-                            : "opacity-0 pointer-events-none"
-                    } ${isPlaying && !showControls ? "cursor-none" : ""}`}
-                >
-                {/* Top bar info */}
-                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
-                    <div className="text-white drop-shadow-md">
-                        <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
-                            {title}
-                        </h2>
-                        {isSeries && season && episode && (
-                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                                Season {season} • Episode {episode}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Ad Shield Status & Toggle for Embed Streams */}
-                    {activeDownload && isEmbedStream(activeDownload) && (
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold shadow-lg backdrop-blur-md">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                <span>Ad Shield Active</span>
-                            </div>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsAdShieldActive(false);
-                                }}
-                                className="px-3 py-1 rounded-full bg-black/70 border border-white/20 hover:bg-black/90 text-white/80 hover:text-white text-[11px] font-semibold transition-all backdrop-blur-md cursor-pointer"
-                            >
-                                Unlock Player
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-                {!isPlaying &&
-                    !isLoading &&
-                    !showSubtitleMenu &&
-                    !showAudioMenu &&
-                    !showQualityMenu &&
-                    !showSpeedMenu &&
-                    !showRatioMenu && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (activeDownload && isEmbedStream(activeDownload)) {
-                                    handleEmbedPlayClick(e);
-                                } else {
-                                    togglePlay();
-                                }
-                            }}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary/95 text-white flex items-center justify-center shadow-2xl transition-transform hover:scale-110 active:scale-95 z-50 cursor-pointer pointer-events-auto border-2 border-white/20"
-                            title="Click to start video playback"
-                        >
-                            <Play className="w-6 h-6 sm:w-7 sm:h-7 fill-white translate-x-0.5" />
-                        </button>
-                    )}
+                )}
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
@@ -3963,7 +3892,6 @@ export default function VideoPlayer({
                     </div>
                 </div>
             </div>
-            )}
         </div>
     );
 }
