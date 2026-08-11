@@ -76,30 +76,26 @@ export async function GET(req: NextRequest) {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
         ];
 
-        // Build candidate CDN URLs: try bcdn first, then cacdn
-        // Build candidate CDN URLs: try primary bcdn first, then original url, then bcdnxw / cacdn
-        const urlsToTry: string[] = [];
+        // Build candidate CDN URLs: try original url first, then bcdnxw / bcdn / cacdn
+        const urlsToTry: string[] = [url];
         if (url.includes("hakunaymatata.com")) {
-            try {
-                const bcdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdn.hakunaymatata.com");
-                urlsToTry.push(bcdnAlt);
-            } catch {}
-            if (!urlsToTry.includes(url)) urlsToTry.push(url);
             try {
                 const bcdnxwAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdnxw.hakunaymatata.com");
                 if (!urlsToTry.includes(bcdnxwAlt)) urlsToTry.push(bcdnxwAlt);
+                const bcdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdn.hakunaymatata.com");
+                if (!urlsToTry.includes(bcdnAlt)) urlsToTry.push(bcdnAlt);
                 const cacdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://cacdn.hakunaymatata.com");
                 if (!urlsToTry.includes(cacdnAlt)) urlsToTry.push(cacdnAlt);
             } catch {}
-        } else {
-            urlsToTry.push(url);
         }
 
-        // Strategy 1: Direct fetch from Vercel edge/serverless with primary Referer candidates & Range
+        // Strategy 1: Direct fetch with primary Referer candidates & Range
         const refererCandidates = [
             referer || "https://videodownloader.site/",
             "https://videodownloader.site/",
             "https://h5.aoneroom.com/",
+            "https://h5-api.aoneroom.com/",
+            "https://moviebox.site/",
         ];
 
         const tried = new Set<string>();
@@ -136,7 +132,6 @@ export async function GET(req: NextRequest) {
                         break outer;
                     }
                     if (res.status === 429) {
-                        // Rate limited on this domain — break to try alt domain candidate
                         break;
                     }
                 } catch {
@@ -145,38 +140,58 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // Strategy 2: Render backend proxy fallback with Range headers
+        // Strategy 2: Render backend proxy fallback with Range headers across candidate URLs
         if (!upstreamResp) {
             try {
                 const renderBase = (
                     process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com"
                 ).replace(/\/+$/, "");
-                // Pass the primary (bcdn non-xw) URL to the Render backend too
-                const proxyUrl = urlsToTry[0] || url;
-                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(proxyUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
-                const renderHeaders: Record<string, string> = {
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                    Accept: "*/*",
-                    // Pass Range both as HTTP header AND query param (backend reads from header)
-                    Range: rangeHeader,
-                };
-
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 20000);
-
-                const res = await fetch(renderProxyUrl, {
-                    headers: renderHeaders,
-                    signal: controller.signal,
-                    cache: "no-store",
-                });
-                clearTimeout(timeoutId);
-
-                if (res.ok || res.status === 206) {
-                    upstreamResp = res;
+                for (const targetUrl of urlsToTry) {
+                    const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
+                    const renderHeaders: Record<string, string> = {
+                        "User-Agent": USER_AGENTS[0],
+                        Accept: "*/*",
+                        Range: rangeHeader,
+                    };
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 12000);
+                    try {
+                        const res = await fetch(renderProxyUrl, {
+                            headers: renderHeaders,
+                            signal: controller.signal,
+                            cache: "no-store",
+                        });
+                        clearTimeout(timeoutId);
+                        if (res.ok || res.status === 206) {
+                            upstreamResp = res;
+                            break;
+                        }
+                    } catch {
+                        clearTimeout(timeoutId);
+                    }
                 }
-            } catch {
-                // Backend proxy unavailable
+            } catch {}
+        }
+
+        // Strategy 3: Direct CDN fetch fallback with redirect follow
+        if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
+            for (const targetUrl of urlsToTry) {
+                try {
+                    const res = await fetch(targetUrl, {
+                        headers: {
+                            "User-Agent": USER_AGENTS[0],
+                            Accept: "*/*",
+                            Referer: "https://videodownloader.site/",
+                            Range: rangeHeader,
+                        },
+                        redirect: "follow",
+                        cache: "no-store",
+                    });
+                    if (res.ok || res.status === 206) {
+                        upstreamResp = res;
+                        break;
+                    }
+                } catch {}
             }
         }
 
