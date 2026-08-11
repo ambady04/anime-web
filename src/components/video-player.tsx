@@ -49,6 +49,21 @@ interface VideoPlayerProps {
     shouldPause?: boolean;
 }
 
+const isEmbedStream = (download: DownloadLink | null | undefined): boolean => {
+    if (!download) return false;
+    if ((download as any).isEmbed) return true;
+    const url = (download.url || "").toLowerCase();
+    return (
+        url.includes("vidsrc") ||
+        url.includes("autoembed") ||
+        url.includes("2embed") ||
+        url.includes("embed") ||
+        url.includes("player") ||
+        url.includes("vidplay") ||
+        url.includes("superembed")
+    );
+};
+
 // Format second timestamps to HH:MM:SS text
 const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -105,8 +120,8 @@ export default function VideoPlayer({
         const sourceList = list.length > 0 ? list : downloads;
 
         return [...sourceList].sort((a, b) => {
-            const aEmbed = (a as any).isEmbed ? 1 : 0;
-            const bEmbed = (b as any).isEmbed ? 1 : 0;
+            const aEmbed = isEmbedStream(a) ? 1 : 0;
+            const bEmbed = isEmbedStream(b) ? 1 : 0;
             if (aEmbed !== bEmbed) return aEmbed - bEmbed; // Native direct MP4 streams ALWAYS come first
             return parseResolution(b.resolution) - parseResolution(a.resolution);
         });
@@ -1085,11 +1100,11 @@ export default function VideoPlayer({
         // Step 1: Try next available quality (only if in Auto Quality mode)
         // Prioritize native direct MP4 streams (!isEmbed) FIRST before attempting web embeds
         const nextQuality = isAutoQuality
-            ? (sortedDownloads.find((d) => !(d as any).isEmbed && !failedUrlsRef.current.has(d.url)) ||
+            ? (sortedDownloads.find((d) => !isEmbedStream(d) && !failedUrlsRef.current.has(d.url)) ||
                sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url)))
             : undefined;
         if (nextQuality) {
-            const isNextEmbed = (nextQuality as any).isEmbed || nextQuality.url.includes("autoembed.co") || nextQuality.url.includes("2embed.cc");
+            const isNextEmbed = isEmbedStream(nextQuality);
             setAutoRetryLabel(
                 isNextEmbed
                     ? `Auto-switching to ${(nextQuality as any).name || "Web Embed Server"}...`
@@ -1109,7 +1124,7 @@ export default function VideoPlayer({
             refreshStreamData();
         } else {
             // Step 3: Check if an embed fallback exists before showing error screen
-            const embedFallback = sortedDownloads.find((d) => (d as any).isEmbed || d.url.includes("autoembed.co") || d.url.includes("2embed.cc"));
+            const embedFallback = sortedDownloads.find((d) => isEmbedStream(d));
             if (embedFallback && activeDownload?.id !== embedFallback.id) {
                 setAutoRetryLabel("Switching to Web Embed Server...");
                 setIsLoading(true);
@@ -2431,13 +2446,14 @@ export default function VideoPlayer({
             />
 
             {/* Video / Embed Player Node */}
-            {activeDownload && ((activeDownload as any).isEmbed || activeDownload.url.includes("vidsrc.to")) ? (
+            {activeDownload && isEmbedStream(activeDownload) ? (
                 <div className="relative w-full h-full">
                     <iframe
                         src={activeDownload.url}
                         className="w-full h-full border-0 relative z-10"
                         allowFullScreen
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                         onLoad={() => {
                             setIsLoading(false);
                             setAutoRetryLabel("");
@@ -2590,7 +2606,7 @@ export default function VideoPlayer({
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
                  container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
-            {!playerError && !((activeDownload as any)?.isEmbed || activeDownload?.url.includes("autoembed.co") || activeDownload?.url.includes("2embed.cc")) && (
+            {!playerError && !isEmbedStream(activeDownload) && (
                 <div
                     className={`absolute inset-0 z-10 ${
                         isPlaying && !showControls
@@ -2757,7 +2773,7 @@ export default function VideoPlayer({
             )}
 
             {/* Custom Overlay Controls HUD — rendered ONLY for native direct video streams, NOT for iframe embeds */}
-            {!((activeDownload as any)?.isEmbed || activeDownload?.url.includes("vidsrc.to")) && (
+            {!isEmbedStream(activeDownload) && (
                 <div
                     className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
                         showControls
