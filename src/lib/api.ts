@@ -17,33 +17,20 @@ const getClientHeaders = (adult = false) => {
     };
 };
 
-// Returns the URL of the Vercel-hosted video proxy.
-// IMPORTANT: The /api/video route MUST run on Vercel (Node.js/AWS runtime) — NOT on
-// Cloudflare Workers. Cloudflare Workers return 502 when proxying bcdn.hakunaymatata.com
-// because the CDN blocks Cloudflare's shared IP ranges.
-//
-// Tested results:
-//   anime-web-nu.vercel.app/api/video  → HTTP 206 ✓  (Vercel AWS IPs are allowed by CDN)
-//   kixo.abisolutions.online/api/video → HTTP 502 ✗  (Cloudflare Worker, CDN blocks it)
-//   api.abisolutions.online/api/video  → HTTP 404 ✗  (wrong Vercel project/domain)
-//
 // Returns the URL of the video proxy endpoint.
-// In the browser on Vercel deployment, defaults to relative `/api/video` on the deployment's own domain.
+// Always use relative /api/video on the current deployment.
+// The Next.js /api/video route runs in Node.js (not Cloudflare Workers),
+// so it can proxy CDN streams without IP blocks.
+// Set NEXT_PUBLIC_VIDEO_PROXY_URL in env to override with a specific proxy URL.
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
         if (configuredUrl) {
             return configuredUrl;
         }
-        // Cloudflare Workers (like kixo.abisolutions.online) return HTTP 502 because CDN blocks Cloudflare IPs.
-        // Direct through Vercel AWS video proxy endpoint which CDN permits cleanly (HTTP 206).
-        const host = window.location.hostname.toLowerCase();
-        if (host.includes("abisolutions.online") || host.includes("pages.dev") || host.includes("cloudflare")) {
-            return "https://anime-web-nu.vercel.app/api/video";
-        }
         return "/api/video";
     }
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-web-nu.vercel.app/api/video";
+    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "/api/video";
 }
 
 
