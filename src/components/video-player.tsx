@@ -247,6 +247,8 @@ export default function VideoPlayer({
             HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
                 if (
                     this.target === "_blank" ||
+                    this.target === "_top" ||
+                    this.target === "_parent" ||
                     (this.href && !this.href.includes(window.location.hostname))
                 ) {
                     console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
@@ -262,6 +264,8 @@ export default function VideoPlayer({
             if (
                 link &&
                 (link.target === "_blank" ||
+                    link.target === "_top" ||
+                    link.target === "_parent" ||
                     (link.href && !link.href.includes(window.location.hostname)))
             ) {
                 console.warn("[Ad Shield] Intercepted ad redirect/click:", link.href);
@@ -2453,7 +2457,6 @@ export default function VideoPlayer({
                         className="w-full h-full border-0 relative z-10"
                         allowFullScreen
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                         onLoad={() => {
                             setIsLoading(false);
                             setAutoRetryLabel("");
