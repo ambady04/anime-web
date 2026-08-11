@@ -64,6 +64,16 @@ const isEmbedStream = (download: DownloadLink | null | undefined): boolean => {
     );
 };
 
+const getEmbedSrcUrl = (rawUrl: string) => {
+    if (!rawUrl) return "";
+    let url = rawUrl;
+    if (!url.includes("autoplay=")) {
+        const joiner = url.includes("?") ? "&" : "?";
+        url = `${url}${joiner}autoplay=1&autostart=true`;
+    }
+    return url;
+};
+
 // Format second timestamps to HH:MM:SS text
 const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -226,10 +236,10 @@ export default function VideoPlayer({
         }
         return "geist";
     });
-    const [showEmbedOverlay, setShowEmbedOverlay] = useState(true);
+    const [isAdShieldActive, setIsAdShieldActive] = useState(true);
 
     useEffect(() => {
-        setShowEmbedOverlay(true);
+        setIsAdShieldActive(true);
     }, [activeDownload?.id, activeDownload?.url]);
 
     // Ad Shield Protection — Blocks popup windows, dynamic anchor ad clicks, and unwanted site redirects
@@ -2453,7 +2463,7 @@ export default function VideoPlayer({
             {activeDownload && isEmbedStream(activeDownload) ? (
                 <div className="relative w-full h-full">
                     <iframe
-                        src={activeDownload.url}
+                        src={getEmbedSrcUrl(activeDownload.url)}
                         className="w-full h-full border-0 relative z-10"
                         allowFullScreen
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
@@ -2462,14 +2472,19 @@ export default function VideoPlayer({
                             setAutoRetryLabel("");
                         }}
                     />
-                    {showEmbedOverlay && (
+                    {isAdShieldActive && (
                         <div
                             className="absolute inset-0 z-30 cursor-pointer bg-transparent"
-                            title="Click to start playback"
+                            title="Ad Shield Active — Double-click for Fullscreen"
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                setShowEmbedOverlay(false);
+                                triggerControlsVisibility();
+                            }}
+                            onDoubleClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleFullscreen();
                             }}
                         />
                     )}
@@ -2775,17 +2790,33 @@ export default function VideoPlayer({
                 </div>
             )}
 
-            {/* Custom Overlay Controls HUD — rendered ONLY for native direct video streams, NOT for iframe embeds */}
-            {!isEmbedStream(activeDownload) && (
+            {/* Unlocked Re-enable Ad Shield Badge for Embeds */}
+            {activeDownload && isEmbedStream(activeDownload) && !isAdShieldActive && (
+                <div className="absolute top-4 right-4 z-50 pointer-events-auto">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsAdShieldActive(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 text-[11px] font-bold shadow-xl backdrop-blur-md cursor-pointer transition-all"
+                    >
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        <span>Re-enable Ad Shield</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Custom Overlay Controls HUD — rendered for native video AND embed streams when Ad Shield is active */}
+            {(!isEmbedStream(activeDownload) || isAdShieldActive) && (
                 <div
-                    className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-20 flex flex-col justify-between transition-opacity duration-300 ${
+                    className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-40 flex flex-col justify-between transition-opacity duration-300 ${
                         showControls
                             ? "opacity-100"
                             : "opacity-0 pointer-events-none"
                     } ${isPlaying && !showControls ? "cursor-none" : ""}`}
                 >
                 {/* Top bar info */}
-                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent">
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
                     <div className="text-white drop-shadow-md">
                         <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
                             {title}
@@ -2796,6 +2827,25 @@ export default function VideoPlayer({
                             </p>
                         )}
                     </div>
+
+                    {/* Ad Shield Status & Toggle for Embed Streams */}
+                    {activeDownload && isEmbedStream(activeDownload) && (
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold shadow-lg backdrop-blur-md">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>Ad Shield Active</span>
+                            </div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsAdShieldActive(false);
+                                }}
+                                className="px-3 py-1 rounded-full bg-black/70 border border-white/20 hover:bg-black/90 text-white/80 hover:text-white text-[11px] font-semibold transition-all backdrop-blur-md cursor-pointer"
+                            >
+                                Unlock Player
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
