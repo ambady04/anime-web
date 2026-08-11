@@ -14,6 +14,16 @@ const CORS_HEADERS = {
     "Vary": "Origin",
 };
 
+function randomSpoofedIp(): string {
+    const ranges = [
+        [1, 9], [11, 126], [128, 169], [171, 172], [174, 191], [193, 197], [199, 203],
+    ];
+    const range = ranges[Math.floor(Math.random() * ranges.length)];
+    const first = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+    const rest = () => Math.floor(Math.random() * 255);
+    return `${first}.${rest()}.${rest()}.${rest()}`;
+}
+
 export async function OPTIONS() {
     return new NextResponse(null, {
         status: 204,
@@ -105,6 +115,7 @@ export async function GET(req: NextRequest) {
                 if (tried.has(key)) continue;
                 tried.add(key);
 
+                const spoofedIp = randomSpoofedIp();
                 const directHeaders: Record<string, string> = {
                     "User-Agent": USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
                     Accept: "*/*",
@@ -115,6 +126,9 @@ export async function GET(req: NextRequest) {
                     "Sec-Fetch-Dest": "video",
                     "Sec-Fetch-Mode": "cors",
                     "Sec-Fetch-Site": "cross-site",
+                    "X-Forwarded-For": spoofedIp,
+                    "X-Real-IP": spoofedIp,
+                    "Client-IP": spoofedIp,
                     Range: rangeHeader,
                 };
 
