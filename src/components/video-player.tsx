@@ -565,9 +565,12 @@ export default function VideoPlayer({
 
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
+        const isDirectFallback = directFallbackUrlsRef.current.has(activeDownload.url);
 
         const src = isExternalUrl
-            ? `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
+            ? isDirectFallback
+                ? activeDownload.url
+                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : activeDownload.url;
 
         const setup = () => {
@@ -1114,6 +1117,18 @@ export default function VideoPlayer({
             setIsVideoLoaded(false);
             // Swap url to the alternate URL for the retry
             setActiveDownload({ ...activeDownload, url: altUrl });
+            return;
+        }
+
+        // Direct stream fallback: if proxy fails on server, retry direct client stream
+        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+            directFallbackUrlsRef.current.add(activeDownload.url);
+            setAutoRetryLabel("Switching to direct stream...");
+            setIsLoading(true);
+            setInitialSeekTime(videoRef.current?.currentTime || 0);
+            setIsInitialSeekDone(false);
+            setIsVideoLoaded(false);
+            setRetryTrigger((prev) => prev + 1);
             return;
         }
 
