@@ -566,12 +566,9 @@ export default function VideoPlayer({
         const qualityVal = parseResolution(activeDownload.resolution);
         const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
         const isDirectFallback = directFallbackUrlsRef.current.has(activeDownload.url);
-        // If proxyBase is empty (e.g. Cloudflare host where server proxy is blocked by CDN),
-        // stream the CDN URL directly from the browser using the user's residential IP.
-        const useDirectStream = !proxyBase || isDirectFallback;
 
         const src = isExternalUrl
-            ? useDirectStream
+            ? isDirectFallback
                 ? activeDownload.url
                 : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
             : activeDownload.url;

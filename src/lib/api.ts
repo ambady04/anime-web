@@ -18,30 +18,37 @@ const getClientHeaders = (adult = false) => {
 };
 
 // Returns the URL of the video proxy endpoint.
-// On Cloudflare-hosted deployments (kixo.abisolutions.online etc), the /api/video
-// route runs inside a Cloudflare Worker whose egress IPs are blocked by the CDN (502).
-// In that case we return "" to signal that video-player should stream the CDN URL directly
-// in the browser — the user's residential IP is accepted by the CDN.
-// Set NEXT_PUBLIC_VIDEO_PROXY_URL in env to override with an external proxy URL.
+//
+// Why a proxy is needed:
+//   - The CDN (hakunaymatata.com) only accepts requests with whitelisted Referer/Origin headers.
+//   - Browser video elements send Origin: <current-host> which is rejected (403/429).
+//   - Cloudflare Worker egress IPs are blocked by CDN (502).
+//   - Direct browser streaming gets 429 Too Many Requests.
+//
+// Solution matrix:
+//   Cloudflare host (kixo.abisolutions.online) → use Render backend proxy (Node.js, spoofs Referer)
+//   Vercel/other Node.js host                  → use relative /api/video (runs on Node.js)
+//   NEXT_PUBLIC_VIDEO_PROXY_URL set             → always use that value
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
         if (configuredUrl) {
             return configuredUrl;
         }
-        // Cloudflare Workers can't proxy CDN streams — stream directly from browser instead.
         const host = window.location.hostname.toLowerCase();
+        // On Cloudflare-hosted deployments, /api/video runs in Cloudflare Workers
+        // which are blocked by the CDN. Use the Render backend proxy instead.
         if (
             host.includes("abisolutions.online") ||
-            host.includes("pages.dev") ||
-            host === "localhost" ||
-            host === "127.0.0.1"
+            host.includes("pages.dev")
         ) {
-            return ""; // Direct CDN streaming — no server proxy
+            const renderBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
+            return `${renderBase}/api/video`;
         }
         return "/api/video";
     }
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
+    const renderBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
+    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || `${renderBase}/api/video`;
 }
 
 
