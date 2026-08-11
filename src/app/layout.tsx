@@ -107,11 +107,11 @@ export default function RootLayout({
   try { if (window.parent && window.parent !== window) window.parent.open = blockOpen; } catch(e) {}
   try { if (typeof self !== 'undefined') self.open = blockOpen; } catch(e) {}
 
-  // 2. Intercept programmatic anchor clicks (_blank or external domain)
+  // 2. Intercept programmatic anchor clicks (_blank, _top, _parent or external domain)
   if (typeof HTMLAnchorElement !== 'undefined') {
     var origClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function() {
-      if (this.target === '_blank' || (this.href && !this.href.includes(location.hostname))) {
+      if (this.target === '_blank' || this.target === '_top' || this.target === '_parent' || (this.href && !this.href.includes(location.hostname))) {
         console.warn("[Ad Shield] Blocked anchor click redirect:", this.href);
         return;
       }
@@ -119,7 +119,7 @@ export default function RootLayout({
     };
   }
 
-  // 3. Intercept event delegation for links targeting external domains or _blank
+  // 3. Intercept event delegation for links targeting external domains or _blank/_top/_parent
   var isInternalClick = false;
   document.addEventListener('click', function(e) {
     isInternalClick = true;
@@ -127,7 +127,7 @@ export default function RootLayout({
 
     var target = e.target;
     var link = target && target.closest ? target.closest('a') : null;
-    if (link && (link.target === '_blank' || (link.href && !link.href.includes(location.hostname)))) {
+    if (link && (link.target === '_blank' || link.target === '_top' || link.target === '_parent' || (link.href && !link.href.includes(location.hostname)))) {
       console.warn("[Ad Shield] Prevented ad link navigation:", link.href);
       e.preventDefault();
       e.stopPropagation();
@@ -137,7 +137,7 @@ export default function RootLayout({
   document.addEventListener('pointerdown', function(e) {
     var target = e.target;
     var link = target && target.closest ? target.closest('a') : null;
-    if (link && (link.target === '_blank' || (link.href && !link.href.includes(location.hostname)))) {
+    if (link && (link.target === '_blank' || link.target === '_top' || link.target === '_parent' || (link.href && !link.href.includes(location.hostname)))) {
       console.warn("[Ad Shield] Prevented pointer ad click:", link.href);
       e.preventDefault();
       e.stopPropagation();
