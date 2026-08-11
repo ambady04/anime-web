@@ -35,6 +35,12 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
+        // Cloudflare Workers (like kixo.abisolutions.online) return HTTP 502 because CDN blocks Cloudflare IPs.
+        // Direct through Vercel AWS video proxy endpoint which CDN permits cleanly (HTTP 206).
+        const host = window.location.hostname.toLowerCase();
+        if (host.includes("abisolutions.online") || host.includes("pages.dev") || host.includes("cloudflare")) {
+            return "https://anime-web-nu.vercel.app/api/video";
+        }
         return "/api/video";
     }
     return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "https://anime-web-nu.vercel.app/api/video";

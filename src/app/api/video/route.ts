@@ -77,20 +77,22 @@ export async function GET(req: NextRequest) {
         ];
 
         // Build candidate CDN URLs: try bcdn first, then cacdn
-        const urlsToTry: string[] = [url];
+        // Build candidate CDN URLs: try primary bcdn first, then original url, then bcdnxw / cacdn
+        const urlsToTry: string[] = [];
         if (url.includes("hakunaymatata.com")) {
             try {
-                const hostPart = url.split("://")[1].split("/")[0];
-                const currentSub = hostPart.split(".hakunaymatata.com")[0];
-                for (const sub of ["bcdnxw", "bcdn", "cacdn"]) {
-                    if (sub !== currentSub) {
-                        const alt = url.replace(`://${currentSub}.hakunaymatata.com`, `://${sub}.hakunaymatata.com`);
-                        if (!urlsToTry.includes(alt)) urlsToTry.push(alt);
-                    }
-                }
-            } catch {
-                // Ignore parse errors
-            }
+                const bcdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdn.hakunaymatata.com");
+                urlsToTry.push(bcdnAlt);
+            } catch {}
+            if (!urlsToTry.includes(url)) urlsToTry.push(url);
+            try {
+                const bcdnxwAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdnxw.hakunaymatata.com");
+                if (!urlsToTry.includes(bcdnxwAlt)) urlsToTry.push(bcdnxwAlt);
+                const cacdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://cacdn.hakunaymatata.com");
+                if (!urlsToTry.includes(cacdnAlt)) urlsToTry.push(cacdnAlt);
+            } catch {}
+        } else {
+            urlsToTry.push(url);
         }
 
         // Strategy 1: Direct fetch from Vercel edge/serverless with primary Referer candidates & Range
