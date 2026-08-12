@@ -376,28 +376,32 @@ export const movieApi = {
                 rawObj?.playList ||
                 [];
             if (!Array.isArray(raw)) return [];
-            return raw
-                .map((d: any, idx: number) => {
-                    const rawUrl =
-                        d.url ||
-                        d.playUrl ||
-                        d.downloadUrl ||
-                        d.videoUrl ||
-                        d.hlsUrl ||
-                        d.link ||
-                        (typeof d === "string" ? d : "");
-                    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
-                        return null;
-                    return {
-                        id: String(d.id || d.resolution || idx),
-                        url: rawUrl.trim(),
-                        resolution: parseResolution(
-                            d.resolution || d.quality || d.name || 720,
-                        ),
-                        size: Number(d.size || d.fileSize || 0),
-                    };
-                })
-                .filter((d: any): d is DownloadLink => d !== null);
+            const mapped: (DownloadLink | null)[] = raw.map((d: any, idx: number) => {
+                const rawUrl =
+                    d.url ||
+                    d.playUrl ||
+                    d.downloadUrl ||
+                    d.videoUrl ||
+                    d.hlsUrl ||
+                    d.resource_link ||
+                    d.source_url ||
+                    d.fallbackUrl ||
+                    d.link ||
+                    (typeof d === "string" ? d : "");
+                if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
+                    return null;
+                return {
+                    id: String(d.id || d.resolution || idx),
+                    url: rawUrl.trim(),
+                    resolution: parseResolution(
+                        d.resolution || d.quality || d.name || 720,
+                    ),
+                    size: Number(d.size || d.fileSize || 0),
+                    resource_link: d.resource_link || "",
+                    source_url: d.source_url || "",
+                };
+            });
+            return mapped.filter((d): d is DownloadLink => d !== null);
         };
 
         let downloads: DownloadLink[] = parseDownloadLinks(data);
@@ -429,6 +433,21 @@ export const movieApi = {
                     // Ignore dub error
                 }
             }
+        }
+
+        // If no 1080p stream is present in direct links, inject 1080p VidSrc HD Server
+        if (!downloads.some((d) => parseResolution(d.resolution) >= 1080) && subjectId) {
+            const embedUrl = isSeries
+                ? `https://vidsrc.to/embed/tv/${subjectId}/${reqSeason}/${reqEpisode}`
+                : `https://vidsrc.to/embed/movie/${subjectId}`;
+            downloads.push({
+                id: "embed-vidsrc-1080p",
+                url: embedUrl,
+                resolution: 1080,
+                size: 0,
+                isEmbed: true,
+                name: "VidSrc 1080p Full HD Server",
+            } as any);
         }
 
         return {

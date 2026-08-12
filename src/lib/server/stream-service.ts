@@ -133,6 +133,9 @@ async function fetchMirrorStream(
                     d.downloadUrl ||
                     d.videoUrl ||
                     d.hlsUrl ||
+                    d.resource_link ||
+                    d.source_url ||
+                    d.fallbackUrl ||
                     d.link ||
                     (typeof d === "string" ? d : "");
                 if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
@@ -144,9 +147,26 @@ async function fetchMirrorStream(
                         d.resolution || d.quality || d.name || 720,
                     ),
                     size: Number(d.size || d.fileSize || 0),
+                    resource_link: d.resource_link || "",
+                    source_url: d.source_url || "",
                 };
             })
             .filter((d: any): d is DownloadLink => d !== null);
+
+        // If no 1080p stream is present in direct links, inject 1080p VidSrc HD Server
+        if (!downloads.some((d) => parseResolution(d.resolution) >= 1080) && subjectId) {
+            const embedUrl = season > 0 || episode > 0
+                ? `https://vidsrc.to/embed/tv/${subjectId}/${season || 1}/${episode || 1}`
+                : `https://vidsrc.to/embed/movie/${subjectId}`;
+            downloads.push({
+                id: "embed-vidsrc-1080p",
+                url: embedUrl,
+                resolution: 1080,
+                size: 0,
+                isEmbed: true,
+                name: "VidSrc 1080p Full HD Server",
+            } as any);
+        }
 
         const rawCaptions = data.captions || data.captionList || [];
         const captions: Caption[] = rawCaptions

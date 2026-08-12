@@ -122,18 +122,15 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest — prioritizing native direct MP4 streams first!
+    // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
     const sortedDownloads = useMemo(() => {
-        const list = downloads.filter(
-            (d) => parseResolution(d.resolution) <= 1080,
-        );
-        const sourceList = list.length > 0 ? list : downloads;
-
-        return [...sourceList].sort((a, b) => {
+        return [...downloads].sort((a, b) => {
+            const resA = parseResolution(a.resolution) || ((a as any).isEmbed ? 1080 : 0);
+            const resB = parseResolution(b.resolution) || ((b as any).isEmbed ? 1080 : 0);
+            if (resA !== resB) return resB - resA;
             const aEmbed = isEmbedStream(a) ? 1 : 0;
             const bEmbed = isEmbedStream(b) ? 1 : 0;
-            if (aEmbed !== bEmbed) return aEmbed - bEmbed; // Native direct MP4 streams ALWAYS come first
-            return parseResolution(b.resolution) - parseResolution(a.resolution);
+            return aEmbed - bEmbed;
         });
     }, [downloads]);
 
@@ -3371,7 +3368,21 @@ export default function VideoPlayer({
                                                             {sortedDownloads.map(
                                                                 (link, idx) => {
                                                                     const resNum = parseResolution(link.resolution);
-                                                                    const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                    const isEmbed = isEmbedStream(link);
+                                                                    let label = "";
+                                                                    if (isEmbed) {
+                                                                        label = (link as any).name || (resNum > 0 ? `${resNum}p HD Server` : "1080p Full HD Server");
+                                                                    } else if (resNum === 2160) {
+                                                                        label = "4K Ultra HD (2160p)";
+                                                                    } else if (resNum === 1440) {
+                                                                        label = "2K Quad HD (1440p)";
+                                                                    } else if (resNum === 1080) {
+                                                                        label = "1080p Full HD";
+                                                                    } else if (resNum === 720) {
+                                                                        label = "720p HD";
+                                                                    } else {
+                                                                        label = `${resNum || link.resolution}p`;
+                                                                    }
                                                                     return (
                                                                         <button
                                                                             key={`${link.id || "quality"}-${idx}`}
@@ -3862,7 +3873,21 @@ export default function VideoPlayer({
                                                         {sortedDownloads.map(
                                                             (link, idx) => {
                                                                 const resNum = parseResolution(link.resolution);
-                                                                const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                const isEmbed = isEmbedStream(link);
+                                                                let label = "";
+                                                                if (isEmbed) {
+                                                                    label = (link as any).name || (resNum > 0 ? `${resNum}p HD Server` : "1080p Full HD Server");
+                                                                } else if (resNum === 2160) {
+                                                                    label = "4K Ultra HD (2160p)";
+                                                                } else if (resNum === 1440) {
+                                                                    label = "2K Quad HD (1440p)";
+                                                                } else if (resNum === 1080) {
+                                                                    label = "1080p Full HD";
+                                                                } else if (resNum === 720) {
+                                                                    label = "720p HD";
+                                                                } else {
+                                                                    label = `${resNum || link.resolution}p`;
+                                                                }
                                                                 return (
                                                                     <button
                                                                         key={`${link.id || "quality"}-${idx}`}
