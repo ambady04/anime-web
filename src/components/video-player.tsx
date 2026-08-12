@@ -1140,17 +1140,14 @@ export default function VideoPlayer({
         failedUrlsRef.current.add(activeDownload.url);
         if (altUrl) failedUrlsRef.current.add(altUrl);
 
-        // Step 1: Try next available quality (only if in Auto Quality mode)
-        // Prioritize native direct MP4 streams (!isEmbed) FIRST before attempting web embeds
         const nextQuality = isAutoQuality
-            ? (sortedDownloads.find((d) => !isEmbedStream(d) && !failedUrlsRef.current.has(d.url)) ||
-               sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url)))
+            ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
             : undefined;
         if (nextQuality) {
             const isNextEmbed = isEmbedStream(nextQuality);
             setAutoRetryLabel(
                 isNextEmbed
-                    ? `Auto-switching to ${(nextQuality as any).name || "Web Embed Server"}...`
+                    ? `Auto-switching to ${(nextQuality as any).name || "Web Embed HD Server"}...`
                     : `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
             );
             setIsLoading(true);
@@ -1159,20 +1156,19 @@ export default function VideoPlayer({
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
             setTimeout(() => setActiveDownload(nextQuality), 200);
-        } else if (refreshCountRef.current < 5) {
-            // Step 2: All qualities failed / expired — fetch fresh stream URLs from API
-            refreshCountRef.current += 1;
-            setAutoRetryLabel("Fetching fresh stream links...");
-            setIsLoading(true);
-            refreshStreamData();
         } else {
-            // Step 3: Check if an embed fallback exists before showing error screen
-            const embedFallback = sortedDownloads.find((d) => isEmbedStream(d));
+            // Check if an un-failed embed fallback exists before showing error screen
+            const embedFallback = sortedDownloads.find((d) => isEmbedStream(d) && !failedUrlsRef.current.has(d.url));
             if (embedFallback && activeDownload?.id !== embedFallback.id) {
-                setAutoRetryLabel("Switching to Web Embed Server...");
+                setAutoRetryLabel("Switching to Web Embed HD Server...");
                 setIsLoading(true);
                 setPlayerError(false);
                 setTimeout(() => setActiveDownload(embedFallback), 200);
+            } else if (refreshCountRef.current < 2) {
+                refreshCountRef.current += 1;
+                setAutoRetryLabel("Fetching fresh stream links...");
+                setIsLoading(true);
+                refreshStreamData();
             } else {
                 console.error(
                     "Video player: all stream qualities failed:",

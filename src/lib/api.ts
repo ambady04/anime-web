@@ -435,19 +435,35 @@ export const movieApi = {
             }
         }
 
-        // If no 1080p stream is present in direct links, inject 1080p VidSrc HD Server
-        if (!downloads.some((d) => parseResolution(d.resolution) >= 1080) && subjectId) {
-            const embedUrl = isSeries
-                ? `https://vidsrc.to/embed/tv/${subjectId}/${reqSeason}/${reqEpisode}`
-                : `https://vidsrc.to/embed/movie/${subjectId}`;
-            downloads.push({
-                id: "embed-vidsrc-1080p",
-                url: embedUrl,
-                resolution: 1080,
-                size: 0,
-                isEmbed: true,
-                name: "VidSrc 1080p Full HD Server",
-            } as any);
+        // Add production Cloudflare-compatible 1080p HD embed servers
+        if (subjectId) {
+            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("vidsrc"))) {
+                const vidsrcUrl = isSeries
+                    ? `https://vidsrc.to/embed/tv/${subjectId}/${reqSeason}/${reqEpisode}`
+                    : `https://vidsrc.to/embed/movie/${subjectId}`;
+                downloads.push({
+                    id: "embed-vidsrc-1080p",
+                    url: vidsrcUrl,
+                    resolution: 1080,
+                    size: 0,
+                    isEmbed: true,
+                    name: "VidSrc HD 1080p Server (Fast)",
+                } as any);
+            }
+
+            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("2embed"))) {
+                const embed2Url = isSeries
+                    ? `https://www.2embed.cc/embedtv/${subjectId}&s=${reqSeason}&e=${reqEpisode}`
+                    : `https://www.2embed.cc/embed/${subjectId}`;
+                downloads.push({
+                    id: "embed-2embed-1080p",
+                    url: embed2Url,
+                    resolution: 1080,
+                    size: 0,
+                    isEmbed: true,
+                    name: "2Embed HD 1080p Server (Backup)",
+                } as any);
+            }
         }
 
         return {

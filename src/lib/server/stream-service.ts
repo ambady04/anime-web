@@ -153,19 +153,39 @@ async function fetchMirrorStream(
             })
             .filter((d: any): d is DownloadLink => d !== null);
 
-        // If no 1080p stream is present in direct links, inject 1080p VidSrc HD Server
-        if (!downloads.some((d) => parseResolution(d.resolution) >= 1080) && subjectId) {
-            const embedUrl = season > 0 || episode > 0
-                ? `https://vidsrc.to/embed/tv/${subjectId}/${season || 1}/${episode || 1}`
-                : `https://vidsrc.to/embed/movie/${subjectId}`;
-            downloads.push({
-                id: "embed-vidsrc-1080p",
-                url: embedUrl,
-                resolution: 1080,
-                size: 0,
-                isEmbed: true,
-                name: "VidSrc 1080p Full HD Server",
-            } as any);
+        // Add production Cloudflare-compatible 1080p HD embed servers
+        if (subjectId) {
+            const isEpisodic = season > 0 || episode > 0;
+            const reqS = season || 1;
+            const reqE = episode || 1;
+
+            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("vidsrc"))) {
+                const vidsrcUrl = isEpisodic
+                    ? `https://vidsrc.to/embed/tv/${subjectId}/${reqS}/${reqE}`
+                    : `https://vidsrc.to/embed/movie/${subjectId}`;
+                downloads.push({
+                    id: "embed-vidsrc-1080p",
+                    url: vidsrcUrl,
+                    resolution: 1080,
+                    size: 0,
+                    isEmbed: true,
+                    name: "VidSrc HD 1080p Server (Fast)",
+                } as any);
+            }
+
+            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("2embed"))) {
+                const embed2Url = isEpisodic
+                    ? `https://www.2embed.cc/embedtv/${subjectId}&s=${reqS}&e=${reqE}`
+                    : `https://www.2embed.cc/embed/${subjectId}`;
+                downloads.push({
+                    id: "embed-2embed-1080p",
+                    url: embed2Url,
+                    resolution: 1080,
+                    size: 0,
+                    isEmbed: true,
+                    name: "2Embed HD 1080p Server (Backup)",
+                } as any);
+            }
         }
 
         const rawCaptions = data.captions || data.captionList || [];
