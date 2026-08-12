@@ -18,30 +18,21 @@ const getClientHeaders = (adult = false) => {
 };
 
 // Returns the URL of the video proxy endpoint.
-// On Cloudflare-hosted deployments (kixo.abisolutions.online etc), the /api/video
-// route runs inside a Cloudflare Worker whose egress IPs are blocked by the CDN (502).
-// In that case we return "" to signal that video-player should stream the CDN URL directly
-// in the browser — the user's residential IP is accepted by the CDN.
-// Set NEXT_PUBLIC_VIDEO_PROXY_URL in env to override with an external proxy URL.
+// On localhost / 127.0.0.1, always uses local `/api/video` route.
+// In production, uses NEXT_PUBLIC_VIDEO_PROXY_URL if set, defaulting to relative `/api/video`.
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
+        const host = window.location.hostname.toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1") {
+            return "/api/video";
+        }
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
         if (configuredUrl) {
             return configuredUrl;
         }
-        // Cloudflare Workers can't proxy CDN streams — stream directly from browser instead.
-        const host = window.location.hostname.toLowerCase();
-        if (
-            host.includes("abisolutions.online") ||
-            host.includes("pages.dev") ||
-            host === "localhost" ||
-            host === "127.0.0.1"
-        ) {
-            return ""; // Direct CDN streaming — no server proxy
-        }
         return "/api/video";
     }
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
+    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "/api/video";
 }
 
 

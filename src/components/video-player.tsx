@@ -964,7 +964,9 @@ export default function VideoPlayer({
                     if (typeof window !== "undefined" && targetOrigin !== window.location.origin) {
                         const proxyBase = getVideoProxyBase();
                         const referer = "https://videodownloader.site/";
-                        fetchUrl = `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`;
+                        fetchUrl = proxyBase
+                            ? `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`
+                            : srtUrl;
                     }
                 } catch {}
             }
@@ -974,15 +976,17 @@ export default function VideoPlayer({
             const srtText = await res.text();
 
             const trimmedText = srtText.trim();
-            // Guard: If response is an XML or JSON error payload (e.g. CloudFront MissingKey), ignore safely
+            // Guard: If response is HTML, XML, or JSON error payload (e.g. CloudFront MissingKey / 404 HTML), ignore safely
             if (
+                trimmedText.toLowerCase().startsWith("<!doctype") ||
+                trimmedText.toLowerCase().startsWith("<html") ||
                 trimmedText.startsWith("<?xml") ||
                 trimmedText.startsWith("<Error") ||
                 trimmedText.startsWith('{"error"') ||
                 trimmedText.includes("MissingKey") ||
                 trimmedText.includes("AccessDenied")
             ) {
-                throw new Error("Subtitle response returned XML/JSON error payload");
+                throw new Error("Subtitle response returned invalid HTML/XML/JSON error payload");
             }
 
             // Simple SRT to WebVTT formatting conversion if not already WebVTT
