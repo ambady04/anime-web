@@ -426,7 +426,7 @@ export const streamService = {
                     h5Data.playList ||
                     [];
                 if (Array.isArray(rawDownloads) && rawDownloads.length > 0) {
-                    const downloads: DownloadLink[] = rawDownloads
+                    const downloads = rawDownloads
                         .map((d: any, idx: number) => {
                             const rawUrl =
                                 d.url ||
@@ -456,7 +456,7 @@ export const streamService = {
                                 source_url: d.source_url || "",
                             };
                         })
-                        .filter((d: any): d is DownloadLink => d !== null);
+                        .filter(Boolean) as DownloadLink[];
 
                     if (downloads.length > 0) {
                         const rawCaptions =

@@ -599,6 +599,9 @@ export default function VideoPlayer({
             const video = videoRef.current;
             if (!video || isCancelled) return;
 
+            // Prevent referer leakage to CDNs that block based on Referer header
+            video.setAttribute("referrerpolicy", "no-referrer");
+
             isInitialLoadRef.current = true;
             isRecoveringRef.current = false;
             setIsVideoLoaded(false);
@@ -2649,7 +2652,6 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
-                    referrerPolicy="no-referrer"
                     crossOrigin={subtitleUrl ? "anonymous" : undefined}
                 >
                     {/* Subtitle track */}
