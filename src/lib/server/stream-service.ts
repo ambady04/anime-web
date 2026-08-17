@@ -18,10 +18,17 @@ const MIRRORS = [
 // This mirrors the `random_spoofed_ip()` approach in MovieBox-Tui.
 function randomSpoofedIp(): string {
     const ranges = [
-        [1, 9], [11, 126], [128, 169], [171, 172], [174, 191], [193, 197], [199, 203],
+        [1, 9],
+        [11, 126],
+        [128, 169],
+        [171, 172],
+        [174, 191],
+        [193, 197],
+        [199, 203],
     ];
     const range = ranges[Math.floor(Math.random() * ranges.length)];
-    const first = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+    const first =
+        Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
     const rest = () => Math.floor(Math.random() * 255);
     return `${first}.${rest()}.${rest()}.${rest()}`;
 }
@@ -37,7 +44,8 @@ const parseResolution = (res: any): number => {
     if (typeof res === "number") return isNaN(res) ? 0 : res;
     if (!res) return 0;
     const str = String(res).trim().toUpperCase();
-    if (str.includes("4K") || str.includes("UHD") || str.includes("2160")) return 2160;
+    if (str.includes("4K") || str.includes("UHD") || str.includes("2160"))
+        return 2160;
     if (str.includes("2K") || str.includes("1440")) return 1440;
     if (str.includes("FHD") || str.includes("1080")) return 1080;
     if (str.includes("HD") || str.includes("720")) return 720;
@@ -47,7 +55,11 @@ const parseResolution = (res: any): number => {
     return nums ? parseInt(nums[0], 10) : 0;
 };
 
-const getStreamHeaders = async (host: string, referer: string, adult = false) => {
+const getStreamHeaders = async (
+    host: string,
+    referer: string,
+    adult = false,
+) => {
     const playMode = adult ? "0" : "1";
     const ts = Date.now();
     const token = await getAuthToken();
@@ -153,40 +165,10 @@ async function fetchMirrorStream(
             })
             .filter((d: any): d is DownloadLink => d !== null);
 
-        // Add production Cloudflare-compatible 1080p HD embed servers
-        if (subjectId) {
-            const isEpisodic = season > 0 || episode > 0;
-            const reqS = season || 1;
-            const reqE = episode || 1;
-
-            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("vidsrc"))) {
-                const vidsrcUrl = isEpisodic
-                    ? `https://vidsrc.to/embed/tv/${subjectId}/${reqS}/${reqE}`
-                    : `https://vidsrc.to/embed/movie/${subjectId}`;
-                downloads.push({
-                    id: "embed-vidsrc-1080p",
-                    url: vidsrcUrl,
-                    resolution: 1080,
-                    size: 0,
-                    isEmbed: true,
-                    name: "VidSrc HD 1080p Server (Fast)",
-                } as any);
-            }
-
-            if (!downloads.some((d) => (d as any).isEmbed && d.url.includes("2embed"))) {
-                const embed2Url = isEpisodic
-                    ? `https://www.2embed.cc/embedtv/${subjectId}&s=${reqS}&e=${reqE}`
-                    : `https://www.2embed.cc/embed/${subjectId}`;
-                downloads.push({
-                    id: "embed-2embed-1080p",
-                    url: embed2Url,
-                    resolution: 1080,
-                    size: 0,
-                    isEmbed: true,
-                    name: "2Embed HD 1080p Server (Backup)",
-                } as any);
-            }
-        }
+        // Add production embed servers as last-resort fallback
+        // These use IMDB IDs (not internal subjectIds), so only add if we detect a valid IMDB-like ID
+        // Note: Most embed services block embedding from unknown domains, so these are unreliable
+        // and should only be used when no direct streams are available.
 
         const rawCaptions = data.captions || data.captionList || [];
         const captions: Caption[] = rawCaptions
@@ -203,7 +185,10 @@ async function fetchMirrorStream(
             })
             .filter((c: any): c is Caption => c !== null);
 
-        if ((downloads.length > 0 || captions.length > 0) && data.hasResource !== false) {
+        if (
+            (downloads.length > 0 || captions.length > 0) &&
+            data.hasResource !== false
+        ) {
             return {
                 downloads,
                 captions,
@@ -240,7 +225,10 @@ export const streamService = {
 
         // 0. Primary: Fetch stream data from Render backend API
         try {
-            const apiBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
+            const apiBase = (
+                process.env.NEXT_PUBLIC_API_URL ||
+                "https://anime-api-arlv.onrender.com"
+            ).replace(/\/+$/, "");
             const vUrl = new URL(`${apiBase}/api/stream`);
             vUrl.searchParams.set("path", path);
             if (season) vUrl.searchParams.set("season", String(season));
@@ -259,12 +247,19 @@ export const streamService = {
 
             if (vRes.ok) {
                 const vData: any = await vRes.json();
-                if (vData && Array.isArray(vData.downloads) && vData.downloads.length > 0) {
+                if (
+                    vData &&
+                    Array.isArray(vData.downloads) &&
+                    vData.downloads.length > 0
+                ) {
                     if (streamCache.size > 200) {
                         const firstKey = streamCache.keys().next().value;
                         if (firstKey) streamCache.delete(firstKey);
                     }
-                    streamCache.set(cacheKey, { data: vData as StreamData, expiresAt: Date.now() + 3 * 60 * 1000 });
+                    streamCache.set(cacheKey, {
+                        data: vData as StreamData,
+                        expiresAt: Date.now() + 3 * 60 * 1000,
+                    });
                     return vData as StreamData;
                 }
             }
@@ -329,10 +324,9 @@ export const streamService = {
             "/wefeed-h5-bff/web/subject/download",
         ];
 
-        // ── TIER 1: Race primary mirror tasks (bounded to top 3 mirrors to comply with subrequest limits) ──
-        const primaryMirrors = MIRRORS.slice(0, 3);
+        // ── TIER 1: Race ALL mirrors in parallel (use Promise.any to get first success) ──
         const tier1Tasks: Promise<StreamData | null>[] = [];
-        for (const mirror of primaryMirrors) {
+        for (const mirror of MIRRORS) {
             for (const ref of referers) {
                 for (const epPath of endpoints) {
                     for (const [sAtt, eAtt] of attempts) {
@@ -353,21 +347,160 @@ export const streamService = {
             }
         }
 
-        const validTask = async (task: Promise<StreamData | null>): Promise<StreamData> => {
+        const validTask = async (
+            task: Promise<StreamData | null>,
+        ): Promise<StreamData> => {
             const res = await task;
-            if (res && res.hasResource && (res.downloads.length > 0 || res.captions.length > 0)) {
+            if (
+                res &&
+                res.hasResource &&
+                (res.downloads.length > 0 || res.captions.length > 0)
+            ) {
                 return res;
             }
             throw new Error("No stream links in mirror response");
         };
 
         try {
-            const valid = await Promise.any(tier1Tasks.map((t) => validTask(t)));
+            const valid = await Promise.any(
+                tier1Tasks.map((t) => validTask(t)),
+            );
             if (valid) {
+                if (streamCache.size > 200) {
+                    const firstKey = streamCache.keys().next().value;
+                    if (firstKey) streamCache.delete(firstKey);
+                }
+                streamCache.set(cacheKey, {
+                    data: valid,
+                    expiresAt: Date.now() + 3 * 60 * 1000,
+                });
                 return valid;
             }
         } catch {
-            // Fallthrough to dub track fallback
+            // Fallthrough to h5-api direct fallback
+        }
+
+        // ── TIER 1.5: Direct h5-api.aoneroom.com web endpoint (fallback when mobile mirrors fail) ──
+        try {
+            const h5Base = "https://h5-api.aoneroom.com";
+            const token = await getAuthToken();
+            const spoofedIp = randomSpoofedIp();
+            const h5Headers: Record<string, string> = {
+                "User-Agent":
+                    "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
+                Accept: "*/*",
+                "Accept-Language": "en-US,en;q=0.9",
+                Referer: "https://videodownloader.site/",
+                Origin: "https://videodownloader.site",
+                "X-Forwarded-For": spoofedIp,
+                "X-Real-IP": spoofedIp,
+                ...(token
+                    ? {
+                          Authorization: `Bearer ${token}`,
+                          Cookie: `token=${token}`,
+                      }
+                    : {}),
+            };
+
+            const reqSeason = season > 0 ? season : isEpisodic ? 1 : 0;
+            const reqEpisode = episode > 0 ? episode : isEpisodic ? 1 : 0;
+            const h5Url = `${h5Base}/wefeed-h5api-bff/subject/download?subjectId=${subject.subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`;
+
+            const h5Controller = new AbortController();
+            const h5Timeout = setTimeout(() => h5Controller.abort(), 6000);
+            const h5Res = await fetch(h5Url, {
+                headers: h5Headers,
+                signal: h5Controller.signal,
+                cache: "no-store",
+            });
+            clearTimeout(h5Timeout);
+
+            if (h5Res.ok) {
+                const h5Json: any = await h5Res.json();
+                const h5Data = h5Json.data || h5Json;
+                const rawDownloads =
+                    h5Data.downloads ||
+                    h5Data.downloadList ||
+                    h5Data.resourceList ||
+                    h5Data.sources ||
+                    h5Data.playList ||
+                    [];
+                if (Array.isArray(rawDownloads) && rawDownloads.length > 0) {
+                    const downloads: DownloadLink[] = rawDownloads
+                        .map((d: any, idx: number) => {
+                            const rawUrl =
+                                d.url ||
+                                d.playUrl ||
+                                d.downloadUrl ||
+                                d.videoUrl ||
+                                d.hlsUrl ||
+                                d.resource_link ||
+                                d.source_url ||
+                                d.fallbackUrl ||
+                                d.link ||
+                                (typeof d === "string" ? d : "");
+                            if (
+                                !rawUrl ||
+                                typeof rawUrl !== "string" ||
+                                !rawUrl.trim()
+                            )
+                                return null;
+                            return {
+                                id: String(d.id || d.resolution || idx),
+                                url: rawUrl.trim(),
+                                resolution: parseResolution(
+                                    d.resolution || d.quality || d.name || 720,
+                                ),
+                                size: Number(d.size || d.fileSize || 0),
+                                resource_link: d.resource_link || "",
+                                source_url: d.source_url || "",
+                            };
+                        })
+                        .filter((d: any): d is DownloadLink => d !== null);
+
+                    if (downloads.length > 0) {
+                        const rawCaptions =
+                            h5Data.captions || h5Data.captionList || [];
+                        const captions: Caption[] = rawCaptions
+                            .map((c: any, idx: number) => {
+                                const cUrl = c.url || c.link || "";
+                                if (
+                                    !cUrl ||
+                                    typeof cUrl !== "string" ||
+                                    !cUrl.trim()
+                                )
+                                    return null;
+                                return {
+                                    id: String(c.id || idx),
+                                    lan: c.lan || c.language || "en",
+                                    lanName:
+                                        c.lanName ||
+                                        c.languageName ||
+                                        c.lan ||
+                                        "English",
+                                    url: cUrl.trim(),
+                                };
+                            })
+                            .filter((c: any): c is Caption => c !== null);
+
+                        const result: StreamData = {
+                            downloads,
+                            captions,
+                            hasResource: true,
+                            limited: Boolean(h5Data.limited),
+                            limitedCode: h5Data.limitedCode || "",
+                            stream_domain: "https://videodownloader.site/",
+                        };
+                        streamCache.set(cacheKey, {
+                            data: result,
+                            expiresAt: Date.now() + 3 * 60 * 1000,
+                        });
+                        return result;
+                    }
+                }
+            }
+        } catch {
+            // h5-api fallback failed — continue to dub tracks
         }
 
         // ── TIER 2: Fallback to dub tracks ──
@@ -375,7 +508,10 @@ export const streamService = {
         for (const dub of dubs) {
             if (!dub.detailPath || dub.detailPath === path) continue;
             try {
-                const dubDetails = await movieService.getDetails(dub.detailPath, adult);
+                const dubDetails = await movieService.getDetails(
+                    dub.detailPath,
+                    adult,
+                );
                 const dubSubject = dubDetails.subject;
                 if (!dubSubject || !dubSubject.subjectId) continue;
 
@@ -403,7 +539,10 @@ export const streamService = {
 
                 const dubResults = await Promise.all(dubTasks);
                 const dubValid = dubResults.find(
-                    (r) => r && r.hasResource && (r.downloads.length > 0 || r.captions.length > 0),
+                    (r) =>
+                        r &&
+                        r.hasResource &&
+                        (r.downloads.length > 0 || r.captions.length > 0),
                 );
                 if (dubValid) {
                     return dubValid;

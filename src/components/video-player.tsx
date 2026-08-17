@@ -123,19 +123,15 @@ export default function VideoPlayer({
     );
 
     // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
+    // Filter out ALL embed streams — they show ads and can't be controlled by our player
     const sortedDownloads = useMemo(() => {
-        return [...downloads].sort((a, b) => {
-            const resA =
-                parseResolution(a.resolution) ||
-                ((a as any).isEmbed ? 1080 : 0);
-            const resB =
-                parseResolution(b.resolution) ||
-                ((b as any).isEmbed ? 1080 : 0);
-            if (resA !== resB) return resB - resA;
-            const aEmbed = isEmbedStream(a) ? 1 : 0;
-            const bEmbed = isEmbedStream(b) ? 1 : 0;
-            return aEmbed - bEmbed;
-        });
+        return [...downloads]
+            .filter((d) => !isEmbedStream(d))
+            .sort((a, b) => {
+                const resA = parseResolution(a.resolution) || 0;
+                const resB = parseResolution(b.resolution) || 0;
+                return resB - resA;
+            });
     }, [downloads]);
 
     // States
@@ -1194,11 +1190,8 @@ export default function VideoPlayer({
             ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
             : undefined;
         if (nextQuality) {
-            const isNextEmbed = isEmbedStream(nextQuality);
             setAutoRetryLabel(
-                isNextEmbed
-                    ? `Auto-switching to ${(nextQuality as any).name || "Web Embed HD Server"}...`
-                    : `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
+                `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
             );
             setIsLoading(true);
             // Save current position so initial-seek effect restores it after new source loads
@@ -1207,16 +1200,8 @@ export default function VideoPlayer({
             setIsVideoLoaded(false);
             setTimeout(() => setActiveDownload(nextQuality), 200);
         } else {
-            // Check if an un-failed embed fallback exists before showing error screen
-            const embedFallback = sortedDownloads.find(
-                (d) => isEmbedStream(d) && !failedUrlsRef.current.has(d.url),
-            );
-            if (embedFallback && activeDownload?.id !== embedFallback.id) {
-                setAutoRetryLabel("Switching to Web Embed HD Server...");
-                setIsLoading(true);
-                setPlayerError(false);
-                setTimeout(() => setActiveDownload(embedFallback), 200);
-            } else if (refreshCountRef.current < 2) {
+            // All direct stream qualities failed — try refreshing
+            if (refreshCountRef.current < 2) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
                 setIsLoading(true);
@@ -2551,7 +2536,7 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Player Node — ALWAYS Kixo's signature native red player */}
+            {/* Video Player Node — direct streams only (embeds are filtered out) */}
             {activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
