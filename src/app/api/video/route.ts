@@ -4,24 +4,65 @@ export const dynamic = "force-dynamic";
 // Streaming video — ensure no body size limit truncates the response
 export const maxDuration = 60;
 
-const CORS_HEADERS = {
+const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
     "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
     "Access-Control-Expose-Headers":
         "Content-Range, Content-Length, Accept-Ranges, Content-Type",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
+    Vary: "Origin",
 };
 
 function randomSpoofedIp(): string {
     const ranges = [
-        [1, 9], [11, 126], [128, 169], [171, 172], [174, 191], [193, 197], [199, 203],
+        [1, 9],
+        [11, 126],
+        [128, 169],
+        [171, 172],
+        [174, 191],
+        [193, 197],
+        [199, 203],
     ];
     const range = ranges[Math.floor(Math.random() * ranges.length)];
-    const first = Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
+    const first =
+        Math.floor(Math.random() * (range[1] - range[0] + 1)) + range[0];
     const rest = () => Math.floor(Math.random() * 255);
     return `${first}.${rest()}.${rest()}.${rest()}`;
+}
+
+const USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
+];
+
+// Attempt a single upstream fetch with timeout
+async function tryFetch(
+    targetUrl: string,
+    headers: Record<string, string>,
+    timeoutMs = 15000,
+): Promise<Response | null> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(targetUrl, {
+            headers,
+            signal: controller.signal,
+            redirect: "follow",
+            cache: "no-store",
+        });
+        clearTimeout(timeoutId);
+        if (res.ok || res.status === 206) {
+            return res;
+        }
+        // Consume body to release connection
+        await res.body?.cancel().catch(() => {});
+        return null;
+    } catch {
+        clearTimeout(timeoutId);
+        return null;
+    }
 }
 
 export async function OPTIONS() {
@@ -32,8 +73,6 @@ export async function OPTIONS() {
 }
 
 export async function HEAD(req: NextRequest) {
-    // Some video players send a HEAD request first to check content-length/type.
-    // Forward it to the same GET logic but strip the body.
     const getResponse = await GET(req);
     return new NextResponse(null, {
         status: getResponse.status,
@@ -43,6 +82,7 @@ export async function HEAD(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
+        // ─── Parse URL parameter ───
         const fullReqUrl = req.url;
         let url = "";
         if (fullReqUrl.includes("url=")) {
@@ -70,159 +110,136 @@ export async function GET(req: NextRequest) {
         if (!url) {
             return NextResponse.json(
                 { detail: "Missing url parameter" },
-                { status: 400, headers: { "Access-Control-Allow-Origin": "*" } },
+                { status: 400, headers: CORS_HEADERS },
             );
         }
 
-        const rangeHeader = req.headers.get("range") || "bytes=0-";
-        const referer = req.nextUrl.searchParams.get("referer") || "https://videodownloader.site/";
+        const rangeHeader = req.headers.get("range") || "";
+        const referer =
+            req.nextUrl.searchParams.get("referer") ||
+            "https://videodownloader.site/";
         const mode = req.nextUrl.searchParams.get("mode") || "stream";
         const quality = req.nextUrl.searchParams.get("quality") || "";
-        let upstreamResp: Response | null = null;
 
-        const USER_AGENTS = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-        ];
-
-        // Build candidate CDN URLs: try original url first, then bcdnxw / bcdn / cacdn
+        // ─── Build candidate CDN URLs (max 4 variants) ───
         const urlsToTry: string[] = [url];
         if (url.includes("hakunaymatata.com")) {
             try {
-                const bcdnxwAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdnxw.hakunaymatata.com");
+                const bcdnxwAlt = url.replace(
+                    /:\/\/[^/]+\.hakunaymatata\.com/,
+                    "://bcdnxw.hakunaymatata.com",
+                );
                 if (!urlsToTry.includes(bcdnxwAlt)) urlsToTry.push(bcdnxwAlt);
-                const bcdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://bcdn.hakunaymatata.com");
+                const bcdnAlt = url.replace(
+                    /:\/\/[^/]+\.hakunaymatata\.com/,
+                    "://bcdn.hakunaymatata.com",
+                );
                 if (!urlsToTry.includes(bcdnAlt)) urlsToTry.push(bcdnAlt);
-                const cacdnAlt = url.replace(/:\/\/[^/]+\.hakunaymatata\.com/, "://cacdn.hakunaymatata.com");
+                const cacdnAlt = url.replace(
+                    /:\/\/[^/]+\.hakunaymatata\.com/,
+                    "://cacdn.hakunaymatata.com",
+                );
                 if (!urlsToTry.includes(cacdnAlt)) urlsToTry.push(cacdnAlt);
-            } catch {}
+            } catch {
+                /* ignore URL parse errors */
+            }
         }
 
-        // Strategy 1: Direct fetch with primary Referer candidates & Range
+        const spoofedIp = randomSpoofedIp();
+        const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
+        // Referers ordered by likelihood to work
         const refererCandidates = [
-            referer || "https://videodownloader.site/",
+            referer,
             "https://videodownloader.site/",
             "https://h5.aoneroom.com/",
-            "https://h5-api.aoneroom.com/",
-            "https://moviebox.site/",
         ];
 
-        const tried = new Set<string>();
-        outer: for (const targetUrl of urlsToTry) {
-            for (const ref of refererCandidates) {
-                const key = `${targetUrl}|${ref}`;
-                if (tried.has(key)) continue;
-                tried.add(key);
+        let upstreamResp: Response | null = null;
 
-                const spoofedIp = randomSpoofedIp();
-                const directHeaders: Record<string, string> = {
-                    "User-Agent": USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
+        // ─── Strategy 1: Direct fetch with referer spoofing ───
+        // Limit to 2 URL variants × 2 referers to stay within Cloudflare subrequest budget
+        const maxDirectAttempts = 4;
+        let directAttempts = 0;
+
+        for (const targetUrl of urlsToTry.slice(0, 2)) {
+            if (upstreamResp) break;
+            for (const ref of refererCandidates.slice(0, 2)) {
+                if (directAttempts >= maxDirectAttempts) break;
+                directAttempts++;
+
+                const headers: Record<string, string> = {
+                    "User-Agent": ua,
                     Accept: "*/*",
                     "Accept-Encoding": "identity",
                     "Accept-Language": "en-US,en;q=0.9",
                     Referer: ref,
                     Origin: ref.replace(/\/$/, ""),
                     "Sec-Fetch-Dest": "video",
-                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Mode": "no-cors",
                     "Sec-Fetch-Site": "cross-site",
                     "X-Forwarded-For": spoofedIp,
                     "X-Real-IP": spoofedIp,
                     "Client-IP": spoofedIp,
-                    Range: rangeHeader,
                 };
+                if (rangeHeader) headers["Range"] = rangeHeader;
 
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 12000);
-                try {
-                    const res = await fetch(targetUrl, {
-                        headers: directHeaders,
-                        signal: controller.signal,
-                        cache: "no-store",
-                    });
-                    clearTimeout(timeoutId);
-                    if (res.ok || res.status === 206) {
-                        upstreamResp = res;
-                        break outer;
-                    }
-                    if (res.status === 429) {
-                        break;
-                    }
-                } catch {
-                    clearTimeout(timeoutId);
-                }
+                upstreamResp = await tryFetch(targetUrl, headers, 15000);
+                if (upstreamResp) break;
             }
         }
 
-        // Strategy 2: Render backend proxy fallback with Range headers across candidate URLs
+        // ─── Strategy 2: Render backend proxy ───
         if (!upstreamResp) {
-            try {
-                const renderBase = (
-                    process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com"
-                ).replace(/\/+$/, "");
-                for (const targetUrl of urlsToTry) {
-                    const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}&range=${encodeURIComponent(rangeHeader)}`;
-                    const renderHeaders: Record<string, string> = {
-                        "User-Agent": USER_AGENTS[0],
-                        Accept: "*/*",
-                        Range: rangeHeader,
-                    };
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 12000);
-                    try {
-                        const res = await fetch(renderProxyUrl, {
-                            headers: renderHeaders,
-                            signal: controller.signal,
-                            cache: "no-store",
-                        });
-                        clearTimeout(timeoutId);
-                        if (res.ok || res.status === 206) {
-                            upstreamResp = res;
-                            break;
-                        }
-                    } catch {
-                        clearTimeout(timeoutId);
-                    }
-                }
-            } catch {}
-        }
+            const renderBase = (
+                process.env.NEXT_PUBLIC_API_URL ||
+                "https://anime-api-arlv.onrender.com"
+            ).replace(/\/+$/, "");
 
-        // Strategy 3: Direct CDN fetch fallback with redirect follow
-        if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
-            for (const targetUrl of urlsToTry) {
-                try {
-                    const res = await fetch(targetUrl, {
-                        headers: {
-                            "User-Agent": USER_AGENTS[0],
-                            Accept: "*/*",
-                            Referer: "https://videodownloader.site/",
-                            Range: rangeHeader,
-                        },
-                        redirect: "follow",
-                        cache: "no-store",
-                    });
-                    if (res.ok || res.status === 206) {
-                        upstreamResp = res;
-                        break;
-                    }
-                } catch {}
+            for (const targetUrl of urlsToTry.slice(0, 2)) {
+                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}${rangeHeader ? `&range=${encodeURIComponent(rangeHeader)}` : ""}`;
+                const headers: Record<string, string> = {
+                    "User-Agent": ua,
+                    Accept: "*/*",
+                };
+                if (rangeHeader) headers["Range"] = rangeHeader;
+
+                upstreamResp = await tryFetch(renderProxyUrl, headers, 15000);
+                if (upstreamResp) break;
             }
         }
 
-        if (!upstreamResp || (!upstreamResp.ok && upstreamResp.status !== 206)) {
+        // ─── Strategy 3: Direct CDN without spoofing (last resort) ───
+        if (!upstreamResp) {
+            for (const targetUrl of urlsToTry) {
+                const headers: Record<string, string> = {
+                    "User-Agent": ua,
+                    Accept: "*/*",
+                    Referer: "https://videodownloader.site/",
+                };
+                if (rangeHeader) headers["Range"] = rangeHeader;
+
+                upstreamResp = await tryFetch(targetUrl, headers, 12000);
+                if (upstreamResp) break;
+            }
+        }
+
+        // ─── All strategies exhausted ───
+        if (!upstreamResp) {
             return NextResponse.json(
                 {
                     error: "video_proxy_failed",
-                    message: "All proxy strategies failed. Stream URLs may have expired — please refresh.",
+                    message:
+                        "All proxy strategies failed. Stream URLs may have expired — please refresh.",
                 },
-                {
-                    status: 502,
-                    headers: { "Access-Control-Allow-Origin": "*" },
-                },
+                { status: 502, headers: CORS_HEADERS },
             );
         }
 
+        // ─── Build response headers ───
         const resHeaders = new Headers();
+
+        // Forward essential media headers from upstream
         for (const h of [
             "content-type",
             "content-range",
@@ -235,26 +252,45 @@ export async function GET(req: NextRequest) {
             if (v) resHeaders.set(h, v);
         }
 
-        if (!resHeaders.has("accept-ranges")) resHeaders.set("accept-ranges", "bytes");
-        if (!resHeaders.has("content-type") || mode === "stream") resHeaders.set("content-type", mode === "subtitle" ? "text/vtt" : "video/mp4");
+        // Ensure Accept-Ranges is always present for seekable playback
+        if (!resHeaders.has("accept-ranges")) {
+            resHeaders.set("accept-ranges", "bytes");
+        }
+
+        // Set content-type: prefer upstream's actual type, fall back to mp4 for video streams
+        if (!resHeaders.has("content-type")) {
+            if (mode === "subtitle") {
+                resHeaders.set("content-type", "text/vtt");
+            } else {
+                resHeaders.set("content-type", "video/mp4");
+            }
+        }
+
         // Apply CORS headers
-        Object.entries(CORS_HEADERS).forEach(([k, v]) => resHeaders.set(k, v));
-        resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+        for (const [k, v] of Object.entries(CORS_HEADERS)) {
+            resHeaders.set(k, v);
+        }
+
+        // Prevent caching of proxied streams (CDN tokens expire)
+        resHeaders.set(
+            "Cache-Control",
+            "no-cache, no-store, must-revalidate, max-age=0",
+        );
         resHeaders.set("Pragma", "no-cache");
         resHeaders.set("Expires", "0");
 
-        // Explicitly omit Content-Disposition header so browser plays stream inline without download prompt / rejection
+        // Remove Content-Disposition to prevent download prompts
         resHeaders.delete("content-disposition");
 
         return new NextResponse(upstreamResp.body, {
             status: upstreamResp.status,
             headers: resHeaders,
         });
-
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         return NextResponse.json(
-            { error: "video_proxy_failed", message: err?.message || String(err) },
-            { status: 500, headers: { "Access-Control-Allow-Origin": "*" } },
+            { error: "video_proxy_failed", message },
+            { status: 500, headers: CORS_HEADERS },
         );
     }
 }

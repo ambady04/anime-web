@@ -125,8 +125,12 @@ export default function VideoPlayer({
     // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
     const sortedDownloads = useMemo(() => {
         return [...downloads].sort((a, b) => {
-            const resA = parseResolution(a.resolution) || ((a as any).isEmbed ? 1080 : 0);
-            const resB = parseResolution(b.resolution) || ((b as any).isEmbed ? 1080 : 0);
+            const resA =
+                parseResolution(a.resolution) ||
+                ((a as any).isEmbed ? 1080 : 0);
+            const resB =
+                parseResolution(b.resolution) ||
+                ((b as any).isEmbed ? 1080 : 0);
             if (resA !== resB) return resB - resA;
             const aEmbed = isEmbedStream(a) ? 1 : 0;
             const bEmbed = isEmbedStream(b) ? 1 : 0;
@@ -261,14 +265,19 @@ export default function VideoPlayer({
 
         if (typeof HTMLAnchorElement !== "undefined") {
             const originalAnchorClick = HTMLAnchorElement.prototype.click;
-            HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+            HTMLAnchorElement.prototype.click = function (
+                this: HTMLAnchorElement,
+            ) {
                 if (
                     this.target === "_blank" ||
                     this.target === "_top" ||
                     this.target === "_parent" ||
                     (this.href && !this.href.includes(window.location.hostname))
                 ) {
-                    console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
+                    console.warn(
+                        "[Ad Shield] Blocked dynamic anchor ad click:",
+                        this.href,
+                    );
                     return;
                 }
                 return originalAnchorClick.apply(this, arguments as any);
@@ -283,9 +292,13 @@ export default function VideoPlayer({
                 (link.target === "_blank" ||
                     link.target === "_top" ||
                     link.target === "_parent" ||
-                    (link.href && !link.href.includes(window.location.hostname)))
+                    (link.href &&
+                        !link.href.includes(window.location.hostname)))
             ) {
-                console.warn("[Ad Shield] Intercepted ad redirect/click:", link.href);
+                console.warn(
+                    "[Ad Shield] Intercepted ad redirect/click:",
+                    link.href,
+                );
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -297,7 +310,10 @@ export default function VideoPlayer({
         document.addEventListener("pointerdown", blockAdEvent, true);
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (document.activeElement && document.activeElement.tagName === "IFRAME") {
+            if (
+                document.activeElement &&
+                document.activeElement.tagName === "IFRAME"
+            ) {
                 e.preventDefault();
                 e.returnValue = "Stream Protection: Prevent external redirect";
                 return e.returnValue;
@@ -390,8 +406,14 @@ export default function VideoPlayer({
         window.addEventListener("storage", handleSizeChange);
 
         return () => {
-            window.removeEventListener("kixo-subtitle-font-changed", handleFontChange);
-            window.removeEventListener("kixo-subtitle-size-changed", handleSizeChange);
+            window.removeEventListener(
+                "kixo-subtitle-font-changed",
+                handleFontChange,
+            );
+            window.removeEventListener(
+                "kixo-subtitle-size-changed",
+                handleSizeChange,
+            );
             window.removeEventListener("storage", handleFontChange);
             window.removeEventListener("storage", handleSizeChange);
         };
@@ -561,8 +583,12 @@ export default function VideoPlayer({
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
-        const isDirectFallback = directFallbackUrlsRef.current.has(activeDownload.url);
+        const isExternalUrl =
+            activeDownload.url.startsWith("http://") ||
+            activeDownload.url.startsWith("https://");
+        const isDirectFallback = directFallbackUrlsRef.current.has(
+            activeDownload.url,
+        );
         // If proxyBase is empty (e.g. Cloudflare host where server proxy is blocked by CDN),
         // stream the CDN URL directly from the browser using the user's residential IP.
         const useDirectStream = !proxyBase || isDirectFallback;
@@ -651,28 +677,25 @@ export default function VideoPlayer({
                 }
             } else {
                 // Progressive MP4 / WebM
+                // Do NOT call play() immediately — wait for the video to load
+                // enough data (handled by onLoadedData/onCanPlay → isVideoLoaded
+                // → initial-seek effect which calls play() safely after seek).
                 const currentSrcAttr = video.getAttribute("src") || video.src;
-                if (!currentSrcAttr || !currentSrcAttr.includes(encodeURIComponent(activeDownload.url))) {
+                if (
+                    !currentSrcAttr ||
+                    !currentSrcAttr.includes(
+                        encodeURIComponent(activeDownload.url),
+                    )
+                ) {
                     video.src = src;
                     video.load();
-                }
-                const playPromise = video.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            if (isCancelled) return;
-                            setIsPlaying(true);
-                            setIsLoading(false);
-                            isInitialLoadRef.current = false;
-                        })
-                        .catch(() => {
-                            // Playback pending user click or browser autoplay policy
-                            if (!isCancelled) {
-                                setIsPlaying(false);
-                                setIsLoading(false);
-                                isInitialLoadRef.current = false;
-                            }
-                        });
+                } else {
+                    // Same source already set — trigger loaded state
+                    if (video.readyState >= 2) {
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
+                        isInitialLoadRef.current = false;
+                    }
                 }
             }
         };
@@ -836,18 +859,21 @@ export default function VideoPlayer({
         if (captions.length > 0) {
             // Identify the language of the current audio track from the dubs list
             const currentDub = dubs?.find(
-                (d) => decodeURIComponent(d.detailPath) === decodeURIComponent(detailPath)
+                (d) =>
+                    decodeURIComponent(d.detailPath) ===
+                    decodeURIComponent(detailPath),
             );
             const currentLang = currentDub?.lanName?.toLowerCase() ?? "";
             const currentLanCode = currentDub?.lanCode?.toLowerCase() ?? "";
 
             // Try to match caption to current dub language
-            let defaultCaption: typeof captions[0] | undefined;
+            let defaultCaption: (typeof captions)[0] | undefined;
             if (currentLang) {
                 defaultCaption = captions.find(
                     (c) =>
                         c.lanName?.toLowerCase().includes(currentLang) ||
-                        (currentLanCode && c.lan?.toLowerCase() === currentLanCode),
+                        (currentLanCode &&
+                            c.lan?.toLowerCase() === currentLanCode),
                 );
             }
             // Fall back to English
@@ -943,7 +969,10 @@ export default function VideoPlayer({
                 srtUrl.includes("Policy=") &&
                 !srtUrl.includes("Key-Pair-Id=")
             ) {
-                console.warn("Subtitle URL lacks CloudFront Key-Pair-Id, skipping subtitle track safely:", srtUrl);
+                console.warn(
+                    "Subtitle URL lacks CloudFront Key-Pair-Id, skipping subtitle track safely:",
+                    srtUrl,
+                );
                 setSubtitleUrl((prev) => {
                     if (prev && prev.startsWith("blob:")) {
                         URL.revokeObjectURL(prev);
@@ -958,7 +987,10 @@ export default function VideoPlayer({
             if (srtUrl.startsWith("http://") || srtUrl.startsWith("https://")) {
                 try {
                     const targetOrigin = new URL(srtUrl).origin;
-                    if (typeof window !== "undefined" && targetOrigin !== window.location.origin) {
+                    if (
+                        typeof window !== "undefined" &&
+                        targetOrigin !== window.location.origin
+                    ) {
                         const proxyBase = getVideoProxyBase();
                         const referer = "https://videodownloader.site/";
                         fetchUrl = proxyBase
@@ -983,7 +1015,9 @@ export default function VideoPlayer({
                 trimmedText.includes("MissingKey") ||
                 trimmedText.includes("AccessDenied")
             ) {
-                throw new Error("Subtitle response returned invalid HTML/XML/JSON error payload");
+                throw new Error(
+                    "Subtitle response returned invalid HTML/XML/JSON error payload",
+                );
             }
 
             // Simple SRT to WebVTT formatting conversion if not already WebVTT
@@ -991,7 +1025,9 @@ export default function VideoPlayer({
             if (trimmedText.startsWith("WEBVTT")) {
                 vttText = srtText;
             } else {
-                vttText = "WEBVTT\n\n" + srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+                vttText =
+                    "WEBVTT\n\n" +
+                    srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
             }
 
             const blob = new Blob([vttText], { type: "text/vtt" });
@@ -1025,7 +1061,12 @@ export default function VideoPlayer({
 
     const handlePlayerError = (e: unknown) => {
         // If the error target is not the video element itself (e.g. subtitle track element), ignore
-        if (e && typeof e === "object" && "target" in e && (e as any).target !== videoRef.current) {
+        if (
+            e &&
+            typeof e === "object" &&
+            "target" in e &&
+            (e as any).target !== videoRef.current
+        ) {
             return;
         }
 
@@ -1055,7 +1096,13 @@ export default function VideoPlayer({
         }
 
         // GUARD: Ignore error events if video src is empty, missing, or uninitialized (e.g. from removeAttribute or load reset)
-        if (!video || !video.src || video.src === "" || video.src === window.location.href || !video.currentSrc) {
+        if (
+            !video ||
+            !video.src ||
+            video.src === "" ||
+            video.src === window.location.href ||
+            !video.currentSrc
+        ) {
             return;
         }
 
@@ -1105,11 +1152,14 @@ export default function VideoPlayer({
         // Try alternate URL formats for this quality before giving up.
         // The primary url may be source_url (direct); fallback to resource_link (CloudFront via proxy)
         // or vice versa — whichever wasn't tried yet.
-        const altUrl = activeDownload.resource_link && activeDownload.resource_link !== activeDownload.url
-            ? activeDownload.resource_link
-            : (activeDownload.source_url && activeDownload.source_url !== activeDownload.url
-                ? activeDownload.source_url
-                : null);
+        const altUrl =
+            activeDownload.resource_link &&
+            activeDownload.resource_link !== activeDownload.url
+                ? activeDownload.resource_link
+                : activeDownload.source_url &&
+                    activeDownload.source_url !== activeDownload.url
+                  ? activeDownload.source_url
+                  : null;
 
         if (altUrl && !failedUrlsRef.current.has(altUrl)) {
             failedUrlsRef.current.add(activeDownload.url);
@@ -1158,7 +1208,9 @@ export default function VideoPlayer({
             setTimeout(() => setActiveDownload(nextQuality), 200);
         } else {
             // Check if an un-failed embed fallback exists before showing error screen
-            const embedFallback = sortedDownloads.find((d) => isEmbedStream(d) && !failedUrlsRef.current.has(d.url));
+            const embedFallback = sortedDownloads.find(
+                (d) => isEmbedStream(d) && !failedUrlsRef.current.has(d.url),
+            );
             if (embedFallback && activeDownload?.id !== embedFallback.id) {
                 setAutoRetryLabel("Switching to Web Embed HD Server...");
                 setIsLoading(true);
@@ -1203,13 +1255,19 @@ export default function VideoPlayer({
 
                 // Pick best available quality from fresh data (respecting user's choice if manual)
                 const freshSorted = [...freshStream.downloads].sort(
-                    (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
+                    (a, b) =>
+                        parseResolution(b.resolution) -
+                        parseResolution(a.resolution),
                 );
-                const currentResolution = activeDownload ? parseResolution(activeDownload.resolution) : 0;
+                const currentResolution = activeDownload
+                    ? parseResolution(activeDownload.resolution)
+                    : 0;
                 const pick =
                     !isAutoQuality && currentResolution
                         ? freshSorted.find(
-                              (d) => parseResolution(d.resolution) === currentResolution,
+                              (d) =>
+                                  parseResolution(d.resolution) ===
+                                  currentResolution,
                           ) || freshSorted[0]
                         : freshSorted[0]; // highest available quality (4K/1080p)
 
@@ -1241,7 +1299,12 @@ export default function VideoPlayer({
             stallTimerRef.current = setTimeout(() => {
                 const video = videoRef.current;
                 // Only escalate if the video is genuinely stalled (not loading/playing)
-                if (video && (video.readyState >= 1 || video.currentTime > 0 || !video.paused)) {
+                if (
+                    video &&
+                    (video.readyState >= 1 ||
+                        video.currentTime > 0 ||
+                        !video.paused)
+                ) {
                     // Video has data or is playing — clear spinner
                     setIsLoading(false);
                     isInitialLoadRef.current = false;
@@ -1267,7 +1330,8 @@ export default function VideoPlayer({
         setCurrentTime(current);
 
         if (current > 0 || videoRef.current.readyState >= 2) {
-            if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+            if (waitingTimeoutRef.current)
+                clearTimeout(waitingTimeoutRef.current);
             setIsLoading(false);
             isInitialLoadRef.current = false;
         }
@@ -1412,7 +1476,10 @@ export default function VideoPlayer({
                         setIsPlaying(true);
                     })
                     .catch((err) => {
-                        if (err?.name !== "NotSupportedError" && err?.name !== "AbortError") {
+                        if (
+                            err?.name !== "NotSupportedError" &&
+                            err?.name !== "AbortError"
+                        ) {
                             console.warn("Play interaction notice:", err);
                         }
                         setIsPlaying(false);
@@ -2366,22 +2433,22 @@ export default function VideoPlayer({
                         subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                              ? "Roboto, Arial, sans-serif"
+                              : subtitleFont === "trebuchet"
+                                ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                : subtitleFont === "monospace"
+                                  ? '"Courier New", Courier, monospace'
+                                  : subtitleFont === "serif"
+                                    ? 'Georgia, "Times New Roman", serif'
+                                    : subtitleFont === "impact"
+                                      ? 'Impact, "Arial Black", sans-serif'
+                                      : subtitleFont === "comic"
+                                        ? '"Comic Sans MS", "Comic Sans", cursive'
+                                        : subtitleFont === "verdana"
+                                          ? "Verdana, Geneva, sans-serif"
+                                          : subtitleFont === "lucida"
+                                            ? '"Lucida Console", Monaco, monospace'
+                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
                     } !important;
                     background: rgba(0, 0, 0, 0.75) !important;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
@@ -2392,22 +2459,22 @@ export default function VideoPlayer({
                         subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                              ? "Roboto, Arial, sans-serif"
+                              : subtitleFont === "trebuchet"
+                                ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                : subtitleFont === "monospace"
+                                  ? '"Courier New", Courier, monospace'
+                                  : subtitleFont === "serif"
+                                    ? 'Georgia, "Times New Roman", serif'
+                                    : subtitleFont === "impact"
+                                      ? 'Impact, "Arial Black", sans-serif'
+                                      : subtitleFont === "comic"
+                                        ? '"Comic Sans MS", "Comic Sans", cursive'
+                                        : subtitleFont === "verdana"
+                                          ? "Verdana, Geneva, sans-serif"
+                                          : subtitleFont === "lucida"
+                                            ? '"Lucida Console", Monaco, monospace'
+                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
                     } !important;
                     background: transparent !important;
                 }
@@ -2417,22 +2484,22 @@ export default function VideoPlayer({
                         subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                              ? "Roboto, Arial, sans-serif"
+                              : subtitleFont === "trebuchet"
+                                ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                : subtitleFont === "monospace"
+                                  ? '"Courier New", Courier, monospace'
+                                  : subtitleFont === "serif"
+                                    ? 'Georgia, "Times New Roman", serif'
+                                    : subtitleFont === "impact"
+                                      ? 'Impact, "Arial Black", sans-serif'
+                                      : subtitleFont === "comic"
+                                        ? '"Comic Sans MS", "Comic Sans", cursive'
+                                        : subtitleFont === "verdana"
+                                          ? "Verdana, Geneva, sans-serif"
+                                          : subtitleFont === "lucida"
+                                            ? '"Lucida Console", Monaco, monospace'
+                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
                     } !important;
                 }
                 video.controls-visible::-webkit-media-text-track-display {
@@ -2597,7 +2664,8 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
-                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    crossOrigin={subtitleUrl ? "anonymous" : undefined}
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
@@ -2775,7 +2843,9 @@ export default function VideoPlayer({
                             proxyFallbackIndexRef.current = new Map();
                             refreshCountRef.current = 0;
                             setPlayerError(false);
-                            setAutoRetryLabel("Fetching fresh signed stream links...");
+                            setAutoRetryLabel(
+                                "Fetching fresh signed stream links...",
+                            );
                             setIsLoading(true);
                             refreshStreamData();
                         }}
@@ -2794,38 +2864,38 @@ export default function VideoPlayer({
                         : "opacity-0 pointer-events-none"
                 } ${isPlaying && !showControls ? "cursor-none" : ""}`}
             >
-            {/* Top bar info */}
-            <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
-                <div className="text-white drop-shadow-md">
-                    <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
-                        {title}
-                    </h2>
-                    {isSeries && season && episode && (
-                        <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                            Season {season} • Episode {episode}
-                        </p>
-                    )}
+                {/* Top bar info */}
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
+                    <div className="text-white drop-shadow-md">
+                        <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
+                            {title}
+                        </h2>
+                        {isSeries && season && episode && (
+                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
+                                Season {season} • Episode {episode}
+                            </p>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-            {!isPlaying &&
-                !isLoading &&
-                !showSubtitleMenu &&
-                !showAudioMenu &&
-                !showQualityMenu &&
-                !showSpeedMenu &&
-                !showRatioMenu && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            togglePlay();
-                        }}
-                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
-                    >
-                        <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
-                    </button>
-                )}
+                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+                {!isPlaying &&
+                    !isLoading &&
+                    !showSubtitleMenu &&
+                    !showAudioMenu &&
+                    !showQualityMenu &&
+                    !showSpeedMenu &&
+                    !showRatioMenu && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                togglePlay();
+                            }}
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
+                        >
+                            <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
+                        </button>
+                    )}
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
@@ -3315,97 +3385,128 @@ export default function VideoPlayer({
                                                 setShowRatioMenu(false);
                                             }}
                                             className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                                                    showQualityMenu
-                                                        ? "bg-primary/20 text-primary-light border-primary/30"
-                                                        : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
-                                                }`}
-                                            >
-                                                <span>
-                                                    {activeDownload
-                                                        ? isAutoQuality
-                                                            ? `Auto (${parseResolution(activeDownload.resolution)}p)`
-                                                            : `${parseResolution(activeDownload.resolution)}p`
-                                                        : "Auto"}
-                                                </span>
-                                                <Settings className="w-3.5 h-3.5" />
-                                            </button>
+                                                showQualityMenu
+                                                    ? "bg-primary/20 text-primary-light border-primary/30"
+                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                                            }`}
+                                        >
+                                            <span>
+                                                {activeDownload
+                                                    ? isAutoQuality
+                                                        ? `Auto (${parseResolution(activeDownload.resolution)}p)`
+                                                        : `${parseResolution(activeDownload.resolution)}p`
+                                                    : "Auto"}
+                                            </span>
+                                            <Settings className="w-3.5 h-3.5" />
+                                        </button>
 
-                                            {showQualityMenu &&
-                                                sortedDownloads.length > 0 && (
-                                                    <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                            Quality
-                                                        </p>
-                                                        <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setIsAutoQuality(
+                                        {showQualityMenu &&
+                                            sortedDownloads.length > 0 && (
+                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                        Quality
+                                                    </p>
+                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsAutoQuality(
+                                                                    true,
+                                                                );
+                                                                setShowQualityMenu(
+                                                                    false,
+                                                                );
+                                                                const defaultQuality =
+                                                                    sortedDownloads[0];
+                                                                if (
+                                                                    defaultQuality &&
+                                                                    activeDownload?.id !==
+                                                                        defaultQuality.id
+                                                                ) {
+                                                                    handleQualityChange(
+                                                                        defaultQuality,
                                                                         true,
                                                                     );
-                                                                    setShowQualityMenu(
-                                                                        false,
+                                                                }
+                                                            }}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                        >
+                                                            Auto (Highest)
+                                                        </button>
+                                                        {sortedDownloads.map(
+                                                            (link, idx) => {
+                                                                const resNum =
+                                                                    parseResolution(
+                                                                        link.resolution,
                                                                     );
-                                                                    const defaultQuality = sortedDownloads[0];
-                                                                    if (
-                                                                        defaultQuality &&
-                                                                        activeDownload?.id !==
-                                                                            defaultQuality.id
-                                                                    ) {
-                                                                        handleQualityChange(
-                                                                            defaultQuality,
-                                                                            true,
-                                                                        );
-                                                                    }
-                                                                }}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                            >
-                                                                Auto (Highest)
-                                                            </button>
-                                                            {sortedDownloads.map(
-                                                                (link, idx) => {
-                                                                    const resNum = parseResolution(link.resolution);
-                                                                    const isEmbed = isEmbedStream(link);
-                                                                    let label = "";
-                                                                    if (isEmbed) {
-                                                                        label = (link as any).name || (resNum > 0 ? `${resNum}p HD Server` : "1080p Full HD Server");
-                                                                    } else if (resNum === 2160) {
-                                                                        label = "4K Ultra HD (2160p)";
-                                                                    } else if (resNum === 1440) {
-                                                                        label = "2K Quad HD (1440p)";
-                                                                    } else if (resNum === 1080) {
-                                                                        label = "1080p Full HD";
-                                                                    } else if (resNum === 720) {
-                                                                        label = "720p HD";
-                                                                    } else {
-                                                                        label = `${resNum || link.resolution}p`;
-                                                                    }
-                                                                    return (
-                                                                        <button
-                                                                            key={`${link.id || "quality"}-${idx}`}
-                                                                            onClick={() => {
-                                                                                handleQualityChange(
-                                                                                    link,
-                                                                                );
-                                                                                setShowQualityMenu(
-                                                                                    false,
-                                                                                );
-                                                                            }}
-                                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                                !isAutoQuality &&
-                                                                                activeDownload?.id ===
-                                                                                    link.id
-                                                                                    ? "text-primary bg-primary/10"
-                                                                                    : "text-white/80"
-                                                                            }`}
-                                                                        >
-                                                                            {label}
-                                                                        </button>
+                                                                const isEmbed =
+                                                                    isEmbedStream(
+                                                                        link,
                                                                     );
-                                                                },
-                                                            )}
-                                                        </div>
+                                                                let label = "";
+                                                                if (isEmbed) {
+                                                                    label =
+                                                                        (
+                                                                            link as any
+                                                                        )
+                                                                            .name ||
+                                                                        (resNum >
+                                                                        0
+                                                                            ? `${resNum}p HD Server`
+                                                                            : "1080p Full HD Server");
+                                                                } else if (
+                                                                    resNum ===
+                                                                    2160
+                                                                ) {
+                                                                    label =
+                                                                        "4K Ultra HD (2160p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1440
+                                                                ) {
+                                                                    label =
+                                                                        "2K Quad HD (1440p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1080
+                                                                ) {
+                                                                    label =
+                                                                        "1080p Full HD";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    720
+                                                                ) {
+                                                                    label =
+                                                                        "720p HD";
+                                                                } else {
+                                                                    label = `${resNum || link.resolution}p`;
+                                                                }
+                                                                return (
+                                                                    <button
+                                                                        key={`${link.id || "quality"}-${idx}`}
+                                                                        onClick={() => {
+                                                                            handleQualityChange(
+                                                                                link,
+                                                                            );
+                                                                            setShowQualityMenu(
+                                                                                false,
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
+                                                                            !isAutoQuality &&
+                                                                            activeDownload?.id ===
+                                                                                link.id
+                                                                                ? "text-primary bg-primary/10"
+                                                                                : "text-white/80"
+                                                                        }`}
+                                                                    >
+                                                                        {label}
+                                                                    </button>
+                                                                );
+                                                            },
+                                                        )}
                                                     </div>
-                                                )}
+                                                </div>
+                                            )}
                                     </div>
 
                                     {/* Speed */}
@@ -3851,7 +3952,8 @@ export default function VideoPlayer({
                                                                 setShowQualityMenu(
                                                                     false,
                                                                 );
-                                                                const defaultQuality = sortedDownloads[0];
+                                                                const defaultQuality =
+                                                                    sortedDownloads[0];
                                                                 if (
                                                                     defaultQuality &&
                                                                     activeDownload?.id !==
@@ -3868,19 +3970,49 @@ export default function VideoPlayer({
                                                         </button>
                                                         {sortedDownloads.map(
                                                             (link, idx) => {
-                                                                const resNum = parseResolution(link.resolution);
-                                                                const isEmbed = isEmbedStream(link);
+                                                                const resNum =
+                                                                    parseResolution(
+                                                                        link.resolution,
+                                                                    );
+                                                                const isEmbed =
+                                                                    isEmbedStream(
+                                                                        link,
+                                                                    );
                                                                 let label = "";
                                                                 if (isEmbed) {
-                                                                    label = (link as any).name || (resNum > 0 ? `${resNum}p HD Server` : "1080p Full HD Server");
-                                                                } else if (resNum === 2160) {
-                                                                    label = "4K Ultra HD (2160p)";
-                                                                } else if (resNum === 1440) {
-                                                                    label = "2K Quad HD (1440p)";
-                                                                } else if (resNum === 1080) {
-                                                                    label = "1080p Full HD";
-                                                                } else if (resNum === 720) {
-                                                                    label = "720p HD";
+                                                                    label =
+                                                                        (
+                                                                            link as any
+                                                                        )
+                                                                            .name ||
+                                                                        (resNum >
+                                                                        0
+                                                                            ? `${resNum}p HD Server`
+                                                                            : "1080p Full HD Server");
+                                                                } else if (
+                                                                    resNum ===
+                                                                    2160
+                                                                ) {
+                                                                    label =
+                                                                        "4K Ultra HD (2160p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1440
+                                                                ) {
+                                                                    label =
+                                                                        "2K Quad HD (1440p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1080
+                                                                ) {
+                                                                    label =
+                                                                        "1080p Full HD";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    720
+                                                                ) {
+                                                                    label =
+                                                                        "720p HD";
                                                                 } else {
                                                                     label = `${resNum || link.resolution}p`;
                                                                 }
