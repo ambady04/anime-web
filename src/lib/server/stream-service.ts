@@ -150,7 +150,7 @@ async function fetchMirrorStream(
                     d.fallbackUrl ||
                     d.link ||
                     (typeof d === "string" ? d : "");
-                if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
+                if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "None")
                     return null;
                 return {
                     id: String(d.id || d.resolution || idx),
@@ -442,7 +442,8 @@ export const streamService = {
                             if (
                                 !rawUrl ||
                                 typeof rawUrl !== "string" ||
-                                !rawUrl.trim()
+                                !rawUrl.trim() ||
+                                rawUrl.trim() === "None"
                             )
                                 return null;
                             return {
