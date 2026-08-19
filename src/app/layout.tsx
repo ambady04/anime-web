@@ -83,13 +83,28 @@ export default function RootLayout({
             data-scroll-behavior="smooth"
             suppressHydrationWarning
             className={`${geist.variable} h-full antialiased`}
-            style={{ fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
+            style={{
+                fontFamily:
+                    "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif",
+            }}
         >
             <head>
                 <meta name="referrer" content="no-referrer" />
-                <link rel="preconnect" href="https://img.aoneroom.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://h5-api.aoneroom.com" crossOrigin="anonymous" />
-                <link rel="preconnect" href="https://anime-api-arlv.onrender.com" crossOrigin="anonymous" />
+                <link
+                    rel="preconnect"
+                    href="https://img.aoneroom.com"
+                    crossOrigin="anonymous"
+                />
+                <link
+                    rel="preconnect"
+                    href="https://h5-api.aoneroom.com"
+                    crossOrigin="anonymous"
+                />
+                <link
+                    rel="preconnect"
+                    href="https://anime-api-arlv.onrender.com"
+                    crossOrigin="anonymous"
+                />
                 <script
                     dangerouslySetInnerHTML={{
                         __html: `
@@ -160,18 +175,22 @@ export default function RootLayout({
             </head>
             <body
                 className="min-h-full text-white flex flex-col relative"
-                style={{ backgroundColor: "#000000", fontFamily: "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif" }}
+                style={{
+                    backgroundColor: "#0a0a0f",
+                    fontFamily:
+                        "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif",
+                }}
             >
                 <AuthProvider>
                     {/* Client-only providers: smooth scroll + ambient orbs */}
                     <ClientProviders />
                     <PWARegister />
 
+                    {/* Spatial mesh gradient background */}
+                    <div className="spatial-mesh-bg" aria-hidden="true" />
 
-                    {/* CSS noise texture overlay for premium cinematic feel */}
+                    {/* Subtle noise texture overlay */}
                     <div className="noise-overlay" aria-hidden="true" />
-
-
 
                     {/* Global Navigation */}
                     <Navbar />

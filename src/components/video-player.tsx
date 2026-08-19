@@ -574,6 +574,26 @@ export default function VideoPlayer({
         if (!isHistoryChecked || !activeDownload) return;
 
         let isCancelled = false;
+
+        // Safety: reject embed/iframe URLs that should never reach the video element
+        const dlUrl = (activeDownload.url || "").toLowerCase();
+        try {
+            const hn = new URL(dlUrl).hostname;
+            if (
+                hn.includes("vidsrc") ||
+                hn.includes("autoembed") ||
+                hn.includes("2embed") ||
+                hn.includes("vidplay") ||
+                hn.includes("superembed") ||
+                hn.includes("embedsu")
+            ) {
+                handlePlayerError(new Error("Embed URL rejected"));
+                return;
+            }
+        } catch {
+            /* ignore parse errors */
+        }
+
         const referer = "https://videodownloader.site/";
         const proxyBase = getVideoProxyBase();
 
@@ -584,15 +604,27 @@ export default function VideoPlayer({
         const isDirectFallback = directFallbackUrlsRef.current.has(
             activeDownload.url,
         );
-        // If proxyBase is empty (e.g. Cloudflare host where server proxy is blocked by CDN),
-        // stream the CDN URL directly from the browser using the user's residential IP.
-        const useDirectStream = !proxyBase || isDirectFallback;
+        // CDN URLs (hakunaymatata.com) require Referer headers that browsers won't send.
+        // Always use the proxy for CDN streams. Only use direct for non-CDN URLs.
+        const isCdnUrl =
+            activeDownload.url.includes("hakunaymatata.com") ||
+            activeDownload.url.includes("aoneroom.com");
+        const useDirectStream = !proxyBase || (isDirectFallback && !isCdnUrl);
 
-        const src = isExternalUrl
-            ? useDirectStream
+        // For CDN URLs that expire quickly, use live-resolve mode:
+        // Pass path/season/episode to the proxy which fetches a fresh URL and streams it.
+        // This avoids expired token issues.
+        let src: string;
+        if (isCdnUrl && proxyBase) {
+            // Live-resolve mode — proxy fetches fresh stream URL on each request
+            src = `${proxyBase}?path=${encodeURIComponent(detailPath)}&season=${season || 0}&episode=${episode || 0}&quality=${qualityVal}&_t=${Date.now()}`;
+        } else if (isExternalUrl) {
+            src = useDirectStream
                 ? activeDownload.url
-                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
-            : activeDownload.url;
+                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
+        } else {
+            src = activeDownload.url;
+        }
 
         const setup = () => {
             const video = videoRef.current;
@@ -832,7 +864,7 @@ export default function VideoPlayer({
                 videoRef.current.removeAttribute("src");
                 videoRef.current.load();
             }
-            if (refreshCountRef.current < 2) {
+            if (refreshCountRef.current < 3) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
                 setIsLoading(true);
@@ -1172,8 +1204,15 @@ export default function VideoPlayer({
             return;
         }
 
-        // Direct stream fallback: if proxy fails on server, retry direct client stream
-        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
+        // Direct stream fallback: skip for CDN URLs (they require Referer that browser won't send)
+        // Instead, go directly to refreshing stream data for fresh signed URLs
+        const isCdnStream =
+            activeDownload.url.includes("hakunaymatata.com") ||
+            activeDownload.url.includes("aoneroom.com");
+        if (
+            !isCdnStream &&
+            !directFallbackUrlsRef.current.has(activeDownload.url)
+        ) {
             directFallbackUrlsRef.current.add(activeDownload.url);
             setAutoRetryLabel("Switching to direct stream...");
             setIsLoading(true);
@@ -1203,7 +1242,7 @@ export default function VideoPlayer({
             setTimeout(() => setActiveDownload(nextQuality), 200);
         } else {
             // All direct stream qualities failed — try refreshing
-            if (refreshCountRef.current < 2) {
+            if (refreshCountRef.current < 3) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
                 setIsLoading(true);

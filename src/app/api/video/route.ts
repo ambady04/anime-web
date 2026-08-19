@@ -108,10 +108,63 @@ export async function GET(req: NextRequest) {
         }
 
         if (!url) {
-            return NextResponse.json(
-                { detail: "Missing url parameter" },
-                { status: 400, headers: CORS_HEADERS },
-            );
+            // ─── Live resolve mode: fetch fresh stream URL then proxy ───
+            const pathParam = req.nextUrl.searchParams.get("path") || "";
+            const seasonParam = req.nextUrl.searchParams.get("season") || "0";
+            const episodeParam = req.nextUrl.searchParams.get("episode") || "0";
+            const qualityParam = req.nextUrl.searchParams.get("quality") || "";
+
+            if (!pathParam) {
+                return NextResponse.json(
+                    { detail: "Missing url or path parameter" },
+                    { status: 400, headers: CORS_HEADERS },
+                );
+            }
+
+            // Resolve fresh stream URL server-side
+            try {
+                const { streamService } =
+                    await import("@/lib/server/stream-service");
+                const streamData = await streamService.getStream(
+                    pathParam,
+                    parseInt(seasonParam, 10),
+                    parseInt(episodeParam, 10),
+                    false,
+                );
+
+                if (
+                    !streamData.downloads ||
+                    streamData.downloads.length === 0
+                ) {
+                    return NextResponse.json(
+                        {
+                            error: "no_streams",
+                            message:
+                                "No stream URLs available for this content",
+                        },
+                        { status: 404, headers: CORS_HEADERS },
+                    );
+                }
+
+                // Pick the best quality match
+                const targetQuality = parseInt(qualityParam, 10) || 0;
+                let pick = streamData.downloads[0]; // default: first (highest)
+                if (targetQuality > 0) {
+                    const match = streamData.downloads.find(
+                        (d: any) => (d.resolution || 0) === targetQuality,
+                    );
+                    if (match) pick = match;
+                }
+                url = pick.url;
+            } catch (resolveErr) {
+                return NextResponse.json(
+                    {
+                        error: "stream_resolve_failed",
+                        message: String(resolveErr),
+                    },
+                    { status: 502, headers: CORS_HEADERS },
+                );
+            }
         }
 
         const rangeHeader = req.headers.get("range") || "";

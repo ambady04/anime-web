@@ -336,8 +336,9 @@ export const movieApi = {
             return streamService.getStream(path, season, episode, adult);
         }
 
-        // Retry logic: up to 2 attempts with 1s delay before falling to browser-direct
-        const maxAttempts = 2;
+        // Retry logic: up to 4 attempts with 2s delay — server-side is the only reliable path
+        // (browser-direct h5-api calls fail due to CORS blocking x-user token header)
+        const maxAttempts = 4;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             try {
                 const params: Record<string, string | number | boolean> = {
@@ -381,194 +382,27 @@ export const movieApi = {
                 }
                 // hasResource but no downloads — retry after delay
                 if (attempt < maxAttempts - 1) {
-                    await new Promise((r) => setTimeout(r, 1000));
+                    await new Promise((r) => setTimeout(r, 2000));
                 }
             } catch {
-                // Backend API failed — break to browser fallback
-                break;
-            }
-        }
-
-        const details = await movieApi.getDetails(path, adult);
-        const subjectId = details.subject?.subjectId;
-        if (!subjectId) {
-            return {
-                downloads: [],
-                captions: [],
-                hasResource: false,
-                limited: false,
-                limitedCode: "",
-                stream_domain: "https://videodownloader.site/",
-            };
-        }
-
-        const isSeries = isSeriesType(details.subject?.subjectType);
-        const reqSeason = season > 0 ? season : isSeries ? 1 : 0;
-        const reqEpisode = episode > 0 ? episode : isSeries ? 1 : 0;
-
-        let token = "";
-        try {
-            const tokenRes = await fetch(
-                `${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Referer: "https://videodownloader.site/",
-                    },
-                    body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
-                },
-            );
-            const xUser = tokenRes.headers.get("x-user");
-            if (xUser) token = JSON.parse(xUser).token;
-        } catch {
-            // Ignore
-        }
-
-        const dlRes = await fetch(
-            `${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`,
-            {
-                headers: {
-                    ...getClientHeaders(adult),
-                    "User-Agent":
-                        "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
-                    ...(token
-                        ? {
-                              Authorization: `Bearer ${token}`,
-                              Cookie: `token=${token}`,
-                          }
-                        : {}),
-                },
-            },
-        );
-        const dlJson: any = await dlRes.json();
-        const data = dlJson.data || dlJson;
-        const parseDownloadLinks = (rawObj: any): DownloadLink[] => {
-            const raw =
-                rawObj?.downloads ||
-                rawObj?.downloadList ||
-                rawObj?.resourceList ||
-                rawObj?.sources ||
-                rawObj?.playList ||
-                [];
-            if (!Array.isArray(raw)) return [];
-            const mapped: (DownloadLink | null)[] = raw.map(
-                (d: any, idx: number) => {
-                    const rawUrl =
-                        d.url ||
-                        d.playUrl ||
-                        d.downloadUrl ||
-                        d.videoUrl ||
-                        d.hlsUrl ||
-                        d.resourceLink ||
-                        d.sourceUrl ||
-                        d.resource_link ||
-                        d.source_url ||
-                        d.fallbackUrl ||
-                        d.link ||
-                        (typeof d === "string" ? d : "");
-                    if (
-                        !rawUrl ||
-                        typeof rawUrl !== "string" ||
-                        !rawUrl.trim() ||
-                        rawUrl.trim() === "None"
-                    )
-                        return null;
-                    // Reject embed/iframe URLs — only accept direct stream URLs
-                    if (d.isEmbed) return null;
-                    const lUrl = rawUrl.toLowerCase();
-                    try {
-                        const hn = new URL(lUrl).hostname;
-                        if (
-                            hn.includes("vidsrc") ||
-                            hn.includes("autoembed") ||
-                            hn.includes("2embed") ||
-                            hn.includes("vidplay") ||
-                            hn.includes("superembed") ||
-                            hn.includes("embedsu")
-                        )
-                            return null;
-                    } catch {
-                        if (
-                            lUrl.includes("vidsrc.") ||
-                            lUrl.includes("autoembed.") ||
-                            lUrl.includes("2embed.") ||
-                            lUrl.includes("superembed.")
-                        )
-                            return null;
-                    }
-                    return {
-                        id: String(d.id || d.resolution || idx),
-                        url: rawUrl.trim(),
-                        resolution: parseResolution(
-                            d.resolution || d.quality || d.name || 720,
-                        ),
-                        size: Number(d.size || d.fileSize || 0),
-                        resource_link: d.resourceLink || d.resource_link || "",
-                        source_url: d.sourceUrl || d.source_url || "",
-                    };
-                },
-            );
-            return mapped.filter((d): d is DownloadLink => d !== null);
-        };
-
-        let downloads: DownloadLink[] = parseDownloadLinks(data);
-
-        // Fallback to dub tracks if primary download is empty for series
-        if (downloads.length === 0 && details.dubs && details.dubs.length > 0) {
-            for (const dub of details.dubs) {
-                if (!dub.detailPath || dub.detailPath === path) continue;
-                try {
-                    const dubDetails = await movieApi.getDetails(
-                        dub.detailPath,
-                        adult,
-                    );
-                    const dubSubId = dubDetails.subject?.subjectId;
-                    if (!dubSubId) continue;
-
-                    const dubDlRes = await fetch(
-                        `${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${dubSubId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(dub.detailPath)}`,
-                        {
-                            headers: {
-                                ...getClientHeaders(adult),
-                                "User-Agent":
-                                    "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
-                                ...(token
-                                    ? {
-                                          Authorization: `Bearer ${token}`,
-                                          Cookie: `token=${token}`,
-                                      }
-                                    : {}),
-                            },
-                        },
-                    );
-                    const dubJson: any = await dubDlRes.json();
-                    const dubData = dubJson.data || dubJson;
-                    const dubDl = parseDownloadLinks(dubData);
-                    if (dubDl.length > 0) {
-                        downloads = dubDl;
-                        break;
-                    }
-                } catch {
-                    // Ignore dub error
+                // Backend API failed — retry
+                if (attempt < maxAttempts - 1) {
+                    await new Promise((r) => setTimeout(r, 1500));
                 }
             }
         }
 
-        // Note: Embed servers (vidsrc.to, 2embed.cc) are no longer added as fallbacks.
-        // They return 403 when embedded from third-party domains and use TMDB IDs
-        // which don't match our internal subjectIds.
-
+        // Server-side stream resolution exhausted — return empty
+        // (Browser-direct h5-api calls cannot work due to CORS blocking the x-user auth token)
         return {
-            downloads,
-            captions: data.captions || data.captionList || [],
-            hasResource: true,
-            limited: Boolean(data.limited),
-            limitedCode: data.limitedCode || "",
+            downloads: [],
+            captions: [],
+            hasResource: false,
+            limited: false,
+            limitedCode: "",
             stream_domain: "https://videodownloader.site/",
         };
     },
-
     search: async (
         q: string,
         page = 1,

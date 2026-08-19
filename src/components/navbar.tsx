@@ -61,32 +61,65 @@ export default function Navbar() {
     return (
         <>
             <motion.header
-                className="fixed top-0 left-0 right-0 z-50 transition-all duration-300 backdrop-blur-md"
+                className="fixed top-0 left-0 right-0 z-50 transition-all duration-500"
                 animate={{
-                    backgroundColor: scrolled ? "rgba(0, 0, 0, 0.3)" : "rgba(0, 0, 0, 0)",
-                    boxShadow: scrolled ? "0 4px 30px rgba(0, 0, 0, 0.3)" : "none",
+                    backgroundColor: scrolled
+                        ? "rgba(15, 15, 25, 0.6)"
+                        : "rgba(0, 0, 0, 0)",
+                    backdropFilter: scrolled
+                        ? "blur(40px) saturate(150%)"
+                        : "blur(0px)",
+                    boxShadow: scrolled
+                        ? "0 4px 40px rgba(0, 0, 0, 0.2), 0 1px 0 rgba(255, 255, 255, 0.04)"
+                        : "none",
                 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             >
                 <div className="max-w-tv px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 relative">
-
                     {/* ── Logo ── */}
-                    <Link href="/" className="flex items-center gap-2.5 group shrink-0 relative z-10">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-2.5 group shrink-0 relative z-10"
+                    >
                         <motion.div
                             whileHover={{ scale: 1.08 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                            transition={{
+                                type: "spring",
+                                stiffness: 400,
+                                damping: 20,
+                            }}
                             className="relative"
                         >
-                            <svg className="w-7 h-7" viewBox="0 0 28 28" fill="none">
-                                <path d="M14 2L6 10L14 18L22 10L14 2Z" fill="var(--primary)" fillOpacity="0.95" />
-                                <path d="M14 10L6 18L14 26L22 18L14 10Z" fill="#1A0008" fillOpacity="0.9" />
+                            <svg
+                                className="w-7 h-7"
+                                viewBox="0 0 28 28"
+                                fill="none"
+                            >
+                                <path
+                                    d="M14 2L6 10L14 18L22 10L14 2Z"
+                                    fill="var(--primary)"
+                                    fillOpacity="0.95"
+                                />
+                                <path
+                                    d="M14 10L6 18L14 26L22 18L14 10Z"
+                                    fill="#0a0a1a"
+                                    fillOpacity="0.9"
+                                />
                             </svg>
                             {/* Logo ambient glow */}
                             <motion.div
                                 className="absolute inset-0 rounded-full"
-                                style={{ background: "radial-gradient(circle, rgba(229,9,20,0.4), transparent 70%)", filter: "blur(8px)" }}
+                                style={{
+                                    background:
+                                        "radial-gradient(circle, rgba(124,92,252,0.4), transparent 70%)",
+                                    filter: "blur(8px)",
+                                }}
                                 animate={{ opacity: [0.4, 0.8, 0.4] }}
-                                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                                transition={{
+                                    duration: 2.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                }}
                             />
                         </motion.div>
                         <span className="text-xl font-black tracking-[0.12em] leading-none select-none">
@@ -112,7 +145,9 @@ export default function Navbar() {
                                     key={link.href}
                                     href={link.href}
                                     className={`relative flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-semibold uppercase tracking-widest transition-colors duration-300 select-none ${
-                                        isActive ? "text-white" : "text-[#9CA3AF] hover:text-white"
+                                        isActive
+                                            ? "text-white"
+                                            : "text-[#9CA3AF] hover:text-white"
                                     }`}
                                 >
                                     {isActive && (
@@ -120,15 +155,23 @@ export default function Navbar() {
                                             layoutId="nav-pill"
                                             className="absolute inset-0 rounded-2xl"
                                             style={{
-                                                background: "rgba(229,9,20,0.12)",
-                                                border: "1px solid rgba(229,9,20,0.25)",
-                                                boxShadow: "0 0 16px rgba(229,9,20,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                                                background:
+                                                    "rgba(124,92,252,0.12)",
+                                                border: "1px solid rgba(124,92,252,0.25)",
+                                                boxShadow:
+                                                    "0 0 16px rgba(124,92,252,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
                                             }}
-                                            transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                                            transition={{
+                                                type: "spring",
+                                                stiffness: 500,
+                                                damping: 35,
+                                            }}
                                         />
                                     )}
                                     <Icon className="w-3.5 h-3.5 relative z-10" />
-                                    <span className="relative z-10">{link.label}</span>
+                                    <span className="relative z-10">
+                                        {link.label}
+                                    </span>
                                 </Link>
                             );
                         })}
@@ -136,7 +179,6 @@ export default function Navbar() {
 
                     {/* ── Right Actions ── */}
                     <div className="flex items-center gap-2 sm:gap-3">
-
                         {/* Search — desktop inline */}
                         <div className="hidden sm:block relative">
                             <AnimatePresence mode="wait">
@@ -147,7 +189,11 @@ export default function Navbar() {
                                         initial={{ width: 40, opacity: 0 }}
                                         animate={{ width: 240, opacity: 1 }}
                                         exit={{ width: 40, opacity: 0 }}
-                                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                        transition={{
+                                            type: "spring",
+                                            stiffness: 400,
+                                            damping: 30,
+                                        }}
                                         className="relative flex items-center"
                                     >
                                         <Search className="absolute left-3.5 w-3.5 h-3.5 text-[#9CA3AF] pointer-events-none" />
@@ -156,24 +202,34 @@ export default function Navbar() {
                                             type="text"
                                             placeholder="Search titles..."
                                             value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            onChange={(e) =>
+                                                setSearchQuery(e.target.value)
+                                            }
                                             className="w-full h-9 pl-9 pr-9 rounded-2xl text-xs font-medium placeholder-[rgba(255,255,255,0.3)] text-white focus:outline-none transition-all"
                                             style={{
-                                                background: "rgba(255,255,255,0.07)",
+                                                background:
+                                                    "rgba(255,255,255,0.07)",
                                                 border: "1px solid rgba(255,255,255,0.08)",
                                             }}
                                             onFocus={(e) => {
-                                                e.target.style.borderColor = "rgba(229,9,20,0.4)";
-                                                e.target.style.boxShadow = "0 0 0 3px rgba(229,9,20,0.1), 0 0 20px rgba(229,9,20,0.06)";
+                                                e.target.style.borderColor =
+                                                    "rgba(124,92,252,0.4)";
+                                                e.target.style.boxShadow =
+                                                    "0 0 0 3px rgba(124,92,252,0.1), 0 0 20px rgba(124,92,252,0.06)";
                                             }}
                                             onBlur={(e) => {
-                                                e.target.style.borderColor = "rgba(255,255,255,0.08)";
-                                                e.target.style.boxShadow = "none";
+                                                e.target.style.borderColor =
+                                                    "rgba(255,255,255,0.08)";
+                                                e.target.style.boxShadow =
+                                                    "none";
                                             }}
                                         />
                                         <button
                                             type="button"
-                                            onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                                            onClick={() => {
+                                                setSearchOpen(false);
+                                                setSearchQuery("");
+                                            }}
                                             className="absolute right-3 text-[rgba(255,255,255,0.4)] hover:text-white transition-colors"
                                         >
                                             <X className="w-3.5 h-3.5" />
@@ -188,10 +244,15 @@ export default function Navbar() {
                                         exit={{ opacity: 0 }}
                                         className="w-9 h-9 rounded-2xl flex items-center justify-center text-[#9CA3AF] hover:text-white transition-all duration-200 cursor-pointer"
                                         style={{
-                                            background: "rgba(255,255,255,0.05)",
+                                            background:
+                                                "rgba(255,255,255,0.05)",
                                             border: "1px solid rgba(255,255,255,0.07)",
                                         }}
-                                        whileHover={{ scale: 1.08, backgroundColor: "rgba(255,255,255,0.09)" }}
+                                        whileHover={{
+                                            scale: 1.08,
+                                            backgroundColor:
+                                                "rgba(255,255,255,0.09)",
+                                        }}
                                         whileTap={{ scale: 0.94 }}
                                         aria-label="Open search"
                                     >
@@ -205,7 +266,10 @@ export default function Navbar() {
                         <Link
                             href="/search"
                             className="sm:hidden w-9 h-9 rounded-2xl flex items-center justify-center text-[#9CA3AF] hover:text-white transition-colors"
-                            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)" }}
+                            style={{
+                                background: "rgba(255,255,255,0.05)",
+                                border: "1px solid rgba(255,255,255,0.07)",
+                            }}
                         >
                             <Search className="w-4 h-4" />
                         </Link>
@@ -215,15 +279,21 @@ export default function Navbar() {
                             onClick={() => setShowProfileModal(true)}
                             className="relative w-9 h-9 rounded-full overflow-hidden cursor-pointer focus:outline-none shrink-0"
                             style={{
-                                border: user ? "2px solid rgba(229,9,20,0.5)" : "2px solid rgba(255,255,255,0.1)",
+                                border: user
+                                    ? "2px solid rgba(124,92,252,0.5)"
+                                    : "2px solid rgba(255,255,255,0.1)",
                             }}
                             whileHover={{
                                 scale: 1.08,
-                                borderColor: "rgba(229,9,20,0.8)",
-                                boxShadow: "0 0 16px rgba(229,9,20,0.4)",
+                                borderColor: "rgba(124,92,252,0.8)",
+                                boxShadow: "0 0 16px rgba(124,92,252,0.4)",
                             }}
                             whileTap={{ scale: 0.94 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                            transition={{
+                                type: "spring",
+                                stiffness: 400,
+                                damping: 20,
+                            }}
                             aria-label="Open profile"
                         >
                             {user ? (
@@ -235,12 +305,23 @@ export default function Navbar() {
                                         referrerPolicy="no-referrer"
                                     />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xs font-black text-white" style={{ background: "rgba(229,9,20,0.25)" }}>
-                                        {(user.displayName || "U")[0].toUpperCase()}
+                                    <div
+                                        className="w-full h-full flex items-center justify-center text-xs font-black text-white"
+                                        style={{
+                                            background: "rgba(124,92,252,0.25)",
+                                        }}
+                                    >
+                                        {(user.displayName ||
+                                            "U")[0].toUpperCase()}
                                     </div>
                                 )
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+                                <div
+                                    className="w-full h-full flex items-center justify-center"
+                                    style={{
+                                        background: "rgba(255,255,255,0.06)",
+                                    }}
+                                >
                                     <User className="w-4 h-4 text-[#9CA3AF]" />
                                 </div>
                             )}
@@ -249,7 +330,10 @@ export default function Navbar() {
                 </div>
             </motion.header>
 
-            <ProfileModal isOpen={showProfileModal} onClose={() => setShowProfileModal(false)} />
+            <ProfileModal
+                isOpen={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+            />
         </>
     );
 }

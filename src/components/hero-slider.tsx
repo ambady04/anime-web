@@ -116,7 +116,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 1.5 }}
                 style={{
-                    background: "radial-gradient(ellipse at 80% 40%, rgba(229,9,20,0.08) 0%, transparent 60%)",
+                    background: "radial-gradient(ellipse at 80% 40%, rgba(124,92,252,0.08) 0%, transparent 60%)",
                 }}
             />
 
@@ -138,7 +138,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                         className="inline-flex items-center px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.15em] text-white"
                                         style={{
                                             background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
-                                            boxShadow: "0 4px 16px rgba(229,9,20,0.4)",
+                                            boxShadow: "0 4px 16px rgba(124,92,252,0.4)",
                                         }}
                                     >
                                         {corner}
@@ -150,7 +150,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                             <motion.h1
                                 variants={staggerItem}
                                 className="font-black text-white leading-none tracking-tight mb-4"
-                                style={{ fontSize: "clamp(36px, 5.5vw, 76px)", textShadow: "0 4px 40px rgba(0,0,0,0.8)" }}
+                                style={{ fontSize: "clamp(36px, 5.5vw, 76px)", textShadow: "0 4px 40px rgba(10,10,15,0.8)" }}
                             >
                                 {title}
                             </motion.h1>
@@ -204,7 +204,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                             <motion.p
                                 variants={staggerItem}
                                 className="text-secondary text-sm sm:text-base leading-relaxed line-clamp-3 mb-8 max-w-xl"
-                                style={{ textShadow: "0 2px 10px rgba(0,0,0,0.9)" }}
+                                style={{ textShadow: "0 2px 10px rgba(10,10,15,0.9)" }}
                             >
                                 {desc}
                             </motion.p>
@@ -217,9 +217,9 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                         className="relative flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-bold text-white overflow-hidden cursor-pointer select-none"
                                         style={{
                                             background: "linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)",
-                                            boxShadow: "0 8px 32px rgba(229,9,20,0.45), 0 2px 8px rgba(229,9,20,0.2)",
+                                            boxShadow: "0 8px 32px rgba(124,92,252,0.45), 0 2px 8px rgba(124,92,252,0.2)",
                                         }}
-                                        whileHover={{ scale: 1.04, boxShadow: "0 12px 48px rgba(229,9,20,0.6), 0 4px 16px rgba(229,9,20,0.3)" }}
+                                        whileHover={{ scale: 1.04, boxShadow: "0 12px 48px rgba(124,92,252,0.6), 0 4px 16px rgba(124,92,252,0.3)" }}
                                         whileTap={{ scale: 0.97 }}
                                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
                                     >
@@ -269,7 +269,7 @@ function HeroSlider({ banners }: HeroSliderProps) {
                                     height: 3,
                                     width: idx === current ? 28 : 8,
                                     background: idx === current ? "var(--primary)" : "rgba(255,255,255,0.2)",
-                                    boxShadow: idx === current ? "0 0 10px rgba(229,9,20,0.7)" : "none",
+                                    boxShadow: idx === current ? "0 0 10px rgba(124,92,252,0.7)" : "none",
                                     transition: "all 0.4s cubic-bezier(0.16,1,0.3,1)",
                                 }}
                                 aria-label={`Slide ${idx + 1}`}

@@ -250,7 +250,26 @@ export const streamService = {
         const cacheKey = `stream:${path}:s${season}:e${episode}:adult=${adult}`;
         const cached = streamCache.get(cacheKey);
         if (cached && Date.now() < cached.expiresAt) {
-            return cached.data;
+            // Validate cached data doesn't contain only embed URLs
+            const hasRealDownloads = (cached.data.downloads || []).some(
+                (d: any) => {
+                    if (d.isEmbed) return false;
+                    const u = (d.url || "").toLowerCase();
+                    if (
+                        u.includes("vidsrc.") ||
+                        u.includes("autoembed.") ||
+                        u.includes("2embed.") ||
+                        u.includes("superembed.")
+                    )
+                        return false;
+                    return u.startsWith("http");
+                },
+            );
+            if (hasRealDownloads) {
+                return cached.data;
+            }
+            // Stale embed-only cache — discard and re-fetch
+            streamCache.delete(cacheKey);
         }
 
         // 0. Primary: Fetch stream data from Render backend API
@@ -333,7 +352,127 @@ export const streamService = {
                 }
             }
         } catch {
-            // Ignore Vercel API errors and proceed to mirror fallback
+            // Ignore Vercel API errors and proceed to web play fallback
+        }
+
+        // 0.5. Web Play endpoint — same as official h5.aoneroom.com player uses
+        try {
+            const STREAM_BASE = "https://h5.aoneroom.com/wefeed-h5-bff";
+            const reqSeason = season > 0 ? season : 0;
+            const reqEpisode = episode > 0 ? episode : 0;
+            const playUrl = `${STREAM_BASE}/web/subject/play?subjectId=${path.split("-").pop() || path}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`;
+
+            // We need the subjectId. Try to extract from path or fetch details
+            let subjectId = "";
+            try {
+                const detailsForId = await movieService.getDetails(path, adult);
+                subjectId = detailsForId?.subject?.subjectId || "";
+            } catch {
+                /* ignore */
+            }
+
+            if (subjectId) {
+                const realPlayUrl = `${STREAM_BASE}/web/subject/play?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`;
+                const playerReferer = `https://h5.aoneroom.com/spa/videoPlayPage/movies/${path}?id=${subjectId}&lang=en`;
+
+                const playController = new AbortController();
+                const playTimeout = setTimeout(
+                    () => playController.abort(),
+                    8000,
+                );
+                const playRes = await fetch(realPlayUrl, {
+                    headers: {
+                        "User-Agent":
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+                        Accept: "application/json, text/plain, */*",
+                        Origin: "https://h5.aoneroom.com",
+                        Referer: playerReferer,
+                    },
+                    signal: playController.signal,
+                    cache: "no-store",
+                });
+                clearTimeout(playTimeout);
+
+                if (playRes.ok) {
+                    const playJson: any = await playRes.json();
+                    const playData = playJson.data || playJson;
+                    const streams = playData.streams || [];
+                    const downloads: DownloadLink[] = [];
+
+                    for (const s of streams) {
+                        const sUrl = s.url || "";
+                        if (sUrl && sUrl.startsWith("http")) {
+                            downloads.push({
+                                id: String(s.id || downloads.length),
+                                url: sUrl,
+                                resolution:
+                                    s.resolutions || s.resolution || 720,
+                                size: s.size || 0,
+                            });
+                        }
+                    }
+
+                    // Also check downloadList
+                    for (const key of [
+                        "downloadList",
+                        "resourceList",
+                        "downloads",
+                    ]) {
+                        const rawList = playData[key] || [];
+                        for (const d of rawList) {
+                            const dUrl =
+                                d.url || d.resourceLink || d.sourceUrl || "";
+                            if (dUrl && dUrl.startsWith("http")) {
+                                downloads.push({
+                                    id: String(
+                                        d.id ||
+                                            d.resourceId ||
+                                            downloads.length,
+                                    ),
+                                    url: dUrl,
+                                    resolution: d.resolution || 720,
+                                    size: d.size || 0,
+                                });
+                            }
+                        }
+                    }
+
+                    if (downloads.length > 0) {
+                        const captions: Caption[] = (
+                            playData.captions ||
+                            playData.captionList ||
+                            []
+                        )
+                            .map((c: any, idx: number) => {
+                                const cUrl = c.url || c.link || "";
+                                if (!cUrl) return null;
+                                return {
+                                    id: String(c.id || idx),
+                                    lan: c.lan || "en",
+                                    lanName: c.lanName || "English",
+                                    url: cUrl,
+                                };
+                            })
+                            .filter(Boolean) as Caption[];
+
+                        const result: StreamData = {
+                            downloads,
+                            captions,
+                            hasResource: true,
+                            limited: false,
+                            limitedCode: "",
+                            stream_domain: "https://h5.aoneroom.com",
+                        };
+                        streamCache.set(cacheKey, {
+                            data: result,
+                            expiresAt: Date.now() + 3 * 60 * 1000,
+                        });
+                        return result;
+                    }
+                }
+            }
+        } catch {
+            // Web play fallback failed — continue to mirror fallback
         }
 
         // 1. Get subject details to retrieve subjectId and dub information

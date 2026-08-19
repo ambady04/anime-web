@@ -101,7 +101,7 @@ function MovieCard({
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >
-            <Link href={watchLink} className="absolute inset-0 block rounded-[20px] overflow-hidden">
+            <Link href={watchLink} className="absolute inset-0 block rounded-[24px] overflow-hidden">
                 {/* ── Poster image with smooth loading ── */}
                 <div className="absolute inset-0 bg-neutral-900">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -139,11 +139,11 @@ function MovieCard({
 
                 {/* ── Glow border on hover ── */}
                 <motion.div
-                    className="absolute inset-0 rounded-[20px] pointer-events-none"
+                    className="absolute inset-0 rounded-[24px] pointer-events-none"
                     style={{ border: "1px solid rgba(255,255,255,0.06)" }}
                     animate={{
                         boxShadow: isHovered
-                            ? "0 24px 60px -10px rgba(229, 9, 20, 0.28), 0 0 35px -5px rgba(229, 9, 20, 0.18)"
+                            ? "0 24px 60px -10px rgba(124, 92, 252, 0.28), 0 0 35px -5px rgba(124, 92, 252, 0.18)"
                             : "0 8px 32px rgba(0,0,0,0.8)",
                     }}
                     transition={{ duration: 0.35 }}
@@ -159,7 +159,7 @@ function MovieCard({
                         className="w-12 h-12 rounded-full flex items-center justify-center"
                         style={{
                             background: "linear-gradient(135deg, var(--primary), var(--primary-dark))",
-                            boxShadow: "0 8px 32px rgba(229,9,20,0.6)",
+                            boxShadow: "0 8px 32px rgba(124,92,252,0.6)",
                         }}
                         animate={{ scale: isHovered ? 1 : 0.7 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -177,7 +177,7 @@ function MovieCard({
                     <motion.button
                         className="w-8 h-8 rounded-full flex items-center justify-center"
                         style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.12)", backdropFilter: "blur(8px)" }}
-                        whileHover={{ scale: 1.15, borderColor: "rgba(229,9,20,0.5)" }}
+                        whileHover={{ scale: 1.15, borderColor: "rgba(124,92,252,0.5)" }}
                         whileTap={{ scale: 0.9 }}
                         onClick={(e) => e.preventDefault()}
                         aria-label="Add to watchlist"

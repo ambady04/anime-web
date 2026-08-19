@@ -24,11 +24,11 @@ export default function BottomNav() {
             <div
                 className="relative"
                 style={{
-                    background: "rgba(0,0,0,0.92)",
-                    backdropFilter: "blur(32px) saturate(200%)",
-                    WebkitBackdropFilter: "blur(32px) saturate(200%)",
+                    background: "rgba(15,15,25,0.85)",
+                    backdropFilter: "blur(48px) saturate(160%)",
+                    WebkitBackdropFilter: "blur(48px) saturate(160%)",
                     borderTop: "1px solid rgba(255,255,255,0.06)",
-                    boxShadow: "0 -8px 32px rgba(0,0,0,0.8)",
+                    boxShadow: "0 -8px 32px rgba(0,0,0,0.3)",
                 }}
             >
                 <div className="flex items-center justify-around h-[60px] max-w-lg mx-auto px-2 relative">
@@ -51,13 +51,19 @@ export default function BottomNav() {
                                         <motion.span
                                             layoutId="bottom-nav-indicator"
                                             className="absolute top-0 rounded-full"
-                                                                            style={{
+                                            style={{
                                                 width: 28,
                                                 height: 2.5,
-                                                background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
-                                                boxShadow: "0 0 12px rgba(229,9,20,0.95), 0 0 24px rgba(229,9,20,0.55)",
+                                                background:
+                                                    "linear-gradient(90deg, var(--primary), var(--primary-light))",
+                                                boxShadow:
+                                                    "0 0 12px rgba(124,92,252,0.95), 0 0 24px rgba(124,92,252,0.55)",
                                             }}
-                                            transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                                            transition={{
+                                                type: "spring",
+                                                stiffness: 400,
+                                                damping: 35,
+                                            }}
                                         />
                                     )}
                                 </AnimatePresence>
@@ -68,14 +74,22 @@ export default function BottomNav() {
                                         scale: isActive ? 1.12 : 1,
                                         y: isActive ? -1 : 0,
                                     }}
-                                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                                    transition={{
+                                        type: "spring",
+                                        stiffness: 400,
+                                        damping: 25,
+                                    }}
                                     className="mb-1"
                                 >
                                     <Icon
                                         className="w-5 h-5 transition-colors duration-200"
                                         style={{
-                                            color: isActive ? "var(--primary)" : "rgba(255,255,255,0.4)",
-                                            filter: isActive ? "drop-shadow(0 0 6px rgba(229,9,20,0.6))" : "none",
+                                            color: isActive
+                                                ? "var(--primary)"
+                                                : "rgba(255,255,255,0.4)",
+                                            filter: isActive
+                                                ? "drop-shadow(0 0 6px rgba(124,92,252,0.6))"
+                                                : "none",
                                         }}
                                     />
                                 </motion.div>
@@ -83,7 +97,11 @@ export default function BottomNav() {
                                 {/* Label */}
                                 <span
                                     className="text-[9px] font-bold uppercase tracking-widest transition-colors duration-200"
-                                    style={{ color: isActive ? "var(--primary)" : "rgba(255,255,255,0.5)" }}
+                                    style={{
+                                        color: isActive
+                                            ? "var(--primary)"
+                                            : "rgba(255,255,255,0.5)",
+                                    }}
                                 >
                                     {item.label}
                                 </span>
