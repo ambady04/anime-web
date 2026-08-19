@@ -45,7 +45,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await import("./firebase");
             await ensureFirebase();
             const auth = getFirebaseAuth();
-            const { onAuthStateChanged } = await import("firebase/auth");
+            const { onAuthStateChanged, getRedirectResult } =
+                await import("firebase/auth");
+
+            // Handle redirect result (in case signInWithRedirect was used)
+            getRedirectResult(auth).catch((err) => {
+                console.error("[auth] Redirect result error:", err);
+            });
 
             unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                 if (firebaseUser) {
@@ -79,8 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await ensureFirebase();
             const auth = getFirebaseAuth();
             const provider = getGoogleProvider();
-            const { signInWithPopup } = await import("firebase/auth");
-            await signInWithPopup(auth, provider);
+            const { signInWithRedirect } = await import("firebase/auth");
+            await signInWithRedirect(auth, provider);
         } catch (error) {
             console.error("Google Auth login failed:", error);
             throw error;
