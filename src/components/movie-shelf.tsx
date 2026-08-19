@@ -96,7 +96,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                     style={btnStyle}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: showLeft ? 1 : 0, x: showLeft ? 0 : -8, pointerEvents: showLeft ? "auto" : "none" }}
-                    whileHover={{ scale: 1.1, borderColor: "rgba(124,92,252,0.65)", color: "var(--primary)" }}
+                    whileHover={{ scale: 1.1, borderColor: "rgba(225,29,72,0.65)", color: "var(--primary)" }}
                     whileTap={{ scale: 0.92 }}
                     transition={{ duration: 0.2 }}
                     aria-label="Scroll left"
@@ -132,7 +132,7 @@ function MovieShelf({ title, subjects }: MovieShelfProps) {
                     style={btnStyle}
                     initial={{ opacity: 0, x: 8 }}
                     animate={{ opacity: showRight ? 1 : 0, x: showRight ? 0 : 8, pointerEvents: showRight ? "auto" : "none" }}
-                    whileHover={{ scale: 1.1, borderColor: "rgba(124,92,252,0.65)", color: "var(--primary)" }}
+                    whileHover={{ scale: 1.1, borderColor: "rgba(225,29,72,0.65)", color: "var(--primary)" }}
                     whileTap={{ scale: 0.92 }}
                     transition={{ duration: 0.2 }}
                     aria-label="Scroll right"

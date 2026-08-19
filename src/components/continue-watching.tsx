@@ -118,7 +118,7 @@ export default function ContinueWatching() {
                                                 background:
                                                     "linear-gradient(135deg, var(--primary), var(--primary-dark))",
                                                 boxShadow:
-                                                    "0 8px 32px rgba(124, 92, 252, 0.6)",
+                                                    "0 8px 32px rgba(225, 29, 72, 0.6)",
                                             }}
                                         >
                                             <Play className="w-5 h-5 fill-white text-white ml-[1px]" />
@@ -142,7 +142,7 @@ export default function ContinueWatching() {
                                             className="h-full rounded-full"
                                             style={{
                                                 background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
-                                                boxShadow: "0 0 8px rgba(124,92,252,0.7)",
+                                                boxShadow: "0 0 8px rgba(225,29,72,0.7)",
                                             }}
                                             initial={{ width: 0 }}
                                             animate={{ width: `${item.progress}%` }}

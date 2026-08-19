@@ -57,7 +57,7 @@ export default function BottomNav() {
                                                 background:
                                                     "linear-gradient(90deg, var(--primary), var(--primary-light))",
                                                 boxShadow:
-                                                    "0 0 12px rgba(124,92,252,0.95), 0 0 24px rgba(124,92,252,0.55)",
+                                                    "0 0 12px rgba(225,29,72,0.95), 0 0 24px rgba(225,29,72,0.55)",
                                             }}
                                             transition={{
                                                 type: "spring",
@@ -88,7 +88,7 @@ export default function BottomNav() {
                                                 ? "var(--primary)"
                                                 : "rgba(255,255,255,0.4)",
                                             filter: isActive
-                                                ? "drop-shadow(0 0 6px rgba(124,92,252,0.6))"
+                                                ? "drop-shadow(0 0 6px rgba(225,29,72,0.6))"
                                                 : "none",
                                         }}
                                     />

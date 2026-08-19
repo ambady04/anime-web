@@ -4,11 +4,11 @@
     --color-background: #0a0a0f;
     --color-foreground: #f0f0f5;
 
-    --color-primary: #7c5cfc;
-    --color-primary-glow: rgba(124, 92, 252, 0.3);
-    --color-primary-light: #a78bfa;
-    --color-primary-dark: #5b3fd4;
-    --color-accent: #38bdf8;
+    --color-primary: #e11d48;
+    --color-primary-glow: rgba(225, 29, 72, 0.3);
+    --color-primary-light: #fb7185;
+    --color-primary-dark: #be123c;
+    --color-accent: #f43f5e;
 
     --color-card: rgba(255, 255, 255, 0.04);
     --color-card-hover: rgba(255, 255, 255, 0.08);
@@ -17,7 +17,7 @@
     --color-glass-card: rgba(255, 255, 255, 0.03);
     --color-glass-panel: rgba(255, 255, 255, 0.05);
     --color-glass-border: rgba(255, 255, 255, 0.08);
-    --color-glass-border-hover: rgba(124, 92, 252, 0.4);
+    --color-glass-border-hover: rgba(225, 29, 72, 0.4);
 
     --color-text-primary: #f0f0f5;
     --color-text-secondary: #c4c4d0;
@@ -41,18 +41,18 @@
    ============================================================ */
 
 :root {
-    --primary: #7c5cfc;
-    --primary-glow: rgba(124, 92, 252, 0.3);
-    --primary-light: #a78bfa;
-    --primary-dark: #5b3fd4;
-    --accent: #38bdf8;
+    --primary: #e11d48;
+    --primary-glow: rgba(225, 29, 72, 0.3);
+    --primary-light: #fb7185;
+    --primary-dark: #be123c;
+    --accent: #f43f5e;
 
     --bg-solid: #0a0a0f;
     --bg-gradient: linear-gradient(
         145deg,
         #0a0a0f 0%,
-        #0f0a1a 30%,
-        #0a0f1a 60%,
+        #1a0a0f 30%,
+        #0f0a0a 60%,
         #0a0a0f 100%
     );
     --nav-bg: transparent;
@@ -65,14 +65,14 @@
     --glass-card: rgba(255, 255, 255, 0.03);
     --glass-panel: rgba(255, 255, 255, 0.05);
     --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-border-hover: rgba(124, 92, 252, 0.4);
+    --glass-border-hover: rgba(225, 29, 72, 0.4);
 
     --shadow-card: 0 8px 40px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
     --shadow-hover:
-        0 20px 60px rgba(124, 92, 252, 0.15), 0 0 0 1px rgba(124, 92, 252, 0.2);
+        0 20px 60px rgba(225, 29, 72, 0.15), 0 0 0 1px rgba(225, 29, 72, 0.2);
     --shadow-nav: 0 4px 40px rgba(0, 0, 0, 0.3);
     --shadow-glow:
-        0 0 40px rgba(124, 92, 252, 0.3), 0 0 80px rgba(124, 92, 252, 0.1);
+        0 0 40px rgba(225, 29, 72, 0.3), 0 0 80px rgba(225, 29, 72, 0.1);
 
     --card-bg: rgba(255, 255, 255, 0.03);
     --surface: rgba(15, 15, 25, 0.8);
@@ -91,13 +91,13 @@
 @keyframes glow {
     from {
         text-shadow:
-            0 0 12px rgba(124, 92, 252, 0.2),
-            0 0 24px rgba(124, 92, 252, 0.05);
+            0 0 12px rgba(225, 29, 72, 0.2),
+            0 0 24px rgba(225, 29, 72, 0.05);
     }
     to {
         text-shadow:
-            0 0 24px rgba(124, 92, 252, 0.4),
-            0 0 48px rgba(124, 92, 252, 0.15);
+            0 0 24px rgba(225, 29, 72, 0.4),
+            0 0 48px rgba(225, 29, 72, 0.15);
     }
 }
 
@@ -192,12 +192,12 @@
 
 @keyframes progressGlow {
     from {
-        box-shadow: 0 0 8px rgba(124, 92, 252, 0.4);
+        box-shadow: 0 0 8px rgba(225, 29, 72, 0.4);
     }
     to {
         box-shadow:
-            0 0 20px rgba(124, 92, 252, 0.7),
-            0 0 40px rgba(124, 92, 252, 0.2);
+            0 0 20px rgba(225, 29, 72, 0.7),
+            0 0 40px rgba(225, 29, 72, 0.2);
     }
 }
 
@@ -241,7 +241,7 @@ body {
 }
 
 ::selection {
-    background-color: rgba(124, 92, 252, 0.3);
+    background-color: rgba(225, 29, 72, 0.3);
     color: #ffffff;
 }
 
@@ -279,10 +279,10 @@ body {
 }
 
 .glass-card:hover {
-    border-color: rgba(124, 92, 252, 0.2);
+    border-color: rgba(225, 29, 72, 0.2);
     box-shadow:
-        0 20px 60px rgba(124, 92, 252, 0.1),
-        0 0 0 1px rgba(124, 92, 252, 0.15),
+        0 20px 60px rgba(225, 29, 72, 0.1),
+        0 0 0 1px rgba(225, 29, 72, 0.15),
         inset 0 1px 0 rgba(255, 255, 255, 0.08);
     transform: translateY(-4px) scale(1.01);
     background: rgba(255, 255, 255, 0.05);
@@ -299,10 +299,10 @@ body {
 
 .glass-input:focus {
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(124, 92, 252, 0.4);
+    border-color: rgba(225, 29, 72, 0.4);
     box-shadow:
-        0 0 0 4px rgba(124, 92, 252, 0.08),
-        0 0 24px rgba(124, 92, 252, 0.06),
+        0 0 0 4px rgba(225, 29, 72, 0.08),
+        0 0 24px rgba(225, 29, 72, 0.06),
         inset 0 1px 0 rgba(255, 255, 255, 0.06);
     outline: none;
 }
@@ -337,18 +337,18 @@ body {
    ============================================================ */
 
 .gradient-primary {
-    background: linear-gradient(135deg, #7c5cfc 0%, #5b3fd4 100%);
+    background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
 }
 
 .gradient-primary-glow {
-    background: linear-gradient(135deg, #7c5cfc 0%, #a78bfa 100%);
+    background: linear-gradient(135deg, #e11d48 0%, #fb7185 100%);
     box-shadow:
-        0 8px 32px rgba(124, 92, 252, 0.4),
-        0 2px 8px rgba(124, 92, 252, 0.2);
+        0 8px 32px rgba(225, 29, 72, 0.4),
+        0 2px 8px rgba(225, 29, 72, 0.2);
 }
 
 .text-gradient {
-    background: linear-gradient(135deg, #7c5cfc 0%, #a78bfa 50%, #38bdf8 100%);
+    background: linear-gradient(135deg, #e11d48 0%, #fb7185 50%, #f43f5e 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -366,17 +366,17 @@ body {
     background:
         radial-gradient(
             ellipse at 20% 20%,
-            rgba(124, 92, 252, 0.06) 0%,
+            rgba(225, 29, 72, 0.06) 0%,
             transparent 50%
         ),
         radial-gradient(
             ellipse at 80% 80%,
-            rgba(56, 189, 248, 0.04) 0%,
+            rgba(244, 63, 94, 0.04) 0%,
             transparent 50%
         ),
         radial-gradient(
             ellipse at 50% 50%,
-            rgba(167, 139, 250, 0.03) 0%,
+            rgba(251, 113, 133, 0.03) 0%,
             transparent 60%
         );
     animation: mesh-drift 30s ease-in-out infinite;
@@ -438,7 +438,7 @@ body {
     border-radius: 50%;
     transform: scale(0);
     animation: ripple-animation 0.7s linear;
-    background-color: rgba(124, 92, 252, 0.2);
+    background-color: rgba(225, 29, 72, 0.2);
     pointer-events: none;
 }
 
@@ -542,7 +542,7 @@ body {
    ============================================================ */
 
 :focus-visible {
-    outline: 2px solid rgba(124, 92, 252, 0.5);
+    outline: 2px solid rgba(225, 29, 72, 0.5);
     outline-offset: 3px;
     border-radius: 8px;
 }
@@ -638,9 +638,9 @@ select option {
 }
 
 :focus-visible {
-    outline: 2px solid rgba(124, 92, 252, 0.5) !important;
+    outline: 2px solid rgba(225, 29, 72, 0.5) !important;
     outline-offset: 4px !important;
-    box-shadow: 0 0 20px rgba(124, 92, 252, 0.3) !important;
+    box-shadow: 0 0 20px rgba(225, 29, 72, 0.3) !important;
     border-radius: 8px;
 }
 

@@ -111,7 +111,7 @@ export default function Navbar() {
                                 className="absolute inset-0 rounded-full"
                                 style={{
                                     background:
-                                        "radial-gradient(circle, rgba(124,92,252,0.4), transparent 70%)",
+                                        "radial-gradient(circle, rgba(225,29,72,0.4), transparent 70%)",
                                     filter: "blur(8px)",
                                 }}
                                 animate={{ opacity: [0.4, 0.8, 0.4] }}
@@ -156,10 +156,10 @@ export default function Navbar() {
                                             className="absolute inset-0 rounded-2xl"
                                             style={{
                                                 background:
-                                                    "rgba(124,92,252,0.12)",
-                                                border: "1px solid rgba(124,92,252,0.25)",
+                                                    "rgba(225,29,72,0.12)",
+                                                border: "1px solid rgba(225,29,72,0.25)",
                                                 boxShadow:
-                                                    "0 0 16px rgba(124,92,252,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                                                    "0 0 16px rgba(225,29,72,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
                                             }}
                                             transition={{
                                                 type: "spring",
@@ -213,9 +213,9 @@ export default function Navbar() {
                                             }}
                                             onFocus={(e) => {
                                                 e.target.style.borderColor =
-                                                    "rgba(124,92,252,0.4)";
+                                                    "rgba(225,29,72,0.4)";
                                                 e.target.style.boxShadow =
-                                                    "0 0 0 3px rgba(124,92,252,0.1), 0 0 20px rgba(124,92,252,0.06)";
+                                                    "0 0 0 3px rgba(225,29,72,0.1), 0 0 20px rgba(225,29,72,0.06)";
                                             }}
                                             onBlur={(e) => {
                                                 e.target.style.borderColor =
@@ -280,13 +280,13 @@ export default function Navbar() {
                             className="relative w-9 h-9 rounded-full overflow-hidden cursor-pointer focus:outline-none shrink-0"
                             style={{
                                 border: user
-                                    ? "2px solid rgba(124,92,252,0.5)"
+                                    ? "2px solid rgba(225,29,72,0.5)"
                                     : "2px solid rgba(255,255,255,0.1)",
                             }}
                             whileHover={{
                                 scale: 1.08,
-                                borderColor: "rgba(124,92,252,0.8)",
-                                boxShadow: "0 0 16px rgba(124,92,252,0.4)",
+                                borderColor: "rgba(225,29,72,0.8)",
+                                boxShadow: "0 0 16px rgba(225,29,72,0.4)",
                             }}
                             whileTap={{ scale: 0.94 }}
                             transition={{
@@ -308,7 +308,7 @@ export default function Navbar() {
                                     <div
                                         className="w-full h-full flex items-center justify-center text-xs font-black text-white"
                                         style={{
-                                            background: "rgba(124,92,252,0.25)",
+                                            background: "rgba(225,29,72,0.25)",
                                         }}
                                     >
                                         {(user.displayName ||
