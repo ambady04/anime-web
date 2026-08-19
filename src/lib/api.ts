@@ -30,12 +30,9 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
-        // In production (Vercel), use the Render backend for video proxying
-        // because Vercel serverless functions timeout on large video streams
-        const apiUrl =
-            process.env.NEXT_PUBLIC_API_URL ||
-            "https://anime-api-arlv.onrender.com";
-        return `${apiUrl.replace(/\/+$/, "")}/api/video`;
+        // Use relative /api/video (Vercel route) as fallback proxy
+        // CDN URLs should load directly in browser first (handled in video-player.tsx)
+        return "/api/video";
     }
     const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
     if (configuredUrl) return configuredUrl;
