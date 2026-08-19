@@ -46,38 +46,27 @@ self.addEventListener("fetch", (event) => {
     const isSameOrigin = url.origin === self.location.origin;
 
     // ── 1. ALL API ROUTES & SERVICE WORKER → Network-Only (No SW interception) ───
-    if (isSameOrigin && (url.pathname.startsWith("/api/") || url.pathname === "/sw.js")) {
+    if (
+        isSameOrigin &&
+        (url.pathname.startsWith("/api/") || url.pathname === "/sw.js")
+    ) {
         return;
     }
 
     // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Intercept & inject valid Referer header ─
-    if (!isSameOrigin && (url.hostname.includes("hakunaymatata.com") || url.hostname.includes("aoneroom.com"))) {
+    if (
+        !isSameOrigin &&
+        (url.hostname.includes("hakunaymatata.com") ||
+            url.hostname.includes("aoneroom.com"))
+    ) {
         const isVideo =
             /\.(mp4|m3u8|ts|webm)(\?|$)/i.test(url.pathname) ||
             url.pathname.includes("/bt/") ||
             url.pathname.includes("/resource/");
 
         if (isVideo) {
-            event.respondWith(
-                (async () => {
-                    const reqHeaders = new Headers(event.request.headers);
-                    reqHeaders.set("Referer", "https://videodownloader.site/");
-                    reqHeaders.set("Origin", "https://videodownloader.site");
-
-                    const modifiedReq = new Request(event.request, {
-                        headers: reqHeaders,
-                        mode: "cors",
-                        credentials: "omit",
-                    });
-
-                    try {
-                        const response = await fetch(modifiedReq);
-                        return response;
-                    } catch {
-                        return fetch(event.request);
-                    }
-                })()
-            );
+            // Let video element requests pass through directly to CDN
+            // Browser will send page origin as Referer (referrerpolicy=origin on video element)
             return;
         }
     }
@@ -126,11 +115,17 @@ self.addEventListener("fetch", (event) => {
                 .then((response) => {
                     if (response.ok) {
                         const copy = response.clone();
-                        caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, copy));
+                        caches
+                            .open(STATIC_CACHE)
+                            .then((cache) => cache.put(event.request, copy));
                     }
                     return response;
                 })
-                .catch(() => caches.match(event.request).then((r) => r || Response.error())),
+                .catch(() =>
+                    caches
+                        .match(event.request)
+                        .then((r) => r || Response.error()),
+                ),
         );
         return;
     }

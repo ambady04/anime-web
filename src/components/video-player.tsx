@@ -638,8 +638,9 @@ export default function VideoPlayer({
             const video = videoRef.current;
             if (!video || isCancelled) return;
 
-            // Prevent referer leakage to CDNs that block based on Referer header
-            video.setAttribute("referrerpolicy", "no-referrer");
+            // Set referrer policy - use origin so CDN gets a valid referer
+            // (CDNs often block empty/missing referer but accept any valid origin)
+            video.setAttribute("referrerpolicy", "origin");
 
             isInitialLoadRef.current = true;
             isRecoveringRef.current = false;
