@@ -152,8 +152,36 @@ async function fetchMirrorStream(
                     d.fallbackUrl ||
                     d.link ||
                     (typeof d === "string" ? d : "");
-                if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "None")
+                if (
+                    !rawUrl ||
+                    typeof rawUrl !== "string" ||
+                    !rawUrl.trim() ||
+                    rawUrl.trim() === "None"
+                )
                     return null;
+                // Reject embed/iframe URLs
+                if (d.isEmbed) return null;
+                const lUrl = rawUrl.toLowerCase();
+                try {
+                    const hn = new URL(lUrl).hostname;
+                    if (
+                        hn.includes("vidsrc") ||
+                        hn.includes("autoembed") ||
+                        hn.includes("2embed") ||
+                        hn.includes("vidplay") ||
+                        hn.includes("superembed") ||
+                        hn.includes("embedsu")
+                    )
+                        return null;
+                } catch {
+                    if (
+                        lUrl.includes("vidsrc.") ||
+                        lUrl.includes("autoembed.") ||
+                        lUrl.includes("2embed.") ||
+                        lUrl.includes("superembed.")
+                    )
+                        return null;
+                }
                 return {
                     id: String(d.id || d.resolution || idx),
                     url: rawUrl.trim(),
@@ -249,13 +277,44 @@ export const streamService = {
 
             if (vRes.ok) {
                 const vData: any = await vRes.json();
-                if (
-                    vData &&
-                    Array.isArray(vData.downloads)
-                ) {
+                if (vData && Array.isArray(vData.downloads)) {
                     const validDownloads = vData.downloads.filter((d: any) => {
-                        const dUrl = d.url || d.resourceLink || d.resource_link || d.sourceUrl || d.source_url || "";
-                        if (!dUrl || typeof dUrl !== "string" || dUrl.trim() === "None") return false;
+                        const dUrl =
+                            d.url ||
+                            d.resourceLink ||
+                            d.resource_link ||
+                            d.sourceUrl ||
+                            d.source_url ||
+                            "";
+                        if (
+                            !dUrl ||
+                            typeof dUrl !== "string" ||
+                            dUrl.trim() === "None"
+                        )
+                            return false;
+                        // Reject embed/iframe URLs — only accept direct CDN stream URLs
+                        if (d.isEmbed) return false;
+                        const lUrl = dUrl.toLowerCase();
+                        try {
+                            const hostname = new URL(lUrl).hostname;
+                            if (
+                                hostname.includes("vidsrc") ||
+                                hostname.includes("autoembed") ||
+                                hostname.includes("2embed") ||
+                                hostname.includes("vidplay") ||
+                                hostname.includes("superembed") ||
+                                hostname.includes("embedsu")
+                            )
+                                return false;
+                        } catch {
+                            if (
+                                lUrl.includes("vidsrc.") ||
+                                lUrl.includes("autoembed.") ||
+                                lUrl.includes("2embed.") ||
+                                lUrl.includes("superembed.")
+                            )
+                                return false;
+                        }
                         return true;
                     });
 
@@ -465,7 +524,8 @@ export const streamService = {
                                     d.resolution || d.quality || d.name || 720,
                                 ),
                                 size: Number(d.size || d.fileSize || 0),
-                                resource_link: d.resourceLink || d.resource_link || "",
+                                resource_link:
+                                    d.resourceLink || d.resource_link || "",
                                 source_url: d.sourceUrl || d.source_url || "",
                             };
                         })

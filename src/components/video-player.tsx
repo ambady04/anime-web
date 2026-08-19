@@ -49,45 +49,6 @@ interface VideoPlayerProps {
     shouldPause?: boolean;
 }
 
-const isEmbedStream = (download: DownloadLink | null | undefined): boolean => {
-    if (!download) return false;
-    if ((download as any).isEmbed) return true;
-    const url = (download.url || "").toLowerCase();
-    // Only match known embed service DOMAINS, not generic substrings.
-    // CDN URLs (e.g. hakunaymatata.com) may contain "player" or "embed" in paths/params
-    // but are direct MP4/HLS streams, not embeddable iframes.
-    try {
-        const hostname = new URL(url).hostname;
-        return (
-            hostname.includes("vidsrc") ||
-            hostname.includes("autoembed") ||
-            hostname.includes("2embed") ||
-            hostname.includes("vidplay") ||
-            hostname.includes("superembed") ||
-            hostname.includes("embedsu")
-        );
-    } catch {
-        // Fallback for malformed URLs — only match obvious embed domains
-        return (
-            url.includes("vidsrc.") ||
-            url.includes("autoembed.") ||
-            url.includes("2embed.") ||
-            url.includes("vidplay.") ||
-            url.includes("superembed.")
-        );
-    }
-};
-
-const getEmbedSrcUrl = (rawUrl: string) => {
-    if (!rawUrl) return "";
-    let url = rawUrl;
-    if (!url.includes("autoplay=")) {
-        const joiner = url.includes("?") ? "&" : "?";
-        url = `${url}${joiner}autoplay=1&autostart=true`;
-    }
-    return url;
-};
-
 // Format second timestamps to HH:MM:SS text
 const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -127,8 +88,34 @@ export default function VideoPlayer({
 
     // Stream options
     // Memoize derived arrays from streamData to stabilize references across renders
+    // Filter out embed/iframe URLs — only keep direct stream downloads
     const downloads = useMemo(
-        () => streamData.downloads || [],
+        () =>
+            (streamData.downloads || []).filter((d) => {
+                if ((d as any).isEmbed) return false;
+                const url = (d.url || "").toLowerCase();
+                try {
+                    const hn = new URL(url).hostname;
+                    if (
+                        hn.includes("vidsrc") ||
+                        hn.includes("autoembed") ||
+                        hn.includes("2embed") ||
+                        hn.includes("vidplay") ||
+                        hn.includes("superembed") ||
+                        hn.includes("embedsu")
+                    )
+                        return false;
+                } catch {
+                    if (
+                        url.includes("vidsrc.") ||
+                        url.includes("autoembed.") ||
+                        url.includes("2embed.") ||
+                        url.includes("superembed.")
+                    )
+                        return false;
+                }
+                return true;
+            }),
         [streamData.downloads],
     );
     const captions = useMemo(
@@ -2551,154 +2538,143 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Player Node — direct streams use <video>, embeds use <iframe> */}
+            {/* Video Player Node — direct streams only */}
             {activeDownload && !playerError ? (
-                isEmbedStream(activeDownload) ? (
-                    <iframe
-                        src={activeDownload.url}
-                        allowFullScreen
-                        allow="autoplay; fullscreen"
-                        className="w-full h-full border-0 absolute inset-0 z-0 bg-black"
-                        title="Video Player"
-                    />
-                ) : (
-                    <video
-                        ref={videoRef}
-                        onEnded={handleVideoEnded}
-                        style={{ filter: `brightness(${brightnessLevel})` }}
-                        className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
-                            aspectRatio === "contain"
-                                ? "object-contain"
-                                : aspectRatio === "fill"
-                                  ? "object-fill"
-                                  : "object-cover"
-                        }`}
-                        onPlay={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsPlaying(true);
-                            setIsLoading(false);
-                            setAutoRetryLabel("");
-                            transientRetryCountRef.current = 0;
-                        }}
-                        onPause={() => setIsPlaying(false)}
-                        onLoadedMetadata={handleLoadedMetadata}
-                        onDurationChange={() => {
+                <video
+                    ref={videoRef}
+                    onEnded={handleVideoEnded}
+                    style={{ filter: `brightness(${brightnessLevel})` }}
+                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
+                        aspectRatio === "contain"
+                            ? "object-contain"
+                            : aspectRatio === "fill"
+                              ? "object-fill"
+                              : "object-cover"
+                    }`}
+                    onPlay={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsPlaying(true);
+                        setIsLoading(false);
+                        setAutoRetryLabel("");
+                        transientRetryCountRef.current = 0;
+                    }}
+                    onPause={() => setIsPlaying(false)}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onDurationChange={() => {
+                        if (
+                            videoRef.current &&
+                            videoRef.current.duration > 0 &&
+                            isFinite(videoRef.current.duration)
+                        ) {
+                            setDuration(videoRef.current.duration);
+                        }
+                    }}
+                    onTimeUpdate={handleTimeUpdate}
+                    onProgress={() => {
+                        if (
+                            videoRef.current &&
+                            videoRef.current.buffered.length > 0 &&
+                            videoRef.current.duration > 0 &&
+                            isFinite(videoRef.current.duration)
+                        ) {
+                            const buf = videoRef.current.buffered;
+                            let maxEnd = 0;
+                            for (let i = 0; i < buf.length; i++) {
+                                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
+                            }
+                            setBufferedPercent(
+                                (maxEnd / videoRef.current.duration) * 100,
+                            );
+                        }
+                    }}
+                    onWaiting={() => {
+                        // Only show loading spinner if video has NO frame available to render (readyState < 2)
+                        // and stays stalled for at least 1500ms
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        waitingTimeoutRef.current = setTimeout(() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.duration > 0 &&
-                                isFinite(videoRef.current.duration)
+                                videoRef.current.readyState < 2 &&
+                                !videoRef.current.paused
                             ) {
-                                setDuration(videoRef.current.duration);
+                                setIsLoading(true);
                             }
-                        }}
-                        onTimeUpdate={handleTimeUpdate}
-                        onProgress={() => {
+                        }, 1500);
+                    }}
+                    onSeeking={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        waitingTimeoutRef.current = setTimeout(() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.buffered.length > 0 &&
-                                videoRef.current.duration > 0 &&
-                                isFinite(videoRef.current.duration)
+                                videoRef.current.readyState < 2
                             ) {
-                                const buf = videoRef.current.buffered;
-                                let maxEnd = 0;
-                                for (let i = 0; i < buf.length; i++) {
-                                    if (buf.end(i) > maxEnd)
-                                        maxEnd = buf.end(i);
-                                }
-                                setBufferedPercent(
-                                    (maxEnd / videoRef.current.duration) * 100,
-                                );
+                                setIsLoading(true);
                             }
-                        }}
-                        onWaiting={() => {
-                            // Only show loading spinner if video has NO frame available to render (readyState < 2)
-                            // and stays stalled for at least 1500ms
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            waitingTimeoutRef.current = setTimeout(() => {
-                                if (
-                                    videoRef.current &&
-                                    videoRef.current.readyState < 2 &&
-                                    !videoRef.current.paused
-                                ) {
-                                    setIsLoading(true);
-                                }
-                            }, 1500);
-                        }}
-                        onSeeking={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            waitingTimeoutRef.current = setTimeout(() => {
-                                if (
-                                    videoRef.current &&
-                                    videoRef.current.readyState < 2
-                                ) {
-                                    setIsLoading(true);
-                                }
-                            }, 1000);
-                        }}
-                        onSeeked={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsLoading(false);
-                        }}
-                        onLoadedData={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsVideoLoaded(true);
-                            setIsLoading(false);
-                        }}
-                        onCanPlay={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsVideoLoaded(true);
-                            setIsLoading(false);
-                            isInitialLoadRef.current = false;
-                            isRecoveringRef.current = false;
-                        }}
-                        onCanPlayThrough={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsVideoLoaded(true);
-                            setIsLoading(false);
-                        }}
-                        onPlaying={() => {
-                            if (waitingTimeoutRef.current)
-                                clearTimeout(waitingTimeoutRef.current);
-                            setIsLoading(false);
-                            setAutoRetryLabel("");
-                            transientRetryCountRef.current = 0;
-                        }}
-                        onError={handlePlayerError}
-                        autoPlay
-                        playsInline
-                        preload="auto"
-                        crossOrigin={subtitleUrl ? "anonymous" : undefined}
-                    >
-                        {/* Subtitle track */}
-                        {subtitleUrl && activeCaption && (
-                            <track
-                                key={activeCaption.id || activeCaption.url}
-                                kind="subtitles"
-                                src={subtitleUrl}
-                                srcLang={activeCaption.lan}
-                                label={activeCaption.lanName}
-                                default
-                                onError={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    setSubtitleUrl("");
-                                }}
-                            />
-                        )}
-                    </video>
-                )
+                        }, 1000);
+                    }}
+                    onSeeked={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsLoading(false);
+                    }}
+                    onLoadedData={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
+                    }}
+                    onCanPlay={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
+                        isInitialLoadRef.current = false;
+                        isRecoveringRef.current = false;
+                    }}
+                    onCanPlayThrough={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
+                    }}
+                    onPlaying={() => {
+                        if (waitingTimeoutRef.current)
+                            clearTimeout(waitingTimeoutRef.current);
+                        setIsLoading(false);
+                        setAutoRetryLabel("");
+                        transientRetryCountRef.current = 0;
+                    }}
+                    onError={handlePlayerError}
+                    autoPlay
+                    playsInline
+                    preload="auto"
+                    crossOrigin={subtitleUrl ? "anonymous" : undefined}
+                >
+                    {/* Subtitle track */}
+                    {subtitleUrl && activeCaption && (
+                        <track
+                            key={activeCaption.id || activeCaption.url}
+                            kind="subtitles"
+                            src={subtitleUrl}
+                            srcLang={activeCaption.lan}
+                            label={activeCaption.lanName}
+                            default
+                            onError={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setSubtitleUrl("");
+                            }}
+                        />
+                    )}
+                </video>
             ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
-                 container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
-            {!playerError && !isEmbedStream(activeDownload) && (
+                 container's onTouchStart/onTouchEnd. */}
+            {!playerError && (
                 <div
                     className={`absolute inset-0 z-10 ${
                         isPlaying && !showControls
@@ -2889,8 +2865,7 @@ export default function VideoPlayer({
                 </div>
 
                 {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-                {!isEmbedStream(activeDownload) &&
-                    !isPlaying &&
+                {!isPlaying &&
                     !isLoading &&
                     !showSubtitleMenu &&
                     !showAudioMenu &&
@@ -2910,7 +2885,7 @@ export default function VideoPlayer({
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
-                    className={`w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto ${isEmbedStream(activeDownload) ? "hidden" : ""}`}
+                    className={`w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto`}
                     data-controls-panel
                 >
                     <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">
@@ -3449,22 +3424,8 @@ export default function VideoPlayer({
                                                                     parseResolution(
                                                                         link.resolution,
                                                                     );
-                                                                const isEmbed =
-                                                                    isEmbedStream(
-                                                                        link,
-                                                                    );
                                                                 let label = "";
-                                                                if (isEmbed) {
-                                                                    label =
-                                                                        (
-                                                                            link as any
-                                                                        )
-                                                                            .name ||
-                                                                        (resNum >
-                                                                        0
-                                                                            ? `${resNum}p HD Server`
-                                                                            : "1080p Full HD Server");
-                                                                } else if (
+                                                                if (
                                                                     resNum ===
                                                                     2160
                                                                 ) {
@@ -3985,22 +3946,8 @@ export default function VideoPlayer({
                                                                     parseResolution(
                                                                         link.resolution,
                                                                     );
-                                                                const isEmbed =
-                                                                    isEmbedStream(
-                                                                        link,
-                                                                    );
                                                                 let label = "";
-                                                                if (isEmbed) {
-                                                                    label =
-                                                                        (
-                                                                            link as any
-                                                                        )
-                                                                            .name ||
-                                                                        (resNum >
-                                                                        0
-                                                                            ? `${resNum}p HD Server`
-                                                                            : "1080p Full HD Server");
-                                                                } else if (
+                                                                if (
                                                                     resNum ===
                                                                     2160
                                                                 ) {

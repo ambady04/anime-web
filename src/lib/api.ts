@@ -336,9 +336,8 @@ export const movieApi = {
             return streamService.getStream(path, season, episode, adult);
         }
 
-        // Retry logic matching mobile app: up to 4 attempts with 1.5s delays
-        // This gives the backend time to fetch/cache stream URLs for new content
-        const maxAttempts = 4;
+        // Retry logic: up to 2 attempts with 1s delay before falling to browser-direct
+        const maxAttempts = 2;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             try {
                 const params: Record<string, string | number | boolean> = {
@@ -356,11 +355,33 @@ export const movieApi = {
                     Array.isArray(res.downloads) &&
                     res.downloads.length > 0
                 ) {
-                    return res;
+                    // Filter out embed/iframe URLs that may come from an outdated backend
+                    res.downloads = res.downloads.filter((d: any) => {
+                        if (d.isEmbed) return false;
+                        const u = (d.url || "").toLowerCase();
+                        try {
+                            const hn = new URL(u).hostname;
+                            if (
+                                hn.includes("vidsrc") ||
+                                hn.includes("autoembed") ||
+                                hn.includes("2embed") ||
+                                hn.includes("vidplay") ||
+                                hn.includes("superembed") ||
+                                hn.includes("embedsu")
+                            )
+                                return false;
+                        } catch {
+                            /* ignore */
+                        }
+                        return true;
+                    });
+                    if (res.downloads.length > 0) {
+                        return res;
+                    }
                 }
                 // hasResource but no downloads — retry after delay
                 if (attempt < maxAttempts - 1) {
-                    await new Promise((r) => setTimeout(r, 1500));
+                    await new Promise((r) => setTimeout(r, 1000));
                 }
             } catch {
                 // Backend API failed — break to browser fallback
@@ -446,8 +467,36 @@ export const movieApi = {
                         d.fallbackUrl ||
                         d.link ||
                         (typeof d === "string" ? d : "");
-                    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "None")
+                    if (
+                        !rawUrl ||
+                        typeof rawUrl !== "string" ||
+                        !rawUrl.trim() ||
+                        rawUrl.trim() === "None"
+                    )
                         return null;
+                    // Reject embed/iframe URLs — only accept direct stream URLs
+                    if (d.isEmbed) return null;
+                    const lUrl = rawUrl.toLowerCase();
+                    try {
+                        const hn = new URL(lUrl).hostname;
+                        if (
+                            hn.includes("vidsrc") ||
+                            hn.includes("autoembed") ||
+                            hn.includes("2embed") ||
+                            hn.includes("vidplay") ||
+                            hn.includes("superembed") ||
+                            hn.includes("embedsu")
+                        )
+                            return null;
+                    } catch {
+                        if (
+                            lUrl.includes("vidsrc.") ||
+                            lUrl.includes("autoembed.") ||
+                            lUrl.includes("2embed.") ||
+                            lUrl.includes("superembed.")
+                        )
+                            return null;
+                    }
                     return {
                         id: String(d.id || d.resolution || idx),
                         url: rawUrl.trim(),
