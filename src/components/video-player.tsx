@@ -53,15 +53,29 @@ const isEmbedStream = (download: DownloadLink | null | undefined): boolean => {
     if (!download) return false;
     if ((download as any).isEmbed) return true;
     const url = (download.url || "").toLowerCase();
-    return (
-        url.includes("vidsrc") ||
-        url.includes("autoembed") ||
-        url.includes("2embed") ||
-        url.includes("embed") ||
-        url.includes("player") ||
-        url.includes("vidplay") ||
-        url.includes("superembed")
-    );
+    // Only match known embed service DOMAINS, not generic substrings.
+    // CDN URLs (e.g. hakunaymatata.com) may contain "player" or "embed" in paths/params
+    // but are direct MP4/HLS streams, not embeddable iframes.
+    try {
+        const hostname = new URL(url).hostname;
+        return (
+            hostname.includes("vidsrc") ||
+            hostname.includes("autoembed") ||
+            hostname.includes("2embed") ||
+            hostname.includes("vidplay") ||
+            hostname.includes("superembed") ||
+            hostname.includes("embedsu")
+        );
+    } catch {
+        // Fallback for malformed URLs — only match obvious embed domains
+        return (
+            url.includes("vidsrc.") ||
+            url.includes("autoembed.") ||
+            url.includes("2embed.") ||
+            url.includes("vidplay.") ||
+            url.includes("superembed.")
+        );
+    }
 };
 
 const getEmbedSrcUrl = (rawUrl: string) => {
@@ -125,12 +139,11 @@ export default function VideoPlayer({
     // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
     // Note: Embed streams are kept as a last-resort fallback.
     const sortedDownloads = useMemo(() => {
-        return [...downloads]
-            .sort((a, b) => {
-                const resA = parseResolution(a.resolution) || 0;
-                const resB = parseResolution(b.resolution) || 0;
-                return resB - resA;
-            });
+        return [...downloads].sort((a, b) => {
+            const resA = parseResolution(a.resolution) || 0;
+            const resB = parseResolution(b.resolution) || 0;
+            return resB - resA;
+        });
     }, [downloads]);
 
     // States
@@ -2550,135 +2563,136 @@ export default function VideoPlayer({
                     />
                 ) : (
                     <video
-                    ref={videoRef}
-                    onEnded={handleVideoEnded}
-                    style={{ filter: `brightness(${brightnessLevel})` }}
-                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
-                        aspectRatio === "contain"
-                            ? "object-contain"
-                            : aspectRatio === "fill"
-                              ? "object-fill"
-                              : "object-cover"
-                    }`}
-                    onPlay={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsPlaying(true);
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                        transientRetryCountRef.current = 0;
-                    }}
-                    onPause={() => setIsPlaying(false)}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onDurationChange={() => {
-                        if (
-                            videoRef.current &&
-                            videoRef.current.duration > 0 &&
-                            isFinite(videoRef.current.duration)
-                        ) {
-                            setDuration(videoRef.current.duration);
-                        }
-                    }}
-                    onTimeUpdate={handleTimeUpdate}
-                    onProgress={() => {
-                        if (
-                            videoRef.current &&
-                            videoRef.current.buffered.length > 0 &&
-                            videoRef.current.duration > 0 &&
-                            isFinite(videoRef.current.duration)
-                        ) {
-                            const buf = videoRef.current.buffered;
-                            let maxEnd = 0;
-                            for (let i = 0; i < buf.length; i++) {
-                                if (buf.end(i) > maxEnd) maxEnd = buf.end(i);
-                            }
-                            setBufferedPercent(
-                                (maxEnd / videoRef.current.duration) * 100,
-                            );
-                        }
-                    }}
-                    onWaiting={() => {
-                        // Only show loading spinner if video has NO frame available to render (readyState < 2)
-                        // and stays stalled for at least 1500ms
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        waitingTimeoutRef.current = setTimeout(() => {
+                        ref={videoRef}
+                        onEnded={handleVideoEnded}
+                        style={{ filter: `brightness(${brightnessLevel})` }}
+                        className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
+                            aspectRatio === "contain"
+                                ? "object-contain"
+                                : aspectRatio === "fill"
+                                  ? "object-fill"
+                                  : "object-cover"
+                        }`}
+                        onPlay={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsPlaying(true);
+                            setIsLoading(false);
+                            setAutoRetryLabel("");
+                            transientRetryCountRef.current = 0;
+                        }}
+                        onPause={() => setIsPlaying(false)}
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onDurationChange={() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.readyState < 2 &&
-                                !videoRef.current.paused
+                                videoRef.current.duration > 0 &&
+                                isFinite(videoRef.current.duration)
                             ) {
-                                setIsLoading(true);
+                                setDuration(videoRef.current.duration);
                             }
-                        }, 1500);
-                    }}
-                    onSeeking={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        waitingTimeoutRef.current = setTimeout(() => {
+                        }}
+                        onTimeUpdate={handleTimeUpdate}
+                        onProgress={() => {
                             if (
                                 videoRef.current &&
-                                videoRef.current.readyState < 2
+                                videoRef.current.buffered.length > 0 &&
+                                videoRef.current.duration > 0 &&
+                                isFinite(videoRef.current.duration)
                             ) {
-                                setIsLoading(true);
+                                const buf = videoRef.current.buffered;
+                                let maxEnd = 0;
+                                for (let i = 0; i < buf.length; i++) {
+                                    if (buf.end(i) > maxEnd)
+                                        maxEnd = buf.end(i);
+                                }
+                                setBufferedPercent(
+                                    (maxEnd / videoRef.current.duration) * 100,
+                                );
                             }
-                        }, 1000);
-                    }}
-                    onSeeked={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsLoading(false);
-                    }}
-                    onLoadedData={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsVideoLoaded(true);
-                        setIsLoading(false);
-                    }}
-                    onCanPlay={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsVideoLoaded(true);
-                        setIsLoading(false);
-                        isInitialLoadRef.current = false;
-                        isRecoveringRef.current = false;
-                    }}
-                    onCanPlayThrough={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsVideoLoaded(true);
-                        setIsLoading(false);
-                    }}
-                    onPlaying={() => {
-                        if (waitingTimeoutRef.current)
-                            clearTimeout(waitingTimeoutRef.current);
-                        setIsLoading(false);
-                        setAutoRetryLabel("");
-                        transientRetryCountRef.current = 0;
-                    }}
-                    onError={handlePlayerError}
-                    autoPlay
-                    playsInline
-                    preload="auto"
-                    crossOrigin={subtitleUrl ? "anonymous" : undefined}
-                >
-                    {/* Subtitle track */}
-                    {subtitleUrl && activeCaption && (
-                        <track
-                            key={activeCaption.id || activeCaption.url}
-                            kind="subtitles"
-                            src={subtitleUrl}
-                            srcLang={activeCaption.lan}
-                            label={activeCaption.lanName}
-                            default
-                            onError={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                setSubtitleUrl("");
-                            }}
-                        />
-                    )}
-                </video>
+                        }}
+                        onWaiting={() => {
+                            // Only show loading spinner if video has NO frame available to render (readyState < 2)
+                            // and stays stalled for at least 1500ms
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            waitingTimeoutRef.current = setTimeout(() => {
+                                if (
+                                    videoRef.current &&
+                                    videoRef.current.readyState < 2 &&
+                                    !videoRef.current.paused
+                                ) {
+                                    setIsLoading(true);
+                                }
+                            }, 1500);
+                        }}
+                        onSeeking={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            waitingTimeoutRef.current = setTimeout(() => {
+                                if (
+                                    videoRef.current &&
+                                    videoRef.current.readyState < 2
+                                ) {
+                                    setIsLoading(true);
+                                }
+                            }, 1000);
+                        }}
+                        onSeeked={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsLoading(false);
+                        }}
+                        onLoadedData={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsVideoLoaded(true);
+                            setIsLoading(false);
+                        }}
+                        onCanPlay={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsVideoLoaded(true);
+                            setIsLoading(false);
+                            isInitialLoadRef.current = false;
+                            isRecoveringRef.current = false;
+                        }}
+                        onCanPlayThrough={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsVideoLoaded(true);
+                            setIsLoading(false);
+                        }}
+                        onPlaying={() => {
+                            if (waitingTimeoutRef.current)
+                                clearTimeout(waitingTimeoutRef.current);
+                            setIsLoading(false);
+                            setAutoRetryLabel("");
+                            transientRetryCountRef.current = 0;
+                        }}
+                        onError={handlePlayerError}
+                        autoPlay
+                        playsInline
+                        preload="auto"
+                        crossOrigin={subtitleUrl ? "anonymous" : undefined}
+                    >
+                        {/* Subtitle track */}
+                        {subtitleUrl && activeCaption && (
+                            <track
+                                key={activeCaption.id || activeCaption.url}
+                                kind="subtitles"
+                                src={subtitleUrl}
+                                srcLang={activeCaption.lan}
+                                label={activeCaption.lanName}
+                                default
+                                onError={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    setSubtitleUrl("");
+                                }}
+                            />
+                        )}
+                    </video>
                 )
             ) : null}
 
