@@ -51,8 +51,8 @@
     --bg-gradient: linear-gradient(
         145deg,
         #0a0a0f 0%,
-        #1a0a0f 30%,
-        #0f0a0a 60%,
+        #0a0a0f 30%,
+        #0a0a0f 60%,
         #0a0a0f 100%
     );
     --nav-bg: transparent;
@@ -366,17 +366,17 @@ body {
     background:
         radial-gradient(
             ellipse at 20% 20%,
-            rgba(225, 29, 72, 0.06) 0%,
+            rgba(225, 29, 72, 0.03) 0%,
             transparent 50%
         ),
         radial-gradient(
             ellipse at 80% 80%,
-            rgba(244, 63, 94, 0.04) 0%,
+            rgba(244, 63, 94, 0.02) 0%,
             transparent 50%
         ),
         radial-gradient(
             ellipse at 50% 50%,
-            rgba(251, 113, 133, 0.03) 0%,
+            rgba(251, 113, 133, 0.01) 0%,
             transparent 60%
         );
     animation: mesh-drift 30s ease-in-out infinite;
