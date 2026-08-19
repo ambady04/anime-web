@@ -48,22 +48,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const { onAuthStateChanged, getRedirectResult } =
                 await import("firebase/auth");
 
-            // Handle redirect result (in case signInWithRedirect was used)
-            getRedirectResult(auth).catch((err) => {
+            // Wait for redirect result first so we don't flash "Guest" state
+            let redirectUser: User | null = null;
+            try {
+                const result = await getRedirectResult(auth);
+                if (result?.user) {
+                    redirectUser = result.user;
+                }
+            } catch (err) {
                 console.error("[auth] Redirect result error:", err);
-            });
+            }
+
+            // If redirect gave us a user, set it immediately
+            if (redirectUser) {
+                setUser(redirectUser);
+                setCurrentUid(redirectUser.uid);
+                setLoading(false);
+                try {
+                    const { syncUserData } = await import("./sync");
+                    await syncUserData(redirectUser.uid);
+                } catch (e) {
+                    console.error("[auth] Background sync failed:", e);
+                }
+            }
 
             unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                 if (firebaseUser) {
                     setUser(firebaseUser);
-                    // Set UID for storage.ts sync operations
                     setCurrentUid(firebaseUser.uid);
-                    // Perform background sync on successful authentication
-                    try {
-                        const { syncUserData } = await import("./sync");
-                        await syncUserData(firebaseUser.uid);
-                    } catch (e) {
-                        console.error("[auth] Background sync failed:", e);
+                    // Only sync if this isn't the redirect user we already handled
+                    if (
+                        !redirectUser ||
+                        firebaseUser.uid !== redirectUser.uid
+                    ) {
+                        try {
+                            const { syncUserData } = await import("./sync");
+                            await syncUserData(firebaseUser.uid);
+                        } catch (e) {
+                            console.error("[auth] Background sync failed:", e);
+                        }
                     }
                 } else {
                     setUser(null);
