@@ -30,9 +30,16 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
-        return "/api/video";
+        // In production (Vercel), use the Render backend for video proxying
+        // because Vercel serverless functions timeout on large video streams
+        const apiUrl =
+            process.env.NEXT_PUBLIC_API_URL ||
+            "https://anime-api-arlv.onrender.com";
+        return `${apiUrl.replace(/\/+$/, "")}/api/video`;
     }
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "/api/video";
+    const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
+    if (configuredUrl) return configuredUrl;
+    return "/api/video";
 }
 
 export interface ImageModel {

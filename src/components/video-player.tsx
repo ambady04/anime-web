@@ -611,13 +611,13 @@ export default function VideoPlayer({
             activeDownload.url.includes("aoneroom.com");
         const useDirectStream = !proxyBase || (isDirectFallback && !isCdnUrl);
 
-        // For CDN URLs that expire quickly, use live-resolve mode:
-        // Pass path/season/episode to the proxy which fetches a fresh URL and streams it.
-        // This avoids expired token issues.
+        // Build the video source URL:
+        // - CDN URLs: proxy through Render backend with url= param (stream URLs are fresh from /api/stream)
+        // - External URLs: proxy through the configured proxy base
+        // - Other: use directly
         let src: string;
         if (isCdnUrl && proxyBase) {
-            // Live-resolve mode — proxy fetches fresh stream URL on each request
-            src = `${proxyBase}?path=${encodeURIComponent(detailPath)}&season=${season || 0}&episode=${episode || 0}&quality=${qualityVal}&_t=${Date.now()}`;
+            src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`;
         } else if (isExternalUrl) {
             src = useDirectStream
                 ? activeDownload.url
