@@ -6,6 +6,7 @@ import {
     useState,
     useEffect,
     useCallback,
+    useRef,
     ReactNode,
 } from "react";
 import type { User } from "firebase/auth";
@@ -21,9 +22,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Pre-load Firebase auth module so signInWithPopup runs synchronously after click
+let _firebasePreloaded = false;
+let _preloadPromise: Promise<void> | null = null;
+
+function preloadFirebase() {
+    if (_preloadPromise) return _preloadPromise;
+    _preloadPromise = (async () => {
+        const { ensureFirebase } = await import("./firebase");
+        await ensureFirebase();
+        await import("firebase/auth");
+        _firebasePreloaded = true;
+    })();
+    return _preloadPromise;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const syncedRef = useRef(false);
 
     // Manual or programmatic synchronization trigger
     const triggerSync = useCallback(async () => {
@@ -39,48 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         let unsubscribe: (() => void) | null = null;
 
-        // Lazy-load Firebase auth and set up the listener
         (async () => {
-            const { ensureFirebase, getFirebaseAuth } =
-                await import("./firebase");
-            await ensureFirebase();
+            // Pre-load Firebase so login click is faster
+            await preloadFirebase();
+
+            const { getFirebaseAuth } = await import("./firebase");
             const auth = getFirebaseAuth();
-            const { onAuthStateChanged, getRedirectResult } =
-                await import("firebase/auth");
-
-            // Wait for redirect result first so we don't flash "Guest" state
-            let redirectUser: User | null = null;
-            try {
-                const result = await getRedirectResult(auth);
-                if (result?.user) {
-                    redirectUser = result.user;
-                }
-            } catch (err) {
-                console.error("[auth] Redirect result error:", err);
-            }
-
-            // If redirect gave us a user, set it immediately
-            if (redirectUser) {
-                setUser(redirectUser);
-                setCurrentUid(redirectUser.uid);
-                setLoading(false);
-                try {
-                    const { syncUserData } = await import("./sync");
-                    await syncUserData(redirectUser.uid);
-                } catch (e) {
-                    console.error("[auth] Background sync failed:", e);
-                }
-            }
+            const { onAuthStateChanged } = await import("firebase/auth");
 
             unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                 if (firebaseUser) {
                     setUser(firebaseUser);
                     setCurrentUid(firebaseUser.uid);
-                    // Only sync if this isn't the redirect user we already handled
-                    if (
-                        !redirectUser ||
-                        firebaseUser.uid !== redirectUser.uid
-                    ) {
+                    if (!syncedRef.current) {
+                        syncedRef.current = true;
                         try {
                             const { syncUserData } = await import("./sync");
                             await syncUserData(firebaseUser.uid);
@@ -91,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 } else {
                     setUser(null);
                     setCurrentUid(null);
+                    syncedRef.current = false;
                 }
                 setLoading(false);
             });
@@ -103,14 +93,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loginWithGoogle = useCallback(async () => {
         try {
-            const { ensureFirebase, getFirebaseAuth, getGoogleProvider } =
+            // Ensure Firebase is ready (should already be preloaded)
+            if (!_firebasePreloaded) {
+                await preloadFirebase();
+            }
+
+            const { getFirebaseAuth, getGoogleProvider } =
                 await import("./firebase");
-            await ensureFirebase();
             const auth = getFirebaseAuth();
             const provider = getGoogleProvider();
-            const { signInWithRedirect } = await import("firebase/auth");
-            await signInWithRedirect(auth, provider);
-        } catch (error) {
+            const { signInWithPopup } = await import("firebase/auth");
+            await signInWithPopup(auth, provider);
+        } catch (error: unknown) {
+            // Suppress popup-blocked/closed errors since user can retry
+            if (
+                error instanceof Error &&
+                "code" in error &&
+                ((error as { code: string }).code === "auth/popup-blocked" ||
+                    (error as { code: string }).code ===
+                        "auth/popup-closed-by-user")
+            ) {
+                console.warn(
+                    "[auth] Popup blocked by browser. Disable ad-blocker or allow popups for this site.",
+                );
+                return;
+            }
             console.error("Google Auth login failed:", error);
             throw error;
         }
