@@ -30,8 +30,9 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
-        // Production: use Cloudflare Worker proxy (trusted edge IPs that CDNs accept)
-        return "https://video-proxy.abhijithabhijith1999.workers.dev";
+        // Production: use Vercel's own /api/video route for live-resolve + proxy
+        // Vercel can reach the stream APIs and the signed URLs are valid for Vercel's IP
+        return "/api/video";
     }
     const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
     if (configuredUrl) return configuredUrl;
