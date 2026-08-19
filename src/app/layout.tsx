@@ -175,6 +175,7 @@ export default function RootLayout({
             </head>
             <body
                 className="min-h-full text-white flex flex-col relative"
+                suppressHydrationWarning={true}
                 style={{
                     backgroundColor: "#0a0a0f",
                     fontFamily:
