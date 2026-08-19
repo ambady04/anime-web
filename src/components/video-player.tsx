@@ -601,9 +601,6 @@ export default function VideoPlayer({
         const isExternalUrl =
             activeDownload.url.startsWith("http://") ||
             activeDownload.url.startsWith("https://");
-        const isDirectFallback = directFallbackUrlsRef.current.has(
-            activeDownload.url,
-        );
         // CDN URLs: Try direct first (browser with no-referrer policy can often access CDN directly).
         // If direct fails, the error handler will retry through the proxy.
         const isCdnUrl =
