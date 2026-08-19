@@ -2448,6 +2448,7 @@ export default function VideoPlayer({
             }`}
         >
             <style
+                suppressHydrationWarning
                 dangerouslySetInnerHTML={{
                     __html: `
                 video {

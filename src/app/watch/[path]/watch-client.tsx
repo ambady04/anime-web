@@ -465,7 +465,15 @@ export default function WatchClient({
             detailPath: subject.detailPath || path,
         };
 
-        return [currentEntry, ...(subject.dubs || [])];
+        // Deduplicate by detailPath to avoid React key collisions
+        const merged = [currentEntry, ...(subject.dubs || [])];
+        const seen = new Set<string>();
+        return merged.filter((d) => {
+            const key = decodeURIComponent(d.detailPath);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     }, [subject, path]);
 
     const genres = useMemo(() => {
