@@ -604,21 +604,32 @@ export default function VideoPlayer({
         const isDirectFallback = directFallbackUrlsRef.current.has(
             activeDownload.url,
         );
-        // CDN URLs (hakunaymatata.com) require Referer headers that browsers won't send.
-        // Always use the proxy for CDN streams. Only use direct for non-CDN URLs.
+        // CDN URLs: Try direct first (browser with no-referrer policy can often access CDN directly).
+        // If direct fails, the error handler will retry through the proxy.
         const isCdnUrl =
             activeDownload.url.includes("hakunaymatata.com") ||
             activeDownload.url.includes("aoneroom.com");
-        const useDirectStream = !proxyBase || (isDirectFallback && !isCdnUrl);
+        const isDirectFallbackAttempt = directFallbackUrlsRef.current.has(
+            activeDownload.url,
+        );
 
         // Build the video source URL:
-        // - CDN URLs: proxy through Render backend with url= param (stream URLs are fresh from /api/stream)
-        // - External URLs: proxy through the configured proxy base
-        // - Other: use directly
+        // - CDN URLs: try direct first (with referrerpolicy=no-referrer on video element)
+        //   If direct fails, error handler will add to directFallbackUrls and retry through proxy
+        // - Non-CDN external URLs: use proxy
         let src: string;
-        if (isCdnUrl && proxyBase) {
-            src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`;
+        if (isCdnUrl) {
+            if (!isDirectFallbackAttempt) {
+                // First attempt: try direct CDN (browser residential IP + no referer)
+                src = activeDownload.url;
+            } else if (proxyBase) {
+                // Second attempt: proxy through Render backend
+                src = `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}&_t=${Date.now()}`;
+            } else {
+                src = activeDownload.url;
+            }
         } else if (isExternalUrl) {
+            const useDirectStream = !proxyBase || isDirectFallbackAttempt;
             src = useDirectStream
                 ? activeDownload.url
                 : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
@@ -1204,17 +1215,18 @@ export default function VideoPlayer({
             return;
         }
 
-        // Direct stream fallback: skip for CDN URLs (they require Referer that browser won't send)
-        // Instead, go directly to refreshing stream data for fresh signed URLs
+        // Direct stream fallback: for CDN URLs that failed direct, try proxy next
+        // For non-CDN URLs that failed proxy, try direct next
         const isCdnStream =
             activeDownload.url.includes("hakunaymatata.com") ||
             activeDownload.url.includes("aoneroom.com");
-        if (
-            !isCdnStream &&
-            !directFallbackUrlsRef.current.has(activeDownload.url)
-        ) {
+        if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
             directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Switching to direct stream...");
+            setAutoRetryLabel(
+                isCdnStream
+                    ? "Switching to proxy stream..."
+                    : "Switching to direct stream...",
+            );
             setIsLoading(true);
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
