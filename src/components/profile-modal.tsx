@@ -171,16 +171,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
         try {
             await loginWithGoogle();
         } catch (err: any) {
-            if (
-                err?.code === "auth/popup-blocked" ||
-                err?.code === "auth/popup-closed-by-user"
-            ) {
-                setErrorMessage(
-                    "Popup blocked by your browser or an extension. Please allow popups for this site or disable your ad blocker, then try again.",
-                );
-            } else {
-                setErrorMessage(err.message || "Failed to log in with Google.");
-            }
+            setErrorMessage(err.message || "Failed to log in with Google.");
         }
     };
 

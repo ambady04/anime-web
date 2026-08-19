@@ -22,7 +22,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Pre-load Firebase auth module so signInWithPopup runs synchronously after click
+// Pre-load Firebase auth module eagerly
 let _firebasePreloaded = false;
 let _preloadPromise: Promise<void> | null = null;
 
@@ -57,12 +57,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let unsubscribe: (() => void) | null = null;
 
         (async () => {
-            // Pre-load Firebase so login click is faster
             await preloadFirebase();
 
             const { getFirebaseAuth } = await import("./firebase");
             const auth = getFirebaseAuth();
-            const { onAuthStateChanged } = await import("firebase/auth");
+            const { onAuthStateChanged, getRedirectResult } =
+                await import("firebase/auth");
+
+            // Process redirect result (resolves the credential after redirect sign-in)
+            try {
+                await getRedirectResult(auth);
+            } catch (err) {
+                console.error("[auth] Redirect result error:", err);
+            }
 
             unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                 if (firebaseUser) {
@@ -93,7 +100,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loginWithGoogle = useCallback(async () => {
         try {
-            // Ensure Firebase is ready (should already be preloaded)
             if (!_firebasePreloaded) {
                 await preloadFirebase();
             }
@@ -102,22 +108,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await import("./firebase");
             const auth = getFirebaseAuth();
             const provider = getGoogleProvider();
-            const { signInWithPopup } = await import("firebase/auth");
-            await signInWithPopup(auth, provider);
-        } catch (error: unknown) {
-            // Suppress popup-blocked/closed errors since user can retry
-            if (
-                error instanceof Error &&
-                "code" in error &&
-                ((error as { code: string }).code === "auth/popup-blocked" ||
-                    (error as { code: string }).code ===
-                        "auth/popup-closed-by-user")
-            ) {
-                console.warn(
-                    "[auth] Popup blocked by browser. Disable ad-blocker or allow popups for this site.",
-                );
-                return;
+            const { signInWithPopup, signInWithRedirect } =
+                await import("firebase/auth");
+
+            // Try popup first, fall back to redirect if blocked
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (popupErr: unknown) {
+                const code =
+                    popupErr instanceof Error && "code" in popupErr
+                        ? (popupErr as { code: string }).code
+                        : "";
+                if (
+                    code === "auth/popup-blocked" ||
+                    code === "auth/popup-closed-by-user"
+                ) {
+                    // Popup blocked — use redirect (navigates away from page)
+                    await signInWithRedirect(auth, provider);
+                } else {
+                    throw popupErr;
+                }
             }
+        } catch (error) {
             console.error("Google Auth login failed:", error);
             throw error;
         }
