@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { streamService } from "@/lib/server/stream-service";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
     try {
@@ -18,7 +19,12 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        const data = await streamService.getStream(path, season, episode, adult);
+        const data = await streamService.getStream(
+            path,
+            season,
+            episode,
+            adult,
+        );
 
         return NextResponse.json(data, {
             headers: {
@@ -28,20 +34,23 @@ export async function GET(req: NextRequest) {
             },
         });
     } catch {
-        return NextResponse.json({
-            downloads: [],
-            captions: [],
-            hasResource: false,
-            limited: false,
-            limitedCode: "",
-            stream_domain: "https://videodownloader.site/",
-        }, {
-            status: 200,
-            headers: {
-                "Cache-Control": "private, no-store, max-age=0",
-                "CDN-Cache-Control": "no-store",
-                "Cloudflare-CDN-Cache-Control": "no-store",
+        return NextResponse.json(
+            {
+                downloads: [],
+                captions: [],
+                hasResource: false,
+                limited: false,
+                limitedCode: "",
+                stream_domain: "https://videodownloader.site/",
             },
-        });
+            {
+                status: 200,
+                headers: {
+                    "Cache-Control": "private, no-store, max-age=0",
+                    "CDN-Cache-Control": "no-store",
+                    "Cloudflare-CDN-Cache-Control": "no-store",
+                },
+            },
+        );
     }
 }

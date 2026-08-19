@@ -285,7 +285,7 @@ export const streamService = {
             if (adult) vUrl.searchParams.set("adult", "true");
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
             const vRes = await fetch(vUrl.toString(), {
                 headers: { Accept: "application/json" },
