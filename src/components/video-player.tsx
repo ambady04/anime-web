@@ -123,10 +123,9 @@ export default function VideoPlayer({
     );
 
     // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
-    // Filter out ALL embed streams — they show ads and can't be controlled by our player
+    // Note: Embed streams are kept as a last-resort fallback.
     const sortedDownloads = useMemo(() => {
         return [...downloads]
-            .filter((d) => !isEmbedStream(d))
             .sort((a, b) => {
                 const resA = parseResolution(a.resolution) || 0;
                 const resB = parseResolution(b.resolution) || 0;
@@ -2539,9 +2538,18 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Player Node — direct streams only (embeds are filtered out) */}
+            {/* Video Player Node — direct streams use <video>, embeds use <iframe> */}
             {activeDownload && !playerError ? (
-                <video
+                isEmbedStream(activeDownload) ? (
+                    <iframe
+                        src={activeDownload.url}
+                        allowFullScreen
+                        allow="autoplay; fullscreen"
+                        className="w-full h-full border-0 absolute inset-0 z-0 bg-black"
+                        title="Video Player"
+                    />
+                ) : (
+                    <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
                     style={{ filter: `brightness(${brightnessLevel})` }}
@@ -2671,6 +2679,7 @@ export default function VideoPlayer({
                         />
                     )}
                 </video>
+                )
             ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
@@ -2866,7 +2875,8 @@ export default function VideoPlayer({
                 </div>
 
                 {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-                {!isPlaying &&
+                {!isEmbedStream(activeDownload) &&
+                    !isPlaying &&
                     !isLoading &&
                     !showSubtitleMenu &&
                     !showAudioMenu &&
@@ -2886,7 +2896,7 @@ export default function VideoPlayer({
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
-                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto"
+                    className={`w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto ${isEmbedStream(activeDownload) ? "hidden" : ""}`}
                     data-controls-panel
                 >
                     <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">

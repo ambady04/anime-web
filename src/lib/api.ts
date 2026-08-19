@@ -439,6 +439,8 @@ export const movieApi = {
                         d.downloadUrl ||
                         d.videoUrl ||
                         d.hlsUrl ||
+                        d.resourceLink ||
+                        d.sourceUrl ||
                         d.resource_link ||
                         d.source_url ||
                         d.fallbackUrl ||
@@ -453,8 +455,8 @@ export const movieApi = {
                             d.resolution || d.quality || d.name || 720,
                         ),
                         size: Number(d.size || d.fileSize || 0),
-                        resource_link: d.resource_link || "",
-                        source_url: d.source_url || "",
+                        resource_link: d.resourceLink || d.resource_link || "",
+                        source_url: d.sourceUrl || d.source_url || "",
                     };
                 },
             );

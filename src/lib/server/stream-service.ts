@@ -145,6 +145,8 @@ async function fetchMirrorStream(
                     d.downloadUrl ||
                     d.videoUrl ||
                     d.hlsUrl ||
+                    d.resourceLink ||
+                    d.sourceUrl ||
                     d.resource_link ||
                     d.source_url ||
                     d.fallbackUrl ||
@@ -159,8 +161,8 @@ async function fetchMirrorStream(
                         d.resolution || d.quality || d.name || 720,
                     ),
                     size: Number(d.size || d.fileSize || 0),
-                    resource_link: d.resource_link || "",
-                    source_url: d.source_url || "",
+                    resource_link: d.resourceLink || d.resource_link || "",
+                    source_url: d.sourceUrl || d.source_url || "",
                 };
             })
             .filter((d: any): d is DownloadLink => d !== null);
@@ -249,18 +251,26 @@ export const streamService = {
                 const vData: any = await vRes.json();
                 if (
                     vData &&
-                    Array.isArray(vData.downloads) &&
-                    vData.downloads.length > 0
+                    Array.isArray(vData.downloads)
                 ) {
-                    if (streamCache.size > 200) {
-                        const firstKey = streamCache.keys().next().value;
-                        if (firstKey) streamCache.delete(firstKey);
-                    }
-                    streamCache.set(cacheKey, {
-                        data: vData as StreamData,
-                        expiresAt: Date.now() + 3 * 60 * 1000,
+                    const validDownloads = vData.downloads.filter((d: any) => {
+                        const dUrl = d.url || d.resourceLink || d.resource_link || d.sourceUrl || d.source_url || "";
+                        if (!dUrl || typeof dUrl !== "string" || dUrl.trim() === "None") return false;
+                        return true;
                     });
-                    return vData as StreamData;
+
+                    if (validDownloads.length > 0) {
+                        vData.downloads = validDownloads;
+                        if (streamCache.size > 200) {
+                            const firstKey = streamCache.keys().next().value;
+                            if (firstKey) streamCache.delete(firstKey);
+                        }
+                        streamCache.set(cacheKey, {
+                            data: vData as StreamData,
+                            expiresAt: Date.now() + 3 * 60 * 1000,
+                        });
+                        return vData as StreamData;
+                    }
                 }
             }
         } catch {
@@ -434,6 +444,8 @@ export const streamService = {
                                 d.downloadUrl ||
                                 d.videoUrl ||
                                 d.hlsUrl ||
+                                d.resourceLink ||
+                                d.sourceUrl ||
                                 d.resource_link ||
                                 d.source_url ||
                                 d.fallbackUrl ||
@@ -453,8 +465,8 @@ export const streamService = {
                                     d.resolution || d.quality || d.name || 720,
                                 ),
                                 size: Number(d.size || d.fileSize || 0),
-                                resource_link: d.resource_link || "",
-                                source_url: d.source_url || "",
+                                resource_link: d.resourceLink || d.resource_link || "",
+                                source_url: d.sourceUrl || d.source_url || "",
                             };
                         })
                         .filter(Boolean) as DownloadLink[];
