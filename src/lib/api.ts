@@ -30,9 +30,8 @@ export function getVideoProxyBase(): string {
         if (configuredUrl) {
             return configuredUrl;
         }
-        // Use relative /api/video (Vercel route) as fallback proxy
-        // CDN URLs should load directly in browser first (handled in video-player.tsx)
-        return "/api/video";
+        // Production: use Cloudflare Worker proxy (trusted edge IPs that CDNs accept)
+        return "https://video-proxy.abhijithabhijith1999.workers.dev";
     }
     const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
     if (configuredUrl) return configuredUrl;
