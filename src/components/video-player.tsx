@@ -606,22 +606,13 @@ export default function VideoPlayer({
             Boolean(navigator.serviceWorker?.controller);
 
         // Build the video source URL
-        // CDN URLs stream directly from the user's residential IP with Service Worker injecting whitelisted Referer
-        const isCdnUrl =
-            activeDownload.url.includes("hakunaymatata.com") ||
-            activeDownload.url.includes("aoneroom.com");
-
+        // All video streams route through proxyBase (/api/video) which injects Referer: https://videodownloader.site/
         let src: string;
         if (isExternalUrl) {
             const isDirectFallbackAttempt = directFallbackUrlsRef.current.has(
                 activeDownload.url,
             );
-            const useDirectStream =
-                isCdnUrl ||
-                hasActiveServiceWorker ||
-                !proxyBase ||
-                isDirectFallbackAttempt;
-            src = useDirectStream
+            src = isDirectFallbackAttempt || !proxyBase
                 ? activeDownload.url
                 : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
         } else {
