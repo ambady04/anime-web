@@ -6,7 +6,7 @@
 //   3. /_next/static/*               → Network-First (Fresh JS/CSS bundles on new deployments)
 //   4. Page navigations              → Network-First (Fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v17";
+const STATIC_CACHE = "kixo-static-v18";
 const IMAGE_CACHE = "kixo-images-v3";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 

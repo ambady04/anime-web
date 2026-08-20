@@ -82,15 +82,31 @@ export async function HEAD(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
     try {
-        // ─── Parse URL parameter ───
+        // ─── Parse URL parameter cleanly and preserve CDN signature/timestamp ───
         let url = req.nextUrl.searchParams.get("url") || "";
 
-        if (!url) {
+        if (url) {
+            try {
+                const parsed = new URL(url);
+                for (const key of ["sign", "t", "Policy", "Signature", "Key-Pair-Id"]) {
+                    if (req.nextUrl.searchParams.has(key) && !parsed.searchParams.has(key)) {
+                        parsed.searchParams.set(key, req.nextUrl.searchParams.get(key)!);
+                    }
+                }
+                url = parsed.toString();
+            } catch {
+                if (req.nextUrl.searchParams.has("t") && !url.includes("t=")) {
+                    url += (url.includes("?") ? "&" : "?") + `t=${req.nextUrl.searchParams.get("t")}`;
+                }
+            }
+        }
+
+        if (!url || !url.includes("t=")) {
             const fullReqUrl = req.url;
             if (fullReqUrl.includes("url=")) {
                 const afterUrl = fullReqUrl.slice(fullReqUrl.indexOf("url=") + 4);
                 let cutIndex = afterUrl.length;
-                for (const p of ["&referer=", "&mode=", "&quality=", "&_t="]) {
+                for (const p of ["&referer=", "&mode=", "&quality="]) {
                     const idx = afterUrl.indexOf(p);
                     if (idx !== -1 && idx < cutIndex) {
                         cutIndex = idx;
@@ -98,9 +114,12 @@ export async function GET(req: NextRequest) {
                 }
                 const rawVal = afterUrl.slice(0, cutIndex);
                 try {
-                    url = decodeURIComponent(rawVal);
+                    const decoded = decodeURIComponent(rawVal);
+                    if (decoded.startsWith("http")) {
+                        url = decoded;
+                    }
                 } catch {
-                    url = rawVal;
+                    if (rawVal.startsWith("http")) url = rawVal;
                 }
             }
         }
