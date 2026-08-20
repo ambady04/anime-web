@@ -601,13 +601,20 @@ export default function VideoPlayer({
         const isExternalUrl =
             activeDownload.url.startsWith("http://") ||
             activeDownload.url.startsWith("https://");
+        const hasActiveServiceWorker =
+            typeof navigator !== "undefined" &&
+            Boolean(navigator.serviceWorker?.controller);
+
         // Build the video source URL
         let src: string;
         if (isExternalUrl) {
             const isDirectFallbackAttempt = directFallbackUrlsRef.current.has(
                 activeDownload.url,
             );
-            const useDirectStream = !proxyBase || isDirectFallbackAttempt;
+            const useDirectStream =
+                hasActiveServiceWorker ||
+                !proxyBase ||
+                isDirectFallbackAttempt;
             src = useDirectStream
                 ? activeDownload.url
                 : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;

@@ -65,8 +65,23 @@ self.addEventListener("fetch", (event) => {
             url.pathname.includes("/resource/");
 
         if (isVideo) {
-            // Let video element requests pass through directly to CDN
-            // Browser will send page origin as Referer (referrerpolicy=origin on video element)
+            event.respondWith(
+                (async () => {
+                    const range = event.request.headers.get("range");
+                    const headers = {};
+                    if (range) headers["Range"] = range;
+                    try {
+                        const resp = await fetch(event.request.url, {
+                            headers,
+                            referrer: "https://videodownloader.site/",
+                            referrerPolicy: "unsafe-url",
+                        });
+                        return resp;
+                    } catch {
+                        return fetch(event.request);
+                    }
+                })(),
+            );
             return;
         }
     }
