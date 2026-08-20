@@ -185,6 +185,7 @@ export async function GET(req: NextRequest) {
         let upstreamResp: Response | null = null;
 
         // ─── Strategy 1: Direct fetch with correct Referer ───
+        const attemptLogs: string[] = [];
         for (const ref of uniqueReferers) {
             const headers: Record<string, string> = {
                 "User-Agent": ua,
@@ -196,8 +197,27 @@ export async function GET(req: NextRequest) {
             };
             if (rangeHeader) headers["Range"] = rangeHeader;
 
-            upstreamResp = await tryFetch(url, headers, 15000);
-            if (upstreamResp) break;
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const res = await fetch(url, {
+                    headers,
+                    signal: controller.signal,
+                    redirect: "follow",
+                    cache: "no-store",
+                });
+                clearTimeout(timeoutId);
+                attemptLogs.push(`ref=${ref} -> status=${res.status} ${res.statusText}`);
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                    break;
+                } else {
+                    const errTxt = await res.text().catch(() => "");
+                    attemptLogs.push(`  body=${errTxt.slice(0, 100)}`);
+                }
+            } catch (e: any) {
+                attemptLogs.push(`ref=${ref} -> err=${e.message}`);
+            }
         }
 
         // ─── Strategy 2: Render backend proxy fallback ───
@@ -214,7 +234,23 @@ export async function GET(req: NextRequest) {
             };
             if (rangeHeader) headers["Range"] = rangeHeader;
 
-            upstreamResp = await tryFetch(renderProxyUrl, headers, 15000);
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const res = await fetch(renderProxyUrl, {
+                    headers,
+                    signal: controller.signal,
+                    redirect: "follow",
+                    cache: "no-store",
+                });
+                clearTimeout(timeoutId);
+                attemptLogs.push(`render -> status=${res.status}`);
+                if (res.ok || res.status === 206) {
+                    upstreamResp = res;
+                }
+            } catch (e: any) {
+                attemptLogs.push(`render -> err=${e.message}`);
+            }
         }
 
         // ─── All strategies exhausted ───
@@ -222,8 +258,9 @@ export async function GET(req: NextRequest) {
             return NextResponse.json(
                 {
                     error: "video_proxy_failed",
-                    message:
-                        "All proxy strategies failed. Stream URLs may have expired — please refresh.",
+                    message: "All proxy strategies failed.",
+                    attempts: attemptLogs,
+                    targetUrl: url,
                 },
                 { status: 502, headers: CORS_HEADERS },
             );
