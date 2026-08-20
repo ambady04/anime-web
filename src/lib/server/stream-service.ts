@@ -438,6 +438,22 @@ export const streamService = {
                     }
 
                     if (downloads.length > 0) {
+                        const parseResNum = (r: any) => {
+                            const val = parseInt(String(r).replace(/\D/g, ""), 10);
+                            return isNaN(val) ? 0 : val;
+                        };
+                        const uniqueMap = new Map<number, DownloadLink>();
+                        for (const d of downloads) {
+                            const r = parseResNum(d.resolution);
+                            const existing = uniqueMap.get(r);
+                            if (!existing || (Number(d.size) || 0) > (Number(existing.size) || 0)) {
+                                uniqueMap.set(r, { ...d, resolution: r });
+                            }
+                        }
+                        const sortedDownloads = Array.from(uniqueMap.values()).sort(
+                            (a, b) => parseResNum(b.resolution) - parseResNum(a.resolution),
+                        );
+
                         const captions: Caption[] = (
                             playData.captions ||
                             playData.captionList ||
@@ -448,15 +464,15 @@ export const streamService = {
                                 if (!cUrl) return null;
                                 return {
                                     id: String(c.id || idx),
-                                    lan: c.lan || "en",
-                                    lanName: c.lanName || "English",
+                                    lan: c.lan || c.language || "en",
+                                    lanName: c.lanName || c.languageName || "English",
                                     url: cUrl,
                                 };
                             })
                             .filter(Boolean) as Caption[];
 
                         const result: StreamData = {
-                            downloads,
+                            downloads: sortedDownloads,
                             captions,
                             hasResource: true,
                             limited: false,
