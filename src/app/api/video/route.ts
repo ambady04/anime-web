@@ -83,28 +83,26 @@ export async function HEAD(req: NextRequest) {
 export async function GET(req: NextRequest) {
     try {
         // ─── Parse URL parameter ───
-        const fullReqUrl = req.url;
-        let url = "";
-        if (fullReqUrl.includes("url=")) {
-            const afterUrl = fullReqUrl.slice(fullReqUrl.indexOf("url=") + 4);
-            let cutIndex = afterUrl.length;
-            for (const p of ["&referer=", "&mode=", "&quality=", "&_t="]) {
-                const idx = afterUrl.indexOf(p);
-                if (idx !== -1 && idx < cutIndex) {
-                    cutIndex = idx;
+        let url = req.nextUrl.searchParams.get("url") || "";
+
+        if (!url) {
+            const fullReqUrl = req.url;
+            if (fullReqUrl.includes("url=")) {
+                const afterUrl = fullReqUrl.slice(fullReqUrl.indexOf("url=") + 4);
+                let cutIndex = afterUrl.length;
+                for (const p of ["&referer=", "&mode=", "&quality=", "&_t="]) {
+                    const idx = afterUrl.indexOf(p);
+                    if (idx !== -1 && idx < cutIndex) {
+                        cutIndex = idx;
+                    }
+                }
+                const rawVal = afterUrl.slice(0, cutIndex);
+                try {
+                    url = decodeURIComponent(rawVal);
+                } catch {
+                    url = rawVal;
                 }
             }
-            const rawVal = afterUrl.slice(0, cutIndex);
-            try {
-                url = decodeURIComponent(rawVal);
-            } catch {
-                url = rawVal;
-            }
-            if (!url.startsWith("http")) {
-                url = req.nextUrl.searchParams.get("url") || "";
-            }
-        } else {
-            url = req.nextUrl.searchParams.get("url") || "";
         }
 
         if (!url) {
@@ -167,38 +165,13 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        const rangeHeader = req.headers.get("range") || "";
+        const rangeHeader = req.headers.get("range") || req.nextUrl.searchParams.get("range") || "";
         const referer =
             req.nextUrl.searchParams.get("referer") ||
             "https://videodownloader.site/";
         const mode = req.nextUrl.searchParams.get("mode") || "stream";
         const quality = req.nextUrl.searchParams.get("quality") || "";
 
-        // ─── Build candidate CDN URLs (max 4 variants) ───
-        const urlsToTry: string[] = [url];
-        if (url.includes("hakunaymatata.com")) {
-            try {
-                const bcdnxwAlt = url.replace(
-                    /:\/\/[^/]+\.hakunaymatata\.com/,
-                    "://bcdnxw.hakunaymatata.com",
-                );
-                if (!urlsToTry.includes(bcdnxwAlt)) urlsToTry.push(bcdnxwAlt);
-                const bcdnAlt = url.replace(
-                    /:\/\/[^/]+\.hakunaymatata\.com/,
-                    "://bcdn.hakunaymatata.com",
-                );
-                if (!urlsToTry.includes(bcdnAlt)) urlsToTry.push(bcdnAlt);
-                const cacdnAlt = url.replace(
-                    /:\/\/[^/]+\.hakunaymatata\.com/,
-                    "://cacdn.hakunaymatata.com",
-                );
-                if (!urlsToTry.includes(cacdnAlt)) urlsToTry.push(cacdnAlt);
-            } catch {
-                /* ignore URL parse errors */
-            }
-        }
-
-        const spoofedIp = randomSpoofedIp();
         const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
         // Referers ordered by likelihood to work
@@ -207,74 +180,41 @@ export async function GET(req: NextRequest) {
             "https://videodownloader.site/",
             "https://h5.aoneroom.com/",
         ];
+        const uniqueReferers = Array.from(new Set(refererCandidates.filter(Boolean)));
 
         let upstreamResp: Response | null = null;
 
-        // ─── Strategy 1: Direct fetch with referer spoofing ───
-        // Limit to 2 URL variants × 2 referers to stay within Cloudflare subrequest budget
-        const maxDirectAttempts = 4;
-        let directAttempts = 0;
+        // ─── Strategy 1: Direct fetch with correct Referer ───
+        for (const ref of uniqueReferers) {
+            const headers: Record<string, string> = {
+                "User-Agent": ua,
+                Accept: "*/*",
+                "Accept-Encoding": "identity",
+                "Accept-Language": "en-US,en;q=0.9",
+                Referer: ref,
+                Origin: ref.replace(/\/$/, ""),
+            };
+            if (rangeHeader) headers["Range"] = rangeHeader;
 
-        for (const targetUrl of urlsToTry.slice(0, 2)) {
+            upstreamResp = await tryFetch(url, headers, 15000);
             if (upstreamResp) break;
-            for (const ref of refererCandidates.slice(0, 2)) {
-                if (directAttempts >= maxDirectAttempts) break;
-                directAttempts++;
-
-                const headers: Record<string, string> = {
-                    "User-Agent": ua,
-                    Accept: "*/*",
-                    "Accept-Encoding": "identity",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    Referer: ref,
-                    Origin: ref.replace(/\/$/, ""),
-                    "Sec-Fetch-Dest": "video",
-                    "Sec-Fetch-Mode": "no-cors",
-                    "Sec-Fetch-Site": "cross-site",
-                    "X-Forwarded-For": spoofedIp,
-                    "X-Real-IP": spoofedIp,
-                    "Client-IP": spoofedIp,
-                };
-                if (rangeHeader) headers["Range"] = rangeHeader;
-
-                upstreamResp = await tryFetch(targetUrl, headers, 15000);
-                if (upstreamResp) break;
-            }
         }
 
-        // ─── Strategy 2: Render backend proxy ───
+        // ─── Strategy 2: Render backend proxy fallback ───
         if (!upstreamResp) {
             const renderBase = (
                 process.env.NEXT_PUBLIC_API_URL ||
                 "https://anime-api-arlv.onrender.com"
             ).replace(/\/+$/, "");
 
-            for (const targetUrl of urlsToTry.slice(0, 2)) {
-                const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(targetUrl)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}${rangeHeader ? `&range=${encodeURIComponent(rangeHeader)}` : ""}`;
-                const headers: Record<string, string> = {
-                    "User-Agent": ua,
-                    Accept: "*/*",
-                };
-                if (rangeHeader) headers["Range"] = rangeHeader;
+            const renderProxyUrl = `${renderBase}/api/video?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(referer)}&mode=${mode}&quality=${quality}${rangeHeader ? `&range=${encodeURIComponent(rangeHeader)}` : ""}`;
+            const headers: Record<string, string> = {
+                "User-Agent": ua,
+                Accept: "*/*",
+            };
+            if (rangeHeader) headers["Range"] = rangeHeader;
 
-                upstreamResp = await tryFetch(renderProxyUrl, headers, 15000);
-                if (upstreamResp) break;
-            }
-        }
-
-        // ─── Strategy 3: Direct CDN without spoofing (last resort) ───
-        if (!upstreamResp) {
-            for (const targetUrl of urlsToTry) {
-                const headers: Record<string, string> = {
-                    "User-Agent": ua,
-                    Accept: "*/*",
-                    Referer: "https://videodownloader.site/",
-                };
-                if (rangeHeader) headers["Range"] = rangeHeader;
-
-                upstreamResp = await tryFetch(targetUrl, headers, 12000);
-                if (upstreamResp) break;
-            }
+            upstreamResp = await tryFetch(renderProxyUrl, headers, 15000);
         }
 
         // ─── All strategies exhausted ───

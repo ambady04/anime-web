@@ -601,18 +601,9 @@ export default function VideoPlayer({
         const isExternalUrl =
             activeDownload.url.startsWith("http://") ||
             activeDownload.url.startsWith("https://");
-        // CDN URLs must go through a proxy (CDN blocks direct browser access and datacenter IPs).
-        // Use Cloudflare Worker in live-resolve mode: Worker fetches fresh stream URL from same IP then proxies video.
-        const isCdnUrl =
-            activeDownload.url.includes("hakunaymatata.com") ||
-            activeDownload.url.includes("aoneroom.com");
-
         // Build the video source URL
         let src: string;
-        if (isCdnUrl && proxyBase) {
-            // Live-resolve mode: Worker fetches fresh stream URL from its own IP and proxies
-            src = `${proxyBase}?path=${encodeURIComponent(detailPath)}&season=${season || 0}&episode=${episode || 0}&quality=${qualityVal}&_t=${Date.now()}`;
-        } else if (isExternalUrl) {
+        if (isExternalUrl) {
             const isDirectFallbackAttempt = directFallbackUrlsRef.current.has(
                 activeDownload.url,
             );
