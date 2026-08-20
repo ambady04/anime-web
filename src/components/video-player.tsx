@@ -2694,7 +2694,6 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
-                    crossOrigin={subtitleUrl ? "anonymous" : undefined}
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (

@@ -6,7 +6,7 @@
 //   3. /_next/static/*               → Network-First (Fresh JS/CSS bundles on new deployments)
 //   4. Page navigations              → Network-First (Fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v18";
+const STATIC_CACHE = "kixo-static-v19";
 const IMAGE_CACHE = "kixo-images-v3";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 
@@ -53,7 +53,7 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Intercept & inject valid Referer header ─
+    // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Direct browser media streaming ─────
     if (
         !isSameOrigin &&
         (url.hostname.includes("hakunaymatata.com") ||
@@ -65,23 +65,7 @@ self.addEventListener("fetch", (event) => {
             url.pathname.includes("/resource/");
 
         if (isVideo) {
-            event.respondWith(
-                (async () => {
-                    const range = event.request.headers.get("range");
-                    const headers = {};
-                    if (range) headers["Range"] = range;
-                    try {
-                        const resp = await fetch(event.request.url, {
-                            headers,
-                            referrer: "https://videodownloader.site/",
-                            referrerPolicy: "unsafe-url",
-                        });
-                        return resp;
-                    } catch {
-                        return fetch(event.request);
-                    }
-                })(),
-            );
+            // Let native browser media engine stream directly without CORS interception
             return;
         }
     }
