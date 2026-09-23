@@ -6,7 +6,7 @@ KIXO is a premium, high-fidelity Glassmorphism-style movie streaming web applica
 
 ## Key Features
 
-- 🎭 **Glassmorphism Design System**: Clean, transparent card layouts with `backdrop-filter: blur(20px)`, subtle red borders (`#E31C25` theme color), responsive grid arrangements, and customized high-contrast scrollbars.
+- 🎭 **Glassmorphism Design System**: Clean UI, transparent card layouts with `backdrop-filter: blur(20px)`, subtle red borders (`#E31C25` theme color), responsive grid arrangements, and customized high-contrast scrollbars.
 - 📱 **Responsive Multi-Device Layout**: Fully adaptive navigation containing a desktop header and a convenient mobile bottom navigation bar.
 - 🔍 **Rich Category Explorer**: A discovery view organized by genres (Action, Comedy, Drama, etc.) and curated Collections (Anime Hits, Blockbuster Movies, Korean Dramas).
 - 🎬 **Custom Widescreen Video Player HUD**: Complete with a floating glass panel, volume sliders, multiple playback speeds, audio dub stream selectors, and error recovery fallbacks.

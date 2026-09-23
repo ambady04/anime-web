@@ -364,16 +364,20 @@ export const streamService = {
 
             // We need the subjectId. Try to extract from path or fetch details
             let subjectId = "";
+            let resolvedDetailPath = path;
             try {
                 const detailsForId = await movieService.getDetails(path, adult);
                 subjectId = detailsForId?.subject?.subjectId || "";
+                if (detailsForId?.subject?.detailPath) {
+                    resolvedDetailPath = detailsForId.subject.detailPath;
+                }
             } catch {
                 /* ignore */
             }
 
             if (subjectId) {
-                const realPlayUrl = `${STREAM_BASE}/web/subject/play?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`;
-                const playerReferer = `https://h5.aoneroom.com/spa/videoPlayPage/movies/${path}?id=${subjectId}&lang=en`;
+                const realPlayUrl = `${STREAM_BASE}/web/subject/play?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(resolvedDetailPath)}`;
+                const playerReferer = `https://h5.aoneroom.com/spa/videoPlayPage/movies/${resolvedDetailPath}?id=${subjectId}&lang=en`;
 
                 const playController = new AbortController();
                 const playTimeout = setTimeout(
@@ -548,6 +552,8 @@ export const streamService = {
             "/wefeed-h5-bff/web/subject/download",
         ];
 
+        const canonicalPath = subject.detailPath || path;
+
         // ── TIER 1: Race ALL mirrors in parallel (use Promise.any to get first success) ──
         const tier1Tasks: Promise<StreamData | null>[] = [];
         for (const mirror of MIRRORS) {
@@ -560,7 +566,7 @@ export const streamService = {
                                 ref,
                                 epPath,
                                 subject.subjectId,
-                                path,
+                                canonicalPath,
                                 sAtt,
                                 eAtt,
                                 adult,

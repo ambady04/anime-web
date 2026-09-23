@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 // Streaming video — ensure no body size limit truncates the response
 export const maxDuration = 60;
+export const preferredRegion = ["sin1", "bom1", "hnd1", "kix1", "cdg1", "iad1"];
 
 const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
@@ -193,17 +194,21 @@ export async function GET(req: NextRequest) {
 
         const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
+        const spoofedIp = randomSpoofedIp();
+
         // Referers ordered by likelihood to work
         const refererCandidates = [
             referer,
             "https://videodownloader.site/",
+            "https://moviebox.ph/",
+            "https://movie-box.co/",
             "https://h5.aoneroom.com/",
         ];
         const uniqueReferers = Array.from(new Set(refererCandidates.filter(Boolean)));
 
         let upstreamResp: Response | null = null;
 
-        // ─── Strategy 1: Direct fetch with correct Referer ───
+        // ─── Strategy 1: Direct fetch with correct Referer and spoofed residential IP ───
         const attemptLogs: string[] = [];
         for (const ref of uniqueReferers) {
             const headers: Record<string, string> = {
@@ -212,18 +217,21 @@ export async function GET(req: NextRequest) {
                 "Accept-Encoding": "identity",
                 "Accept-Language": "en-US,en;q=0.9",
                 Referer: ref,
-                Origin: ref.replace(/\/$/, ""),
+                "X-Forwarded-For": spoofedIp,
+                "X-Real-IP": spoofedIp,
+                "CF-Connecting-IP": spoofedIp,
+                "Client-IP": spoofedIp,
+                "X-Client-IP": spoofedIp,
             };
             if (rangeHeader) headers["Range"] = rangeHeader;
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
                 const res = await fetch(url, {
                     headers,
                     signal: controller.signal,
                     redirect: "follow",
-                    cache: "no-store",
                 });
                 clearTimeout(timeoutId);
                 attemptLogs.push(`ref=${ref} -> status=${res.status} ${res.statusText}`);

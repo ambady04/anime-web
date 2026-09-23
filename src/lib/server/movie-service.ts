@@ -389,11 +389,46 @@ export const movieService = {
             throw new Error("Empty or invalid path");
         }
 
-        const rawData = await fetchFromPool<any>(
-            "/wefeed-h5api-bff/detail",
-            { detailPath: path },
-            { adult, useAuth: false },
-        );
+        let rawData: any;
+        try {
+            rawData = await fetchFromPool<any>(
+                "/wefeed-h5api-bff/detail",
+                { detailPath: path },
+                { adult, useAuth: false },
+            );
+        } catch (err) {
+            // Case-insensitive / search fallback: If path fails (e.g. wrong casing like YoJu6lgmUl9),
+            // search for the title portion and find the canonical detailPath!
+            try {
+                const parts = path.split("-");
+                const titleQuery = (
+                    parts.length > 1 && parts[parts.length - 1].length >= 6
+                        ? parts.slice(0, -1)
+                        : parts
+                ).join(" ");
+
+                if (titleQuery) {
+                    const searchRes = await movieService.search(titleQuery, 1, undefined, adult);
+                    const match = (searchRes.items || []).find((item) => {
+                        const iPath = (item.detailPath || "").toLowerCase();
+                        const target = path.toLowerCase();
+                        return (
+                            iPath === target ||
+                            iPath.includes(target) ||
+                            target.includes(iPath) ||
+                            (item.title && target.includes(item.title.toLowerCase().replace(/[^a-z0-9]/g, "-")))
+                        );
+                    });
+
+                    if (match && match.detailPath && match.detailPath !== path) {
+                        return movieService.getDetails(match.detailPath, adult);
+                    }
+                }
+            } catch {
+                /* fallthrough to original error */
+            }
+            throw err;
+        }
 
         const detailsData = (rawData.data || rawData) as ItemDetails;
 
