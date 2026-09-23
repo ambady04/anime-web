@@ -78,9 +78,9 @@ export default function ContinueWatching() {
                         return (
                             <motion.div
                                 key={item.detailPath}
-                                className="shrink-0 w-[220px] sm:w-[260px] md:w-[290px] xl:w-[320px] 2xl:w-[360px] 3xl:w-[420px] 4xl:w-[480px] rounded-[20px] overflow-hidden relative group"
+                                className="shrink-0 w-[220px] sm:w-[260px] md:w-[290px] xl:w-[320px] 2xl:w-[360px] 3xl:w-[420px] 4xl:w-[480px] rounded-[24px] overflow-hidden relative group"
                                 style={{
-                                    background: "#080808",
+                                    background: "rgba(15,15,25,0.6)",
                                     border: "1px solid rgba(255,255,255,0.06)",
                                     scrollSnapAlign: "start",
                                 }}
@@ -118,7 +118,7 @@ export default function ContinueWatching() {
                                                 background:
                                                     "linear-gradient(135deg, var(--primary), var(--primary-dark))",
                                                 boxShadow:
-                                                    "0 8px 32px rgba(229, 9, 20, 0.6)",
+                                                    "0 8px 32px rgba(225, 29, 72, 0.6)",
                                             }}
                                         >
                                             <Play className="w-5 h-5 fill-white text-white ml-[1px]" />
@@ -142,7 +142,7 @@ export default function ContinueWatching() {
                                             className="h-full rounded-full"
                                             style={{
                                                 background: "linear-gradient(90deg, var(--primary), var(--primary-light))",
-                                                boxShadow: "0 0 8px rgba(255,0,85,0.7)",
+                                                boxShadow: "0 0 8px rgba(225,29,72,0.7)",
                                             }}
                                             initial={{ width: 0 }}
                                             animate={{ width: `${item.progress}%` }}

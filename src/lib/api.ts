@@ -18,39 +18,26 @@ const getClientHeaders = (adult = false) => {
 };
 
 // Returns the URL of the video proxy endpoint.
-//
-// Why a proxy is needed:
-//   - The CDN (hakunaymatata.com) only accepts requests with whitelisted Referer/Origin headers.
-//   - Browser video elements send Origin: <current-host> which is rejected (403/429).
-//   - Cloudflare Worker egress IPs are blocked by CDN (502).
-//   - Direct browser streaming gets 429 Too Many Requests.
-//
-// Solution matrix:
-//   Cloudflare host (kixo.abisolutions.online) → use Render backend proxy (Node.js, spoofs Referer)
-//   Vercel/other Node.js host                  → use relative /api/video (runs on Node.js)
-//   NEXT_PUBLIC_VIDEO_PROXY_URL set             → always use that value
+// On localhost / 127.0.0.1, always uses local `/api/video` route.
+// In production, uses NEXT_PUBLIC_VIDEO_PROXY_URL if set, defaulting to relative `/api/video`.
 export function getVideoProxyBase(): string {
     if (typeof window !== "undefined") {
+        const host = window.location.hostname.toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1") {
+            return "/api/video";
+        }
         const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
         if (configuredUrl) {
             return configuredUrl;
         }
-        const host = window.location.hostname.toLowerCase();
-        // On Cloudflare-hosted deployments, /api/video runs in Cloudflare Workers
-        // which are blocked by the CDN. Use the Render backend proxy instead.
-        if (
-            host.includes("abisolutions.online") ||
-            host.includes("pages.dev")
-        ) {
-            const renderBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
-            return `${renderBase}/api/video`;
-        }
+        // Production: use Vercel's own /api/video route for live-resolve + proxy
+        // Vercel can reach the stream APIs and the signed URLs are valid for Vercel's IP
         return "/api/video";
     }
-    const renderBase = (process.env.NEXT_PUBLIC_API_URL || "https://anime-api-arlv.onrender.com").replace(/\/+$/, "");
-    return process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || `${renderBase}/api/video`;
+    const configuredUrl = process.env.NEXT_PUBLIC_VIDEO_PROXY_URL || "";
+    if (configuredUrl) return configuredUrl;
+    return "/api/video";
 }
-
 
 export interface ImageModel {
     url: string;
@@ -211,11 +198,14 @@ async function fetchFromApi<T>(
     const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
 
     // Use the Vercel/Render backend when configured
-    const rawApiBase = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL)
-        ? process.env.NEXT_PUBLIC_API_URL
-        : "";
+    const rawApiBase =
+        typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL
+            ? process.env.NEXT_PUBLIC_API_URL
+            : "";
     const apiBase = rawApiBase.replace(/\/+$/, "");
-    const cleanEndpoint = fullEndpoint.startsWith("/") ? fullEndpoint : `/${fullEndpoint}`;
+    const cleanEndpoint = fullEndpoint.startsWith("/")
+        ? fullEndpoint
+        : `/${fullEndpoint}`;
     const url = apiBase ? `${apiBase}${cleanEndpoint}` : cleanEndpoint;
 
     let lastError: Error | null = null;
@@ -235,7 +225,6 @@ async function fetchFromApi<T>(
         } catch (err: unknown) {
             lastError = err instanceof Error ? err : new Error(String(err));
             if (attempt < maxRetries - 1) {
-
                 await new Promise((r) => setTimeout(r, 100));
                 continue;
             }
@@ -254,7 +243,8 @@ export const parseResolution = (res?: string | number | null): number => {
     if (typeof res === "number") return isNaN(res) ? 0 : res;
     if (!res) return 0;
     const str = String(res).trim().toUpperCase();
-    if (str.includes("4K") || str.includes("UHD") || str.includes("2160")) return 2160;
+    if (str.includes("4K") || str.includes("UHD") || str.includes("2160"))
+        return 2160;
     if (str.includes("2K") || str.includes("1440")) return 1440;
     if (str.includes("FHD") || str.includes("1080")) return 1080;
     if (str.includes("HD") || str.includes("720")) return 720;
@@ -279,12 +269,16 @@ export const movieApi = {
             return movieService.getHome(adult);
         }
         try {
-            const data = await fetchFromApi<HomepageData>("/api/home", { adult });
+            const data = await fetchFromApi<HomepageData>("/api/home", {
+                adult,
+            });
             if (data && data.operatingList) {
                 data.operatingList = data.operatingList.map((op) => ({
                     ...op,
                     subjects: stripCamSubjects(
-                        (op.subjects || []).filter((s) => Boolean(s.detailPath)),
+                        (op.subjects || []).filter((s) =>
+                            Boolean(s.detailPath),
+                        ),
                     ),
                 }));
                 return data;
@@ -292,9 +286,12 @@ export const movieApi = {
         } catch {
             // Direct browser fallback if backend API is unreachable
         }
-        const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/home?host=h5-api.aoneroom.com`, {
-            headers: getClientHeaders(adult),
-        });
+        const directRes = await fetch(
+            `${H5_BASE}/wefeed-h5api-bff/home?host=h5-api.aoneroom.com`,
+            {
+                headers: getClientHeaders(adult),
+            },
+        );
         const json: any = await directRes.json();
         const data = (json.data || json) as HomepageData;
         if (data.operatingList) {
@@ -314,14 +311,20 @@ export const movieApi = {
             return movieService.getDetails(path, adult);
         }
         try {
-            const data = await fetchFromApi<ItemDetails>("/api/details", { path, adult });
+            const data = await fetchFromApi<ItemDetails>("/api/details", {
+                path,
+                adult,
+            });
             if (data && data.subject) return data;
         } catch {
             // Direct browser fallback if backend API is unreachable
         }
-        const directRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(path)}`, {
-            headers: getClientHeaders(adult),
-        });
+        const directRes = await fetch(
+            `${H5_BASE}/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(path)}`,
+            {
+                headers: getClientHeaders(adult),
+            },
+        );
         const json: any = await directRes.json();
         return (json.data || json) as ItemDetails;
     },
@@ -337,126 +340,73 @@ export const movieApi = {
             return streamService.getStream(path, season, episode, adult);
         }
 
-        // Use fetchFromApi which routes to Vercel (api.abisolutions.online) via
-        // NEXT_PUBLIC_API_URL. Vercel can reach h5-api.aoneroom.com without 429.
-        try {
-            const params: Record<string, string | number | boolean> = { path };
-            if (season) params.season = season;
-            if (episode) params.episode = episode;
-            if (adult) params.adult = adult;
-            const res = await fetchFromApi<StreamData>("/api/stream", params);
-            if (res && Array.isArray(res.downloads) && res.downloads.length > 0) return res;
-            throw new Error("Empty stream downloads from API backend");
-        } catch {
-            // Direct browser fallback — Backend API failed or region blocked, try h5-api directly
-        }
-
-        const details = await movieApi.getDetails(path, adult);
-        const subjectId = details.subject?.subjectId;
-        if (!subjectId) {
-            return { downloads: [], captions: [], hasResource: false, limited: false, limitedCode: "", stream_domain: "https://videodownloader.site/" };
-        }
-
-        const isSeries = isSeriesType(details.subject?.subjectType);
-        const reqSeason = season > 0 ? season : (isSeries ? 1 : 0);
-        const reqEpisode = episode > 0 ? episode : (isSeries ? 1 : 0);
-
-        let token = "";
-        try {
-            const tokenRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Referer: "https://videodownloader.site/" },
-                body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
-            });
-            const xUser = tokenRes.headers.get("x-user");
-            if (xUser) token = JSON.parse(xUser).token;
-        } catch {
-            // Ignore
-        }
-
-        const dlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(path)}`, {
-            headers: {
-                ...getClientHeaders(adult),
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
-                ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
-            },
-        });
-        const dlJson: any = await dlRes.json();
-        const data = dlJson.data || dlJson;
-        const parseDownloadLinks = (rawObj: any): DownloadLink[] => {
-            const raw =
-                rawObj?.downloads ||
-                rawObj?.downloadList ||
-                rawObj?.resourceList ||
-                rawObj?.sources ||
-                rawObj?.playList ||
-                [];
-            if (!Array.isArray(raw)) return [];
-            return raw
-                .map((d: any, idx: number) => {
-                    const rawUrl =
-                        d.url ||
-                        d.playUrl ||
-                        d.downloadUrl ||
-                        d.videoUrl ||
-                        d.hlsUrl ||
-                        d.link ||
-                        (typeof d === "string" ? d : "");
-                    if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim())
-                        return null;
-                    return {
-                        id: String(d.id || d.resolution || idx),
-                        url: rawUrl.trim(),
-                        resolution: parseResolution(
-                            d.resolution || d.quality || d.name || 720,
-                        ),
-                        size: Number(d.size || d.fileSize || 0),
-                    };
-                })
-                .filter((d: any): d is DownloadLink => d !== null);
-        };
-
-        let downloads: DownloadLink[] = parseDownloadLinks(data);
-
-        // Fallback to dub tracks if primary download is empty for series
-        if (downloads.length === 0 && details.dubs && details.dubs.length > 0) {
-            for (const dub of details.dubs) {
-                if (!dub.detailPath || dub.detailPath === path) continue;
-                try {
-                    const dubDetails = await movieApi.getDetails(dub.detailPath, adult);
-                    const dubSubId = dubDetails.subject?.subjectId;
-                    if (!dubSubId) continue;
-
-                    const dubDlRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/download?subjectId=${dubSubId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(dub.detailPath)}`, {
-                        headers: {
-                            ...getClientHeaders(adult),
-                            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
-                            ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
-                        },
+        // Retry logic: up to 4 attempts with 2s delay — server-side is the only reliable path
+        // (browser-direct h5-api calls fail due to CORS blocking x-user token header)
+        const maxAttempts = 4;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                const params: Record<string, string | number | boolean> = {
+                    path,
+                };
+                if (season) params.season = season;
+                if (episode) params.episode = episode;
+                if (adult) params.adult = adult;
+                const res = await fetchFromApi<StreamData>(
+                    "/api/stream",
+                    params,
+                );
+                if (
+                    res &&
+                    Array.isArray(res.downloads) &&
+                    res.downloads.length > 0
+                ) {
+                    // Filter out embed/iframe URLs that may come from an outdated backend
+                    res.downloads = res.downloads.filter((d: any) => {
+                        if (d.isEmbed) return false;
+                        const u = (d.url || "").toLowerCase();
+                        try {
+                            const hn = new URL(u).hostname;
+                            if (
+                                hn.includes("vidsrc") ||
+                                hn.includes("autoembed") ||
+                                hn.includes("2embed") ||
+                                hn.includes("vidplay") ||
+                                hn.includes("superembed") ||
+                                hn.includes("embedsu")
+                            )
+                                return false;
+                        } catch {
+                            /* ignore */
+                        }
+                        return true;
                     });
-                    const dubJson: any = await dubDlRes.json();
-                    const dubData = dubJson.data || dubJson;
-                    const dubDl = parseDownloadLinks(dubData);
-                    if (dubDl.length > 0) {
-                        downloads = dubDl;
-                        break;
+                    if (res.downloads.length > 0) {
+                        return res;
                     }
-                } catch {
-                    // Ignore dub error
+                }
+                // hasResource but no downloads — retry after delay
+                if (attempt < maxAttempts - 1) {
+                    await new Promise((r) => setTimeout(r, 2000));
+                }
+            } catch {
+                // Backend API failed — retry
+                if (attempt < maxAttempts - 1) {
+                    await new Promise((r) => setTimeout(r, 1500));
                 }
             }
         }
 
+        // Server-side stream resolution exhausted — return empty
+        // (Browser-direct h5-api calls cannot work due to CORS blocking the x-user auth token)
         return {
-            downloads,
-            captions: data.captions || data.captionList || [],
-            hasResource: true,
-            limited: Boolean(data.limited),
-            limitedCode: data.limitedCode || "",
+            downloads: [],
+            captions: [],
+            hasResource: false,
+            limited: false,
+            limitedCode: "",
             stream_domain: "https://videodownloader.site/",
         };
     },
-
     search: async (
         q: string,
         page = 1,
@@ -468,12 +418,15 @@ export const movieApi = {
             return movieService.search(q, page, type, adult);
         }
         try {
-            const res = await fetchFromApi<{ items: Subject[] }>("/api/search", {
-                q,
-                page,
-                type: type ?? "",
-                adult,
-            });
+            const res = await fetchFromApi<{ items: Subject[] }>(
+                "/api/search",
+                {
+                    q,
+                    page,
+                    type: type ?? "",
+                    adult,
+                },
+            );
             if (res && res.items && res.items.length > 0) return res;
         } catch {
             // Direct browser fallback
@@ -481,30 +434,53 @@ export const movieApi = {
 
         let token = "";
         try {
-            const tokenRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Referer: "https://videodownloader.site/" },
-                body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
-            });
+            const tokenRes = await fetch(
+                `${H5_BASE}/wefeed-h5api-bff/subject/search-suggest`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Referer: "https://videodownloader.site/",
+                    },
+                    body: JSON.stringify({ keyword: "avatar", perPage: 0 }),
+                },
+            );
             const xUser = tokenRes.headers.get("x-user");
             if (xUser) token = JSON.parse(xUser).token;
         } catch {
             // Ignore
         }
 
-        const searchRes = await fetch(`${H5_BASE}/wefeed-h5api-bff/subject/search`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                ...getClientHeaders(adult),
-                ...(token ? { Authorization: `Bearer ${token}`, Cookie: `token=${token}` } : {}),
+        const searchRes = await fetch(
+            `${H5_BASE}/wefeed-h5api-bff/subject/search`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getClientHeaders(adult),
+                    ...(token
+                        ? {
+                              Authorization: `Bearer ${token}`,
+                              Cookie: `token=${token}`,
+                          }
+                        : {}),
+                },
+                body: JSON.stringify({
+                    keyword: q,
+                    page,
+                    perPage: 24,
+                    subjectType: type ?? 0,
+                }),
             },
-            body: JSON.stringify({ keyword: q, page, perPage: 24, subjectType: type ?? 0 }),
-        });
+        );
         const json: any = await searchRes.json();
         const data = json.data || json;
         const rawItems = data.items || [];
-        return { items: stripCamSubjects(rawItems.filter((i: Subject) => Boolean(i?.detailPath))) };
+        return {
+            items: stripCamSubjects(
+                rawItems.filter((i: Subject) => Boolean(i?.detailPath)),
+            ),
+        };
     },
 
     getCategory: async (

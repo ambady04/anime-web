@@ -6,7 +6,7 @@
 //   3. /_next/static/*               → Network-First (Fresh JS/CSS bundles on new deployments)
 //   4. Page navigations              → Network-First (Fresh HTML, offline fallback)
 
-const STATIC_CACHE = "kixo-static-v17";
+const STATIC_CACHE = "kixo-static-v20";
 const IMAGE_CACHE = "kixo-images-v3";
 const IMAGE_CACHE_MAX_ENTRIES = 500;
 
@@ -46,12 +46,19 @@ self.addEventListener("fetch", (event) => {
     const isSameOrigin = url.origin === self.location.origin;
 
     // ── 1. ALL API ROUTES & SERVICE WORKER → Network-Only (No SW interception) ───
-    if (isSameOrigin && (url.pathname.startsWith("/api/") || url.pathname === "/sw.js")) {
+    if (
+        isSameOrigin &&
+        (url.pathname.startsWith("/api/") || url.pathname === "/sw.js")
+    ) {
         return;
     }
 
-    // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Intercept & inject valid Referer header ─
-    if (!isSameOrigin && (url.hostname.includes("hakunaymatata.com") || url.hostname.includes("aoneroom.com"))) {
+    // ── 1.5. EXTERNAL CDN VIDEO STREAMS → Intercept & attach whitelisted Referer ─
+    if (
+        !isSameOrigin &&
+        (url.hostname.includes("hakunaymatata.com") ||
+            url.hostname.includes("aoneroom.com"))
+    ) {
         const isVideo =
             /\.(mp4|m3u8|ts|webm)(\?|$)/i.test(url.pathname) ||
             url.pathname.includes("/bt/") ||
@@ -60,23 +67,24 @@ self.addEventListener("fetch", (event) => {
         if (isVideo) {
             event.respondWith(
                 (async () => {
-                    const reqHeaders = new Headers(event.request.headers);
-                    reqHeaders.set("Referer", "https://videodownloader.site/");
-                    reqHeaders.set("Origin", "https://videodownloader.site");
-
-                    const modifiedReq = new Request(event.request, {
-                        headers: reqHeaders,
-                        mode: "cors",
-                        credentials: "omit",
-                    });
+                    const range = event.request.headers.get("range");
+                    const fetchHeaders = {};
+                    if (range) fetchHeaders["Range"] = range;
 
                     try {
-                        const response = await fetch(modifiedReq);
+                        const response = await fetch(event.request.url, {
+                            method: "GET",
+                            headers: fetchHeaders,
+                            referrer: "https://videodownloader.site/",
+                            referrerPolicy: "unsafe-url",
+                            mode: "cors",
+                            credentials: "omit",
+                        });
                         return response;
-                    } catch {
+                    } catch (err) {
                         return fetch(event.request);
                     }
-                })()
+                })(),
             );
             return;
         }
@@ -126,11 +134,17 @@ self.addEventListener("fetch", (event) => {
                 .then((response) => {
                     if (response.ok) {
                         const copy = response.clone();
-                        caches.open(STATIC_CACHE).then((cache) => cache.put(event.request, copy));
+                        caches
+                            .open(STATIC_CACHE)
+                            .then((cache) => cache.put(event.request, copy));
                     }
                     return response;
                 })
-                .catch(() => caches.match(event.request).then((r) => r || Response.error())),
+                .catch(() =>
+                    caches
+                        .match(event.request)
+                        .then((r) => r || Response.error()),
+                ),
         );
         return;
     }

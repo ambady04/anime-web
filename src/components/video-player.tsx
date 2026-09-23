@@ -49,31 +49,6 @@ interface VideoPlayerProps {
     shouldPause?: boolean;
 }
 
-const isEmbedStream = (download: DownloadLink | null | undefined): boolean => {
-    if (!download) return false;
-    if ((download as any).isEmbed) return true;
-    const url = (download.url || "").toLowerCase();
-    return (
-        url.includes("vidsrc") ||
-        url.includes("autoembed") ||
-        url.includes("2embed") ||
-        url.includes("embed") ||
-        url.includes("player") ||
-        url.includes("vidplay") ||
-        url.includes("superembed")
-    );
-};
-
-const getEmbedSrcUrl = (rawUrl: string) => {
-    if (!rawUrl) return "";
-    let url = rawUrl;
-    if (!url.includes("autoplay=")) {
-        const joiner = url.includes("?") ? "&" : "?";
-        url = `${url}${joiner}autoplay=1&autostart=true`;
-    }
-    return url;
-};
-
 // Format second timestamps to HH:MM:SS text
 const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -113,8 +88,34 @@ export default function VideoPlayer({
 
     // Stream options
     // Memoize derived arrays from streamData to stabilize references across renders
+    // Filter out embed/iframe URLs — only keep direct stream downloads
     const downloads = useMemo(
-        () => streamData.downloads || [],
+        () =>
+            (streamData.downloads || []).filter((d) => {
+                if ((d as any).isEmbed) return false;
+                const url = (d.url || "").toLowerCase();
+                try {
+                    const hn = new URL(url).hostname;
+                    if (
+                        hn.includes("vidsrc") ||
+                        hn.includes("autoembed") ||
+                        hn.includes("2embed") ||
+                        hn.includes("vidplay") ||
+                        hn.includes("superembed") ||
+                        hn.includes("embedsu")
+                    )
+                        return false;
+                } catch {
+                    if (
+                        url.includes("vidsrc.") ||
+                        url.includes("autoembed.") ||
+                        url.includes("2embed.") ||
+                        url.includes("superembed.")
+                    )
+                        return false;
+                }
+                return true;
+            }),
         [streamData.downloads],
     );
     const captions = useMemo(
@@ -122,18 +123,13 @@ export default function VideoPlayer({
         [streamData.captions],
     );
 
-    // Sort qualities from highest to lowest — prioritizing native direct MP4 streams first!
+    // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
+    // Note: Embed streams are kept as a last-resort fallback.
     const sortedDownloads = useMemo(() => {
-        const list = downloads.filter(
-            (d) => parseResolution(d.resolution) <= 1080,
-        );
-        const sourceList = list.length > 0 ? list : downloads;
-
-        return [...sourceList].sort((a, b) => {
-            const aEmbed = isEmbedStream(a) ? 1 : 0;
-            const bEmbed = isEmbedStream(b) ? 1 : 0;
-            if (aEmbed !== bEmbed) return aEmbed - bEmbed; // Native direct MP4 streams ALWAYS come first
-            return parseResolution(b.resolution) - parseResolution(a.resolution);
+        return [...downloads].sort((a, b) => {
+            const resA = parseResolution(a.resolution) || 0;
+            const resB = parseResolution(b.resolution) || 0;
+            return resB - resA;
         });
     }, [downloads]);
 
@@ -202,8 +198,8 @@ export default function VideoPlayer({
             }
             const resumeTime =
                 historyItem &&
-                historyItem.progress < 95 &&
-                historyItem.currentTime > 5
+                    historyItem.progress < 95 &&
+                    historyItem.currentTime > 5
                     ? historyItem.currentTime
                     : 0;
             return resumeTime;
@@ -264,14 +260,19 @@ export default function VideoPlayer({
 
         if (typeof HTMLAnchorElement !== "undefined") {
             const originalAnchorClick = HTMLAnchorElement.prototype.click;
-            HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+            HTMLAnchorElement.prototype.click = function (
+                this: HTMLAnchorElement,
+            ) {
                 if (
                     this.target === "_blank" ||
                     this.target === "_top" ||
                     this.target === "_parent" ||
                     (this.href && !this.href.includes(window.location.hostname))
                 ) {
-                    console.warn("[Ad Shield] Blocked dynamic anchor ad click:", this.href);
+                    console.warn(
+                        "[Ad Shield] Blocked dynamic anchor ad click:",
+                        this.href,
+                    );
                     return;
                 }
                 return originalAnchorClick.apply(this, arguments as any);
@@ -286,9 +287,13 @@ export default function VideoPlayer({
                 (link.target === "_blank" ||
                     link.target === "_top" ||
                     link.target === "_parent" ||
-                    (link.href && !link.href.includes(window.location.hostname)))
+                    (link.href &&
+                        !link.href.includes(window.location.hostname)))
             ) {
-                console.warn("[Ad Shield] Intercepted ad redirect/click:", link.href);
+                console.warn(
+                    "[Ad Shield] Intercepted ad redirect/click:",
+                    link.href,
+                );
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -300,7 +305,10 @@ export default function VideoPlayer({
         document.addEventListener("pointerdown", blockAdEvent, true);
 
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (document.activeElement && document.activeElement.tagName === "IFRAME") {
+            if (
+                document.activeElement &&
+                document.activeElement.tagName === "IFRAME"
+            ) {
                 e.preventDefault();
                 e.returnValue = "Stream Protection: Prevent external redirect";
                 return e.returnValue;
@@ -393,8 +401,14 @@ export default function VideoPlayer({
         window.addEventListener("storage", handleSizeChange);
 
         return () => {
-            window.removeEventListener("kixo-subtitle-font-changed", handleFontChange);
-            window.removeEventListener("kixo-subtitle-size-changed", handleSizeChange);
+            window.removeEventListener(
+                "kixo-subtitle-font-changed",
+                handleFontChange,
+            );
+            window.removeEventListener(
+                "kixo-subtitle-size-changed",
+                handleSizeChange,
+            );
             window.removeEventListener("storage", handleFontChange);
             window.removeEventListener("storage", handleSizeChange);
         };
@@ -560,22 +574,57 @@ export default function VideoPlayer({
         if (!isHistoryChecked || !activeDownload) return;
 
         let isCancelled = false;
+
+        // Safety: reject embed/iframe URLs that should never reach the video element
+        const dlUrl = (activeDownload.url || "").toLowerCase();
+        try {
+            const hn = new URL(dlUrl).hostname;
+            if (
+                hn.includes("vidsrc") ||
+                hn.includes("autoembed") ||
+                hn.includes("2embed") ||
+                hn.includes("vidplay") ||
+                hn.includes("superembed") ||
+                hn.includes("embedsu")
+            ) {
+                handlePlayerError(new Error("Embed URL rejected"));
+                return;
+            }
+        } catch {
+            /* ignore parse errors */
+        }
+
         const referer = "https://videodownloader.site/";
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
-        const isExternalUrl = activeDownload.url.startsWith("http://") || activeDownload.url.startsWith("https://");
-        const isDirectFallback = directFallbackUrlsRef.current.has(activeDownload.url);
+        const isExternalUrl =
+            activeDownload.url.startsWith("http://") ||
+            activeDownload.url.startsWith("https://");
+        const hasActiveServiceWorker =
+            typeof navigator !== "undefined" &&
+            Boolean(navigator.serviceWorker?.controller);
 
-        const src = isExternalUrl
-            ? isDirectFallback
+        // Build the video source URL
+        // All video streams route through proxyBase (/api/video) which injects Referer: https://videodownloader.site/
+        let src: string;
+        if (isExternalUrl) {
+            const isDirectFallbackAttempt = directFallbackUrlsRef.current.has(
+                activeDownload.url,
+            );
+            src = isDirectFallbackAttempt || !proxyBase
                 ? activeDownload.url
-                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`
-            : activeDownload.url;
+                : `${proxyBase}?url=${encodeURIComponent(activeDownload.url)}&referer=${encodeURIComponent(referer)}&mode=stream&quality=${qualityVal}`;
+        } else {
+            src = activeDownload.url;
+        }
 
         const setup = () => {
             const video = videoRef.current;
             if (!video || isCancelled) return;
+
+            // Don't set referrerpolicy - let browser send default page Referer to CDN
+            // CDNs typically just check that a valid Referer exists
 
             isInitialLoadRef.current = true;
             isRecoveringRef.current = false;
@@ -651,28 +700,25 @@ export default function VideoPlayer({
                 }
             } else {
                 // Progressive MP4 / WebM
+                // Do NOT call play() immediately — wait for the video to load
+                // enough data (handled by onLoadedData/onCanPlay → isVideoLoaded
+                // → initial-seek effect which calls play() safely after seek).
                 const currentSrcAttr = video.getAttribute("src") || video.src;
-                if (!currentSrcAttr || !currentSrcAttr.includes(encodeURIComponent(activeDownload.url))) {
+                if (
+                    !currentSrcAttr ||
+                    !currentSrcAttr.includes(
+                        encodeURIComponent(activeDownload.url),
+                    )
+                ) {
                     video.src = src;
                     video.load();
-                }
-                const playPromise = video.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            if (isCancelled) return;
-                            setIsPlaying(true);
-                            setIsLoading(false);
-                            isInitialLoadRef.current = false;
-                        })
-                        .catch(() => {
-                            // Playback pending user click or browser autoplay policy
-                            if (!isCancelled) {
-                                setIsPlaying(false);
-                                setIsLoading(false);
-                                isInitialLoadRef.current = false;
-                            }
-                        });
+                } else {
+                    // Same source already set — trigger loaded state
+                    if (video.readyState >= 2) {
+                        setIsVideoLoaded(true);
+                        setIsLoading(false);
+                        isInitialLoadRef.current = false;
+                    }
                 }
             }
         };
@@ -791,8 +837,8 @@ export default function VideoPlayer({
 
         const resumeTime =
             historyItem &&
-            historyItem.progress < 95 &&
-            historyItem.currentTime > 5
+                historyItem.progress < 95 &&
+                historyItem.currentTime > 5
                 ? historyItem.currentTime
                 : 0;
         setInitialSeekTime(resumeTime);
@@ -811,7 +857,7 @@ export default function VideoPlayer({
                 videoRef.current.removeAttribute("src");
                 videoRef.current.load();
             }
-            if (refreshCountRef.current < 2) {
+            if (refreshCountRef.current < 3) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
                 setIsLoading(true);
@@ -836,18 +882,21 @@ export default function VideoPlayer({
         if (captions.length > 0) {
             // Identify the language of the current audio track from the dubs list
             const currentDub = dubs?.find(
-                (d) => decodeURIComponent(d.detailPath) === decodeURIComponent(detailPath)
+                (d) =>
+                    decodeURIComponent(d.detailPath) ===
+                    decodeURIComponent(detailPath),
             );
             const currentLang = currentDub?.lanName?.toLowerCase() ?? "";
             const currentLanCode = currentDub?.lanCode?.toLowerCase() ?? "";
 
             // Try to match caption to current dub language
-            let defaultCaption: typeof captions[0] | undefined;
+            let defaultCaption: (typeof captions)[0] | undefined;
             if (currentLang) {
                 defaultCaption = captions.find(
                     (c) =>
                         c.lanName?.toLowerCase().includes(currentLang) ||
-                        (currentLanCode && c.lan?.toLowerCase() === currentLanCode),
+                        (currentLanCode &&
+                            c.lan?.toLowerCase() === currentLanCode),
                 );
             }
             // Fall back to English
@@ -894,9 +943,9 @@ export default function VideoPlayer({
         if (typeof document !== "undefined") {
             setIsPiPSupported(
                 document.pictureInPictureEnabled ||
-                    (videoRef.current &&
-                        "requestPictureInPicture" in videoRef.current) ||
-                    false,
+                (videoRef.current &&
+                    "requestPictureInPicture" in videoRef.current) ||
+                false,
             );
         }
     }, []);
@@ -943,7 +992,10 @@ export default function VideoPlayer({
                 srtUrl.includes("Policy=") &&
                 !srtUrl.includes("Key-Pair-Id=")
             ) {
-                console.warn("Subtitle URL lacks CloudFront Key-Pair-Id, skipping subtitle track safely:", srtUrl);
+                console.warn(
+                    "Subtitle URL lacks CloudFront Key-Pair-Id, skipping subtitle track safely:",
+                    srtUrl,
+                );
                 setSubtitleUrl((prev) => {
                     if (prev && prev.startsWith("blob:")) {
                         URL.revokeObjectURL(prev);
@@ -958,12 +1010,17 @@ export default function VideoPlayer({
             if (srtUrl.startsWith("http://") || srtUrl.startsWith("https://")) {
                 try {
                     const targetOrigin = new URL(srtUrl).origin;
-                    if (typeof window !== "undefined" && targetOrigin !== window.location.origin) {
+                    if (
+                        typeof window !== "undefined" &&
+                        targetOrigin !== window.location.origin
+                    ) {
                         const proxyBase = getVideoProxyBase();
                         const referer = "https://videodownloader.site/";
-                        fetchUrl = `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`;
+                        fetchUrl = proxyBase
+                            ? `${proxyBase}?url=${encodeURIComponent(srtUrl)}&referer=${encodeURIComponent(referer)}&mode=subtitle`
+                            : srtUrl;
                     }
-                } catch {}
+                } catch { }
             }
 
             const res = await fetch(fetchUrl);
@@ -971,15 +1028,19 @@ export default function VideoPlayer({
             const srtText = await res.text();
 
             const trimmedText = srtText.trim();
-            // Guard: If response is an XML or JSON error payload (e.g. CloudFront MissingKey), ignore safely
+            // Guard: If response is HTML, XML, or JSON error payload (e.g. CloudFront MissingKey / 404 HTML), ignore safely
             if (
+                trimmedText.toLowerCase().startsWith("<!doctype") ||
+                trimmedText.toLowerCase().startsWith("<html") ||
                 trimmedText.startsWith("<?xml") ||
                 trimmedText.startsWith("<Error") ||
                 trimmedText.startsWith('{"error"') ||
                 trimmedText.includes("MissingKey") ||
                 trimmedText.includes("AccessDenied")
             ) {
-                throw new Error("Subtitle response returned XML/JSON error payload");
+                throw new Error(
+                    "Subtitle response returned invalid HTML/XML/JSON error payload",
+                );
             }
 
             // Simple SRT to WebVTT formatting conversion if not already WebVTT
@@ -987,7 +1048,9 @@ export default function VideoPlayer({
             if (trimmedText.startsWith("WEBVTT")) {
                 vttText = srtText;
             } else {
-                vttText = "WEBVTT\n\n" + srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
+                vttText =
+                    "WEBVTT\n\n" +
+                    srtText.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2");
             }
 
             const blob = new Blob([vttText], { type: "text/vtt" });
@@ -1021,7 +1084,12 @@ export default function VideoPlayer({
 
     const handlePlayerError = (e: unknown) => {
         // If the error target is not the video element itself (e.g. subtitle track element), ignore
-        if (e && typeof e === "object" && "target" in e && (e as any).target !== videoRef.current) {
+        if (
+            e &&
+            typeof e === "object" &&
+            "target" in e &&
+            (e as any).target !== videoRef.current
+        ) {
             return;
         }
 
@@ -1051,7 +1119,13 @@ export default function VideoPlayer({
         }
 
         // GUARD: Ignore error events if video src is empty, missing, or uninitialized (e.g. from removeAttribute or load reset)
-        if (!video || !video.src || video.src === "" || video.src === window.location.href || !video.currentSrc) {
+        if (
+            !video ||
+            !video.src ||
+            video.src === "" ||
+            video.src === window.location.href ||
+            !video.currentSrc
+        ) {
             return;
         }
 
@@ -1101,11 +1175,14 @@ export default function VideoPlayer({
         // Try alternate URL formats for this quality before giving up.
         // The primary url may be source_url (direct); fallback to resource_link (CloudFront via proxy)
         // or vice versa — whichever wasn't tried yet.
-        const altUrl = activeDownload.resource_link && activeDownload.resource_link !== activeDownload.url
-            ? activeDownload.resource_link
-            : (activeDownload.source_url && activeDownload.source_url !== activeDownload.url
-                ? activeDownload.source_url
-                : null);
+        const altUrl =
+            activeDownload.resource_link &&
+                activeDownload.resource_link !== activeDownload.url
+                ? activeDownload.resource_link
+                : activeDownload.source_url &&
+                    activeDownload.source_url !== activeDownload.url
+                    ? activeDownload.source_url
+                    : null;
 
         if (altUrl && !failedUrlsRef.current.has(altUrl)) {
             failedUrlsRef.current.add(activeDownload.url);
@@ -1120,10 +1197,18 @@ export default function VideoPlayer({
             return;
         }
 
-        // Direct stream fallback: if proxy fails on server, retry direct client stream
+        // Direct stream fallback: for CDN URLs that failed direct, try proxy next
+        // For non-CDN URLs that failed proxy, try direct next
+        const isCdnStream =
+            activeDownload.url.includes("hakunaymatata.com") ||
+            activeDownload.url.includes("aoneroom.com");
         if (!directFallbackUrlsRef.current.has(activeDownload.url)) {
             directFallbackUrlsRef.current.add(activeDownload.url);
-            setAutoRetryLabel("Switching to direct stream...");
+            setAutoRetryLabel(
+                isCdnStream
+                    ? "Switching to proxy stream..."
+                    : "Switching to direct stream...",
+            );
             setIsLoading(true);
             setInitialSeekTime(videoRef.current?.currentTime || 0);
             setIsInitialSeekDone(false);
@@ -1136,18 +1221,12 @@ export default function VideoPlayer({
         failedUrlsRef.current.add(activeDownload.url);
         if (altUrl) failedUrlsRef.current.add(altUrl);
 
-        // Step 1: Try next available quality (only if in Auto Quality mode)
-        // Prioritize native direct MP4 streams (!isEmbed) FIRST before attempting web embeds
         const nextQuality = isAutoQuality
-            ? (sortedDownloads.find((d) => !isEmbedStream(d) && !failedUrlsRef.current.has(d.url)) ||
-               sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url)))
+            ? sortedDownloads.find((d) => !failedUrlsRef.current.has(d.url))
             : undefined;
         if (nextQuality) {
-            const isNextEmbed = isEmbedStream(nextQuality);
             setAutoRetryLabel(
-                isNextEmbed
-                    ? `Auto-switching to ${(nextQuality as any).name || "Web Embed Server"}...`
-                    : `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
+                `Auto-switching to ${parseResolution(nextQuality.resolution)}p...`,
             );
             setIsLoading(true);
             // Save current position so initial-seek effect restores it after new source loads
@@ -1155,20 +1234,13 @@ export default function VideoPlayer({
             setIsInitialSeekDone(false);
             setIsVideoLoaded(false);
             setTimeout(() => setActiveDownload(nextQuality), 200);
-        } else if (refreshCountRef.current < 5) {
-            // Step 2: All qualities failed / expired — fetch fresh stream URLs from API
-            refreshCountRef.current += 1;
-            setAutoRetryLabel("Fetching fresh stream links...");
-            setIsLoading(true);
-            refreshStreamData();
         } else {
-            // Step 3: Check if an embed fallback exists before showing error screen
-            const embedFallback = sortedDownloads.find((d) => isEmbedStream(d));
-            if (embedFallback && activeDownload?.id !== embedFallback.id) {
-                setAutoRetryLabel("Switching to Web Embed Server...");
+            // All direct stream qualities failed — try refreshing
+            if (refreshCountRef.current < 3) {
+                refreshCountRef.current += 1;
+                setAutoRetryLabel("Fetching fresh stream links...");
                 setIsLoading(true);
-                setPlayerError(false);
-                setTimeout(() => setActiveDownload(embedFallback), 200);
+                refreshStreamData();
             } else {
                 console.error(
                     "Video player: all stream qualities failed:",
@@ -1203,14 +1275,20 @@ export default function VideoPlayer({
 
                 // Pick best available quality from fresh data (respecting user's choice if manual)
                 const freshSorted = [...freshStream.downloads].sort(
-                    (a, b) => parseResolution(b.resolution) - parseResolution(a.resolution),
+                    (a, b) =>
+                        parseResolution(b.resolution) -
+                        parseResolution(a.resolution),
                 );
-                const currentResolution = activeDownload ? parseResolution(activeDownload.resolution) : 0;
+                const currentResolution = activeDownload
+                    ? parseResolution(activeDownload.resolution)
+                    : 0;
                 const pick =
                     !isAutoQuality && currentResolution
                         ? freshSorted.find(
-                              (d) => parseResolution(d.resolution) === currentResolution,
-                          ) || freshSorted[0]
+                            (d) =>
+                                parseResolution(d.resolution) ===
+                                currentResolution,
+                        ) || freshSorted[0]
                         : freshSorted[0]; // highest available quality (4K/1080p)
 
                 setActiveDownload(pick);
@@ -1241,7 +1319,12 @@ export default function VideoPlayer({
             stallTimerRef.current = setTimeout(() => {
                 const video = videoRef.current;
                 // Only escalate if the video is genuinely stalled (not loading/playing)
-                if (video && (video.readyState >= 1 || video.currentTime > 0 || !video.paused)) {
+                if (
+                    video &&
+                    (video.readyState >= 1 ||
+                        video.currentTime > 0 ||
+                        !video.paused)
+                ) {
                     // Video has data or is playing — clear spinner
                     setIsLoading(false);
                     isInitialLoadRef.current = false;
@@ -1267,7 +1350,8 @@ export default function VideoPlayer({
         setCurrentTime(current);
 
         if (current > 0 || videoRef.current.readyState >= 2) {
-            if (waitingTimeoutRef.current) clearTimeout(waitingTimeoutRef.current);
+            if (waitingTimeoutRef.current)
+                clearTimeout(waitingTimeoutRef.current);
             setIsLoading(false);
             isInitialLoadRef.current = false;
         }
@@ -1412,7 +1496,10 @@ export default function VideoPlayer({
                         setIsPlaying(true);
                     })
                     .catch((err) => {
-                        if (err?.name !== "NotSupportedError" && err?.name !== "AbortError") {
+                        if (
+                            err?.name !== "NotSupportedError" &&
+                            err?.name !== "AbortError"
+                        ) {
                             console.warn("Play interaction notice:", err);
                         }
                         setIsPlaying(false);
@@ -1534,7 +1621,7 @@ export default function VideoPlayer({
             screen.orientation &&
             (screen.orientation as any).lock
         ) {
-            (screen.orientation as any).lock("landscape").catch(() => {});
+            (screen.orientation as any).lock("landscape").catch(() => { });
         }
     };
 
@@ -1542,7 +1629,7 @@ export default function VideoPlayer({
         if (screen.orientation && (screen.orientation as any).unlock) {
             try {
                 (screen.orientation as any).unlock();
-            } catch (_) {}
+            } catch (_) { }
         }
     };
 
@@ -2346,15 +2433,14 @@ export default function VideoPlayer({
             onTouchStart={handleGestureTouchStart}
             onTouchMove={handleGestureTouchMove}
             onTouchEnd={handleGestureTouchEnd}
-            className={`relative w-full ${
-                isFullscreen
+            className={`relative w-full ${isFullscreen
                     ? "fixed inset-0 z-50 h-screen w-screen rounded-none border-none"
                     : "aspect-video rounded-2xl border border-glass-border shadow-2xl"
-            } bg-black select-none overflow-hidden group/player ${
-                isPlaying && !showControls ? "cursor-none" : ""
-            }`}
+                } bg-black select-none overflow-hidden group/player ${isPlaying && !showControls ? "cursor-none" : ""
+                }`}
         >
             <style
+                suppressHydrationWarning
                 dangerouslySetInnerHTML={{
                     __html: `
                 video {
@@ -2362,78 +2448,75 @@ export default function VideoPlayer({
                 }
                 video::cue {
                     font-size: ${subtitleSize} !important;
-                    font-family: ${
-                        subtitleFont === "inter"
+                    font-family: ${subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
-                    } !important;
+                                ? "Roboto, Arial, sans-serif"
+                                : subtitleFont === "trebuchet"
+                                    ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                    : subtitleFont === "monospace"
+                                        ? '"Courier New", Courier, monospace'
+                                        : subtitleFont === "serif"
+                                            ? 'Georgia, "Times New Roman", serif'
+                                            : subtitleFont === "impact"
+                                                ? 'Impact, "Arial Black", sans-serif'
+                                                : subtitleFont === "comic"
+                                                    ? '"Comic Sans MS", "Comic Sans", cursive'
+                                                    : subtitleFont === "verdana"
+                                                        ? "Verdana, Geneva, sans-serif"
+                                                        : subtitleFont === "lucida"
+                                                            ? '"Lucida Console", Monaco, monospace'
+                                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                        } !important;
                     background: rgba(0, 0, 0, 0.75) !important;
                     text-shadow: 0 1px 2px rgba(0,0,0,0.9) !important;
                 }
                 video::-webkit-media-text-track-display {
                     font-size: ${subtitleSize} !important;
-                    font-family: ${
-                        subtitleFont === "inter"
+                    font-family: ${subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
-                    } !important;
+                                ? "Roboto, Arial, sans-serif"
+                                : subtitleFont === "trebuchet"
+                                    ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                    : subtitleFont === "monospace"
+                                        ? '"Courier New", Courier, monospace'
+                                        : subtitleFont === "serif"
+                                            ? 'Georgia, "Times New Roman", serif'
+                                            : subtitleFont === "impact"
+                                                ? 'Impact, "Arial Black", sans-serif'
+                                                : subtitleFont === "comic"
+                                                    ? '"Comic Sans MS", "Comic Sans", cursive'
+                                                    : subtitleFont === "verdana"
+                                                        ? "Verdana, Geneva, sans-serif"
+                                                        : subtitleFont === "lucida"
+                                                            ? '"Lucida Console", Monaco, monospace'
+                                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                        } !important;
                     background: transparent !important;
                 }
                 video::-webkit-media-text-track-container {
                     font-size: ${subtitleSize} !important;
-                    font-family: ${
-                        subtitleFont === "inter"
+                    font-family: ${subtitleFont === "inter"
                             ? "Inter, -apple-system, BlinkMacSystemFont, sans-serif"
                             : subtitleFont === "roboto"
-                            ? "Roboto, Arial, sans-serif"
-                            : subtitleFont === "trebuchet"
-                            ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
-                            : subtitleFont === "monospace"
-                            ? '"Courier New", Courier, monospace'
-                            : subtitleFont === "serif"
-                            ? 'Georgia, "Times New Roman", serif'
-                            : subtitleFont === "impact"
-                            ? 'Impact, "Arial Black", sans-serif'
-                            : subtitleFont === "comic"
-                            ? '"Comic Sans MS", "Comic Sans", cursive'
-                            : subtitleFont === "verdana"
-                            ? "Verdana, Geneva, sans-serif"
-                            : subtitleFont === "lucida"
-                            ? '"Lucida Console", Monaco, monospace'
-                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
-                    } !important;
+                                ? "Roboto, Arial, sans-serif"
+                                : subtitleFont === "trebuchet"
+                                    ? '"Trebuchet MS", "Lucida Sans Unicode", sans-serif'
+                                    : subtitleFont === "monospace"
+                                        ? '"Courier New", Courier, monospace'
+                                        : subtitleFont === "serif"
+                                            ? 'Georgia, "Times New Roman", serif'
+                                            : subtitleFont === "impact"
+                                                ? 'Impact, "Arial Black", sans-serif'
+                                                : subtitleFont === "comic"
+                                                    ? '"Comic Sans MS", "Comic Sans", cursive'
+                                                    : subtitleFont === "verdana"
+                                                        ? "Verdana, Geneva, sans-serif"
+                                                        : subtitleFont === "lucida"
+                                                            ? '"Lucida Console", Monaco, monospace'
+                                                            : "var(--font-geist), -apple-system, BlinkMacSystemFont, sans-serif"
+                        } !important;
                 }
                 video.controls-visible::-webkit-media-text-track-display {
                     transform: translateY(-80px) !important;
@@ -2484,19 +2567,18 @@ export default function VideoPlayer({
                 }}
             />
 
-            {/* Video Player Node — ALWAYS Kixo's signature native red player */}
+            {/* Video Player Node — direct streams only */}
             {activeDownload && !playerError ? (
                 <video
                     ref={videoRef}
                     onEnded={handleVideoEnded}
                     style={{ filter: `brightness(${brightnessLevel})` }}
-                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${
-                        aspectRatio === "contain"
+                    className={`w-full h-full ${showControls ? "controls-visible" : ""} ${aspectRatio === "contain"
                             ? "object-contain"
                             : aspectRatio === "fill"
-                              ? "object-fill"
-                              : "object-cover"
-                    }`}
+                                ? "object-fill"
+                                : "object-cover"
+                        }`}
                     onPlay={() => {
                         if (waitingTimeoutRef.current)
                             clearTimeout(waitingTimeoutRef.current);
@@ -2597,7 +2679,6 @@ export default function VideoPlayer({
                     autoPlay
                     playsInline
                     preload="auto"
-                    crossOrigin="anonymous"
                 >
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
@@ -2619,14 +2700,13 @@ export default function VideoPlayer({
             ) : null}
 
             {/* Click Catcher Overlay — desktop only; touch is handled by the
-                 container's onTouchStart/onTouchEnd. Disabled for embeds to allow iframe clicks. */}
-            {!playerError && !isEmbedStream(activeDownload) && (
+                 container's onTouchStart/onTouchEnd. */}
+            {!playerError && (
                 <div
-                    className={`absolute inset-0 z-10 ${
-                        isPlaying && !showControls
+                    className={`absolute inset-0 z-10 ${isPlaying && !showControls
                             ? "cursor-none"
                             : "cursor-pointer"
-                    }`}
+                        }`}
                 />
             )}
 
@@ -2730,7 +2810,7 @@ export default function VideoPlayer({
                 (outroStart !== null && outroEnd !== null
                     ? currentTime >= outroStart && currentTime <= outroEnd
                     : currentTime >= duration - 150 &&
-                      currentTime < duration - 10) && (
+                    currentTime < duration - 10) && (
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -2775,7 +2855,9 @@ export default function VideoPlayer({
                             proxyFallbackIndexRef.current = new Map();
                             refreshCountRef.current = 0;
                             setPlayerError(false);
-                            setAutoRetryLabel("Fetching fresh signed stream links...");
+                            setAutoRetryLabel(
+                                "Fetching fresh signed stream links...",
+                            );
                             setIsLoading(true);
                             refreshStreamData();
                         }}
@@ -2788,48 +2870,47 @@ export default function VideoPlayer({
 
             {/* Custom Overlay Controls HUD */}
             <div
-                className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-40 flex flex-col justify-between transition-opacity duration-300 ${
-                    showControls
+                className={`absolute inset-0 from-black/50 via-transparent to-black/20 z-40 flex flex-col justify-between transition-opacity duration-300 ${showControls
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
-                } ${isPlaying && !showControls ? "cursor-none" : ""}`}
+                    } ${isPlaying && !showControls ? "cursor-none" : ""}`}
             >
-            {/* Top bar info */}
-            <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
-                <div className="text-white drop-shadow-md">
-                    <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
-                        {title}
-                    </h2>
-                    {isSeries && season && episode && (
-                        <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
-                            Season {season} • Episode {episode}
-                        </p>
-                    )}
+                {/* Top bar info */}
+                <div className="flex items-center justify-between p-4 sm:p-8 w-full bg-linear-to-b from-black/85 to-transparent pointer-events-auto">
+                    <div className="text-white drop-shadow-md">
+                        <h2 className="font-extrabold text-xs sm:text-base line-clamp-1">
+                            {title}
+                        </h2>
+                        {isSeries && season && episode && (
+                            <p className="text-[10px] sm:text-xs text-white/70 font-semibold mt-0.5">
+                                Season {season} • Episode {episode}
+                            </p>
+                        )}
+                    </div>
                 </div>
-            </div>
 
-            {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
-            {!isPlaying &&
-                !isLoading &&
-                !showSubtitleMenu &&
-                !showAudioMenu &&
-                !showQualityMenu &&
-                !showSpeedMenu &&
-                !showRatioMenu && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            togglePlay();
-                        }}
-                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
-                    >
-                        <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
-                    </button>
-                )}
+                {/* Play/Pause center overlay (shows only on pause, hidden when any menu is open) */}
+                {!isPlaying &&
+                    !isLoading &&
+                    !showSubtitleMenu &&
+                    !showAudioMenu &&
+                    !showQualityMenu &&
+                    !showSpeedMenu &&
+                    !showRatioMenu && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                togglePlay();
+                            }}
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-primary/90 text-white flex items-center justify-center shadow-xl transition-transform hover:scale-105 active:scale-95 z-10 cursor-pointer pointer-events-auto"
+                        >
+                            <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-white translate-x-0.5" />
+                        </button>
+                    )}
 
                 {/* Bottom controls panel wrapped in a premium floating glass panel */}
                 <div
-                    className="w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto"
+                    className={`w-full max-w-6xl mx-auto px-1.5 pb-1.5 sm:px-6 sm:pb-6 pointer-events-auto`}
                     data-controls-panel
                 >
                     <div className="bg-zinc-950/85 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 md:p-5 shadow-2xl space-y-2 sm:space-y-4 transition-all duration-300 hover:border-white/15">
@@ -2858,7 +2939,7 @@ export default function VideoPlayer({
                                     triggerControlsVisibility();
                                     // Ensure video keeps playing after seek
                                     if (!videoRef.current.paused) {
-                                        videoRef.current.play().catch(() => {});
+                                        videoRef.current.play().catch(() => { });
                                     }
                                 }}
                                 onMouseDown={(e) => {
@@ -2904,7 +2985,7 @@ export default function VideoPlayer({
                                             if (!videoRef.current.paused) {
                                                 videoRef.current
                                                     .play()
-                                                    .catch(() => {});
+                                                    .catch(() => { });
                                             }
                                         }
                                         // Give the controls a fresh visibility
@@ -2938,7 +3019,7 @@ export default function VideoPlayer({
                                             0,
                                             Math.min(
                                                 ev.touches[0].clientX -
-                                                    rect.left,
+                                                rect.left,
                                                 rect.width,
                                             ),
                                         );
@@ -2964,7 +3045,7 @@ export default function VideoPlayer({
                                             if (!videoRef.current.paused) {
                                                 videoRef.current
                                                     .play()
-                                                    .catch(() => {});
+                                                    .catch(() => { });
                                             }
                                         }
                                         // Give the controls a fresh visibility
@@ -3125,12 +3206,11 @@ export default function VideoPlayer({
                                                     setShowAudioMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                    showSubtitleMenu ||
-                                                    showSubtitles
+                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu ||
+                                                        showSubtitles
                                                         ? "text-primary bg-primary/10"
                                                         : "text-white/70 hover:text-white"
-                                                }`}
+                                                    }`}
                                                 title="Subtitles"
                                             >
                                                 <Subtitles className="w-4.5 h-4.5" />
@@ -3148,11 +3228,10 @@ export default function VideoPlayer({
                                                                     null,
                                                                 )
                                                             }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                !activeCaption
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption
                                                                     ? "text-primary bg-primary/10"
                                                                     : "text-white/80"
-                                                            }`}
+                                                                }`}
                                                         >
                                                             Off
                                                         </button>
@@ -3168,12 +3247,11 @@ export default function VideoPlayer({
                                                                             caption,
                                                                         )
                                                                     }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        activeCaption?.id ===
-                                                                        caption.id
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
+                                                                            caption.id
                                                                             ? "text-primary bg-primary/10"
                                                                             : "text-white/80"
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {
                                                                         caption.lanName
@@ -3200,12 +3278,11 @@ export default function VideoPlayer({
                                                                         size,
                                                                     )
                                                                 }
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${
-                                                                    subtitleSize ===
-                                                                    size
+                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize ===
+                                                                        size
                                                                         ? "text-primary bg-primary/10"
                                                                         : "text-white/60"
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 {
                                                                     [
@@ -3239,11 +3316,10 @@ export default function VideoPlayer({
                                                     setShowSubtitleMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                    showAudioMenu
+                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showAudioMenu
                                                         ? "text-primary bg-primary/10"
                                                         : "text-white/70 hover:text-white"
-                                                }`}
+                                                    }`}
                                                 title="Change Audio Track"
                                             >
                                                 <Headphones className="w-4.5 h-4.5" />
@@ -3271,17 +3347,16 @@ export default function VideoPlayer({
                                                                             );
                                                                             const epParams =
                                                                                 isSeries &&
-                                                                                season &&
-                                                                                episode
+                                                                                    season &&
+                                                                                    episode
                                                                                     ? `?season=${season}&episode=${episode}`
                                                                                     : "";
                                                                             window.location.href = `/watch/${dub.detailPath}${epParams}`;
                                                                         }}
-                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                            isCurrent
+                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isCurrent
                                                                                 ? "text-primary bg-primary/10"
                                                                                 : "text-white/80"
-                                                                        }`}
+                                                                            }`}
                                                                     >
                                                                         {
                                                                             dub.lanName
@@ -3314,84 +3389,113 @@ export default function VideoPlayer({
                                                 setShowSubtitleMenu(false);
                                                 setShowRatioMenu(false);
                                             }}
-                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-                                                    showQualityMenu
-                                                        ? "bg-primary/20 text-primary-light border-primary/30"
-                                                        : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
+                                            className={`flex items-center space-x-1.5 font-bold text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${showQualityMenu
+                                                    ? "bg-primary/20 text-primary-light border-primary/30"
+                                                    : "bg-white/5 border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20"
                                                 }`}
-                                            >
-                                                <span>
-                                                    {activeDownload
-                                                        ? isAutoQuality
-                                                            ? `Auto (${parseResolution(activeDownload.resolution)}p)`
-                                                            : `${parseResolution(activeDownload.resolution)}p`
-                                                        : "Auto"}
-                                                </span>
-                                                <Settings className="w-3.5 h-3.5" />
-                                            </button>
+                                        >
+                                            <span>
+                                                {activeDownload
+                                                    ? isAutoQuality
+                                                        ? `Auto (${parseResolution(activeDownload.resolution)}p)`
+                                                        : `${parseResolution(activeDownload.resolution)}p`
+                                                    : "Auto"}
+                                            </span>
+                                            <Settings className="w-3.5 h-3.5" />
+                                        </button>
 
-                                            {showQualityMenu &&
-                                                sortedDownloads.length > 0 && (
-                                                    <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                        <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                            Quality
-                                                        </p>
-                                                        <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setIsAutoQuality(
+                                        {showQualityMenu &&
+                                            sortedDownloads.length > 0 && (
+                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                        Quality
+                                                    </p>
+                                                    <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsAutoQuality(
+                                                                    true,
+                                                                );
+                                                                setShowQualityMenu(
+                                                                    false,
+                                                                );
+                                                                const defaultQuality =
+                                                                    sortedDownloads[0];
+                                                                if (
+                                                                    defaultQuality &&
+                                                                    activeDownload?.id !==
+                                                                    defaultQuality.id
+                                                                ) {
+                                                                    handleQualityChange(
+                                                                        defaultQuality,
                                                                         true,
                                                                     );
-                                                                    setShowQualityMenu(
-                                                                        false,
+                                                                }
+                                                            }}
+                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                        >
+                                                            Auto (Highest)
+                                                        </button>
+                                                        {sortedDownloads.map(
+                                                            (link, idx) => {
+                                                                const resNum =
+                                                                    parseResolution(
+                                                                        link.resolution,
                                                                     );
-                                                                    const defaultQuality = sortedDownloads[0];
-                                                                    if (
-                                                                        defaultQuality &&
-                                                                        activeDownload?.id !==
-                                                                            defaultQuality.id
-                                                                    ) {
-                                                                        handleQualityChange(
-                                                                            defaultQuality,
-                                                                            true,
-                                                                        );
-                                                                    }
-                                                                }}
-                                                                className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${isAutoQuality ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                            >
-                                                                Auto (Highest)
-                                                            </button>
-                                                            {sortedDownloads.map(
-                                                                (link, idx) => {
-                                                                    const resNum = parseResolution(link.resolution);
-                                                                    const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
-                                                                    return (
-                                                                        <button
-                                                                            key={`${link.id || "quality"}-${idx}`}
-                                                                            onClick={() => {
-                                                                                handleQualityChange(
-                                                                                    link,
-                                                                                );
-                                                                                setShowQualityMenu(
-                                                                                    false,
-                                                                                );
-                                                                            }}
-                                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                                !isAutoQuality &&
+                                                                let label = "";
+                                                                if (
+                                                                    resNum ===
+                                                                    2160
+                                                                ) {
+                                                                    label =
+                                                                        "4K Ultra HD (2160p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1440
+                                                                ) {
+                                                                    label =
+                                                                        "2K Quad HD (1440p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1080
+                                                                ) {
+                                                                    label =
+                                                                        "1080p Full HD";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    720
+                                                                ) {
+                                                                    label =
+                                                                        "720p HD";
+                                                                } else {
+                                                                    label = `${resNum || link.resolution}p`;
+                                                                }
+                                                                return (
+                                                                    <button
+                                                                        key={`${link.id || "quality"}-${idx}`}
+                                                                        onClick={() => {
+                                                                            handleQualityChange(
+                                                                                link,
+                                                                            );
+                                                                            setShowQualityMenu(
+                                                                                false,
+                                                                            );
+                                                                        }}
+                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality &&
                                                                                 activeDownload?.id ===
-                                                                                    link.id
-                                                                                    ? "text-primary bg-primary/10"
-                                                                                    : "text-white/80"
+                                                                                link.id
+                                                                                ? "text-primary bg-primary/10"
+                                                                                : "text-white/80"
                                                                             }`}
-                                                                        >
-                                                                            {label}
-                                                                        </button>
-                                                                    );
-                                                                },
-                                                            )}
-                                                        </div>
+                                                                    >
+                                                                        {label}
+                                                                    </button>
+                                                                );
+                                                            },
+                                                        )}
                                                     </div>
-                                                )}
+                                                </div>
+                                            )}
                                     </div>
 
                                     {/* Speed */}
@@ -3409,11 +3513,10 @@ export default function VideoPlayer({
                                                 setShowSubtitleMenu(false);
                                                 setShowRatioMenu(false);
                                             }}
-                                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${
-                                                showSpeedMenu
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer hover:bg-white/10 ${showSpeedMenu
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/80 hover:text-white"
-                                            }`}
+                                                }`}
                                         >
                                             {playbackRate}x
                                         </button>
@@ -3434,12 +3537,11 @@ export default function VideoPlayer({
                                                                 rate,
                                                             )
                                                         }
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            playbackRate ===
-                                                            rate
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${playbackRate ===
+                                                                rate
                                                                 ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
-                                                        }`}
+                                                            }`}
                                                     >
                                                         {rate.toFixed(1)}x
                                                     </button>
@@ -3463,11 +3565,10 @@ export default function VideoPlayer({
                                                 setShowAudioMenu(false);
                                                 setShowSubtitleMenu(false);
                                             }}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                showRatioMenu
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showRatioMenu
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/70 hover:text-white"
-                                            }`}
+                                                }`}
                                             title="Aspect Ratio"
                                         >
                                             <svg
@@ -3521,12 +3622,11 @@ export default function VideoPlayer({
                                                                 false,
                                                             );
                                                         }}
-                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                            aspectRatio ===
-                                                            value
+                                                        className={`text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${aspectRatio ===
+                                                                value
                                                                 ? "text-primary bg-primary/10"
                                                                 : "text-white/80"
-                                                        }`}
+                                                            }`}
                                                     >
                                                         {label}
                                                     </button>
@@ -3539,11 +3639,10 @@ export default function VideoPlayer({
                                     {isPiPSupported && (
                                         <button
                                             onClick={togglePiP}
-                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${
-                                                isPiPActive
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${isPiPActive
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/70 hover:text-white"
-                                            }`}
+                                                }`}
                                             title="Picture-in-Picture"
                                         >
                                             <PictureInPicture2 className="w-4.5 h-4.5" />
@@ -3565,12 +3664,11 @@ export default function VideoPlayer({
                                                     setShowAudioMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                    showSubtitleMenu ||
-                                                    showSubtitles
+                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${showSubtitleMenu ||
+                                                        showSubtitles
                                                         ? "text-primary bg-primary/10"
                                                         : "text-white/60 hover:text-white hover:bg-white/10"
-                                                }`}
+                                                    }`}
                                                 title="Subtitles"
                                             >
                                                 <Subtitles className="w-4.5 h-4.5" />
@@ -3603,12 +3701,11 @@ export default function VideoPlayer({
                                                                             caption,
                                                                         )
                                                                     }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        activeCaption?.id ===
-                                                                        caption.id
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
+                                                                            caption.id
                                                                             ? "text-primary bg-primary/10"
                                                                             : "text-white/80"
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {
                                                                         caption.lanName
@@ -3666,11 +3763,10 @@ export default function VideoPlayer({
                                                     setShowSubtitleMenu(false);
                                                     setShowRatioMenu(false);
                                                 }}
-                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                    showAudioMenu
+                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${showAudioMenu
                                                         ? "text-primary bg-primary/10"
                                                         : "text-white/60 hover:text-white hover:bg-white/10"
-                                                }`}
+                                                    }`}
                                                 title="Audio Track"
                                             >
                                                 <Headphones className="w-4.5 h-4.5" />
@@ -3691,18 +3787,17 @@ export default function VideoPlayer({
                                                                         );
                                                                         const epParams =
                                                                             isSeries &&
-                                                                            season &&
-                                                                            episode
+                                                                                season &&
+                                                                                episode
                                                                                 ? `?season=${season}&episode=${episode}`
                                                                                 : "";
                                                                         window.location.href = `/watch/${dub.detailPath}${epParams}`;
                                                                     }}
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                        detailPath ===
-                                                                        dub.detailPath
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${detailPath ===
+                                                                            dub.detailPath
                                                                             ? "text-primary bg-primary/10"
                                                                             : "text-white/80"
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {
                                                                         dub.lanName
@@ -3731,11 +3826,10 @@ export default function VideoPlayer({
                                                 setShowAudioMenu(false);
                                                 setShowSubtitleMenu(false);
                                             }}
-                                            className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${
-                                                showRatioMenu
+                                            className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${showRatioMenu
                                                     ? "text-primary bg-primary/10"
                                                     : "text-white/60 hover:text-white hover:bg-white/10"
-                                            }`}
+                                                }`}
                                             title="Aspect Ratio"
                                         >
                                             <svg
@@ -3812,11 +3906,10 @@ export default function VideoPlayer({
                                                 setShowSubtitleMenu(false);
                                                 setShowRatioMenu(false);
                                             }}
-                                            className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                                                showQualityMenu
+                                            className={`flex items-center font-bold text-[10px] px-2 py-1 rounded-lg border transition-all cursor-pointer ${showQualityMenu
                                                     ? "bg-primary/20 text-primary-light border-primary/30"
                                                     : "bg-white/5 border-white/10 text-white/80"
-                                            }`}
+                                                }`}
                                         >
                                             {activeDownload
                                                 ? `${parseResolution(activeDownload.resolution)}p`
@@ -3837,11 +3930,12 @@ export default function VideoPlayer({
                                                                 setShowQualityMenu(
                                                                     false,
                                                                 );
-                                                                const defaultQuality = sortedDownloads[0];
+                                                                const defaultQuality =
+                                                                    sortedDownloads[0];
                                                                 if (
                                                                     defaultQuality &&
                                                                     activeDownload?.id !==
-                                                                        defaultQuality.id
+                                                                    defaultQuality.id
                                                                 )
                                                                     handleQualityChange(
                                                                         defaultQuality,
@@ -3854,8 +3948,38 @@ export default function VideoPlayer({
                                                         </button>
                                                         {sortedDownloads.map(
                                                             (link, idx) => {
-                                                                const resNum = parseResolution(link.resolution);
-                                                                const label = resNum === 1080 ? "1080p Full HD" : `${resNum || link.resolution}p`;
+                                                                const resNum =
+                                                                    parseResolution(
+                                                                        link.resolution,
+                                                                    );
+                                                                let label = "";
+                                                                if (
+                                                                    resNum ===
+                                                                    2160
+                                                                ) {
+                                                                    label =
+                                                                        "4K Ultra HD (2160p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1440
+                                                                ) {
+                                                                    label =
+                                                                        "2K Quad HD (1440p)";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    1080
+                                                                ) {
+                                                                    label =
+                                                                        "1080p Full HD";
+                                                                } else if (
+                                                                    resNum ===
+                                                                    720
+                                                                ) {
+                                                                    label =
+                                                                        "720p HD";
+                                                                } else {
+                                                                    label = `${resNum || link.resolution}p`;
+                                                                }
                                                                 return (
                                                                     <button
                                                                         key={`${link.id || "quality"}-${idx}`}
@@ -3867,13 +3991,12 @@ export default function VideoPlayer({
                                                                                 false,
                                                                             );
                                                                         }}
-                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${
-                                                                            !isAutoQuality &&
-                                                                            activeDownload?.id ===
+                                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!isAutoQuality &&
+                                                                                activeDownload?.id ===
                                                                                 link.id
                                                                                 ? "text-primary bg-primary/10"
                                                                                 : "text-white/80"
-                                                                        }`}
+                                                                            }`}
                                                                     >
                                                                         {label}
                                                                     </button>

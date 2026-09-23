@@ -1238,7 +1238,10 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                                 </div>
                                                             ) : (
                                                                 cloudHistory.map(
-                                                                    (item, idx) => (
+                                                                    (
+                                                                        item,
+                                                                        idx,
+                                                                    ) => (
                                                                         <div
                                                                             key={`${item.detailPath}-${idx}`}
                                                                             onClick={() =>
@@ -1566,7 +1569,9 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                             Player Subtitle Font
                                                         </span>
                                                         <span className="text-[9px] text-foreground/45 block mt-0.5">
-                                                            Changes font style inside player subtitles
+                                                            Changes font style
+                                                            inside player
+                                                            subtitles
                                                         </span>
                                                     </div>
                                                     <select
@@ -1606,7 +1611,8 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                                                             Verdana (Wide)
                                                         </option>
                                                         <option value="lucida">
-                                                            Lucida Console (Code)
+                                                            Lucida Console
+                                                            (Code)
                                                         </option>
                                                     </select>
                                                 </div>
