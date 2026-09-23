@@ -594,7 +594,8 @@ export default function VideoPlayer({
             /* ignore parse errors */
         }
 
-        const referer = "https://videodownloader.site/";
+        const referer =
+            streamData?.stream_domain || "https://videodownloader.site/";
         const proxyBase = getVideoProxyBase();
 
         const qualityVal = parseResolution(activeDownload.resolution);
@@ -860,6 +861,20 @@ export default function VideoPlayer({
             if (refreshCountRef.current < 3) {
                 refreshCountRef.current += 1;
                 setAutoRetryLabel("Fetching fresh stream links...");
+                setIsLoading(true);
+                setPlayerError(false);
+                refreshStreamData();
+            } else {
+                setIsLoading(false);
+                setPlayerError(true);
+                setAutoRetryLabel("");
+            }
+        } else if (streamData && Array.isArray(streamData.downloads) && streamData.downloads.length === 0) {
+            // StreamData was loaded but has 0 downloads — avoid infinite buffering spinner
+            setActiveDownload(null);
+            if (refreshCountRef.current < 2) {
+                refreshCountRef.current += 1;
+                setAutoRetryLabel("Connecting to stream server...");
                 setIsLoading(true);
                 setPlayerError(false);
                 refreshStreamData();
