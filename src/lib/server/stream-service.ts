@@ -200,16 +200,29 @@ async function fetchMirrorStream(
         // Note: Most embed services block embedding from unknown domains, so these are unreliable
         // and should only be used when no direct streams are available.
 
-        const rawCaptions = data.captions || data.captionList || [];
+        const rawCaptions =
+            data.captions ||
+            data.captionList ||
+            data.subtitles ||
+            data.subtitleList ||
+            data.subs ||
+            [];
         const captions: Caption[] = rawCaptions
             .map((c: any, idx: number) => {
-                const cUrl = c.url || c.link || "";
+                const cUrl =
+                    c.url || c.link || c.subUrl || c.subtitleUrl || "";
                 if (!cUrl || typeof cUrl !== "string" || !cUrl.trim())
                     return null;
                 return {
                     id: String(c.id || idx),
-                    lan: c.lan || c.language || "en",
-                    lanName: c.lanName || c.languageName || c.lan || "English",
+                    lan: c.lan || c.language || c.lang || "en",
+                    lanName:
+                        c.lanName ||
+                        c.languageName ||
+                        c.langName ||
+                        c.name ||
+                        c.lan ||
+                        "English",
                     url: cUrl.trim(),
                 };
             })
@@ -458,18 +471,31 @@ export const streamService = {
                             (a, b) => parseResNum(b.resolution) - parseResNum(a.resolution),
                         );
 
-                        const captions: Caption[] = (
+                        const rawCaptions =
                             playData.captions ||
                             playData.captionList ||
-                            []
-                        )
+                            playData.subtitles ||
+                            playData.subtitleList ||
+                            playData.subs ||
+                            [];
+                        const captions: Caption[] = rawCaptions
                             .map((c: any, idx: number) => {
-                                const cUrl = c.url || c.link || "";
+                                const cUrl =
+                                    c.url ||
+                                    c.link ||
+                                    c.subUrl ||
+                                    c.subtitleUrl ||
+                                    "";
                                 if (!cUrl) return null;
                                 return {
                                     id: String(c.id || idx),
-                                    lan: c.lan || c.language || "en",
-                                    lanName: c.lanName || c.languageName || "English",
+                                    lan: c.lan || c.language || c.lang || "en",
+                                    lanName:
+                                        c.lanName ||
+                                        c.languageName ||
+                                        c.langName ||
+                                        c.name ||
+                                        "English",
                                     url: cUrl,
                                 };
                             })
@@ -694,10 +720,20 @@ export const streamService = {
 
                     if (downloads.length > 0) {
                         const rawCaptions =
-                            h5Data.captions || h5Data.captionList || [];
+                            h5Data.captions ||
+                            h5Data.captionList ||
+                            h5Data.subtitles ||
+                            h5Data.subtitleList ||
+                            h5Data.subs ||
+                            [];
                         const captions: Caption[] = rawCaptions
                             .map((c: any, idx: number) => {
-                                const cUrl = c.url || c.link || "";
+                                const cUrl =
+                                    c.url ||
+                                    c.link ||
+                                    c.subUrl ||
+                                    c.subtitleUrl ||
+                                    "";
                                 if (
                                     !cUrl ||
                                     typeof cUrl !== "string" ||
@@ -706,10 +742,12 @@ export const streamService = {
                                     return null;
                                 return {
                                     id: String(c.id || idx),
-                                    lan: c.lan || c.language || "en",
+                                    lan: c.lan || c.language || c.lang || "en",
                                     lanName:
                                         c.lanName ||
                                         c.languageName ||
+                                        c.langName ||
+                                        c.name ||
                                         c.lan ||
                                         "English",
                                     url: cUrl.trim(),

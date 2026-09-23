@@ -82,6 +82,7 @@ export default function VideoPlayer({
     const qualityMenuMobileRef = useRef<HTMLDivElement>(null);
     const speedMenuRef = useRef<HTMLDivElement>(null);
     const subtitleMenuRef = useRef<HTMLDivElement>(null);
+    const subtitleMenuMobileRef = useRef<HTMLDivElement>(null);
     const ratioMenuRef = useRef<HTMLDivElement>(null);
     const scrubbingTimeRef = useRef<number>(0);
     const transientRetryCountRef = useRef<number>(0);
@@ -119,8 +120,8 @@ export default function VideoPlayer({
         [streamData.downloads],
     );
     const captions = useMemo(
-        () => streamData.captions || [],
-        [streamData.captions],
+        () => streamData?.captions || (streamData as any)?.subtitles || [],
+        [streamData],
     );
 
     // Sort qualities from highest resolution to lowest resolution (4K -> 2K -> 1080p -> 720p -> 480p -> 360p)
@@ -2043,7 +2044,9 @@ export default function VideoPlayer({
             }
             if (
                 subtitleMenuRef.current &&
-                !subtitleMenuRef.current.contains(target)
+                !subtitleMenuRef.current.contains(target) &&
+                (!subtitleMenuMobileRef.current ||
+                    !subtitleMenuMobileRef.current.contains(target))
             ) {
                 setShowSubtitleMenu(false);
             }
@@ -3205,116 +3208,6 @@ export default function VideoPlayer({
                             <div className="flex items-center space-x-1 sm:space-x-2 relative">
                                 {/* â”€â”€ SECONDARY CONTROLS (hidden on mobile, visible sm+) â”€â”€ */}
                                 <div className="hidden sm:flex items-center space-x-2 relative">
-                                    {/* Subtitle Selector */}
-                                    {captions.length > 0 && (
-                                        <div
-                                            ref={subtitleMenuRef}
-                                            className="relative"
-                                        >
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(
-                                                        !showSubtitleMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu ||
-                                                        showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/70 hover:text-white"
-                                                    }`}
-                                                title="Subtitles"
-                                            >
-                                                <Subtitles className="w-4.5 h-4.5" />
-                                            </button>
-
-                                            {showSubtitleMenu && (
-                                                <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Subtitles
-                                                    </p>
-                                                    <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() =>
-                                                                handleSubtitleChange(
-                                                                    null,
-                                                                )
-                                                            }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption
-                                                                    ? "text-primary bg-primary/10"
-                                                                    : "text-white/80"
-                                                                }`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map(
-                                                            (caption) => (
-                                                                <button
-                                                                    key={
-                                                                        caption.id ||
-                                                                        caption.url
-                                                                    }
-                                                                    onClick={() =>
-                                                                        handleSubtitleChange(
-                                                                            caption,
-                                                                        )
-                                                                    }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
-                                                                            caption.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                        }`}
-                                                                >
-                                                                    {
-                                                                        caption.lanName
-                                                                    }
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Size
-                                                    </p>
-                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {[
-                                                            "16px",
-                                                            "22px",
-                                                            "28px",
-                                                            "36px",
-                                                        ].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() =>
-                                                                    setSubtitleSize(
-                                                                        size,
-                                                                    )
-                                                                }
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize ===
-                                                                        size
-                                                                        ? "text-primary bg-primary/10"
-                                                                        : "text-white/60"
-                                                                    }`}
-                                                            >
-                                                                {
-                                                                    [
-                                                                        "SM",
-                                                                        "MD",
-                                                                        "LG",
-                                                                        "XL",
-                                                                    ][i]
-                                                                }
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
                                     {/* Audio/Dub selector */}
                                     {dubs && dubs.length > 0 && (
                                         <div
@@ -3388,6 +3281,120 @@ export default function VideoPlayer({
                                             )}
                                         </div>
                                     )}
+
+                                    {/* Subtitle Selector (Always visible near Quality) */}
+                                    <div
+                                        ref={subtitleMenuRef}
+                                        className="relative"
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setShowSubtitleMenu(
+                                                    !showSubtitleMenu,
+                                                );
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowRatioMenu(false);
+                                            }}
+                                            className={`p-2 rounded-xl transition-all focus:outline-none cursor-pointer flex items-center justify-center hover:bg-white/10 ${showSubtitleMenu ||
+                                                    (showSubtitles && activeCaption)
+                                                    ? "text-primary bg-primary/10"
+                                                    : "text-white/70 hover:text-white"
+                                                }`}
+                                            title={captions.length > 0 ? "Subtitles" : "Subtitles (None available)"}
+                                        >
+                                            <Subtitles className="w-4.5 h-4.5" />
+                                        </button>
+
+                                        {showSubtitleMenu && (
+                                            <div className="absolute bottom-14 right-0 border border-zinc-800 rounded-2xl p-2.5 min-w-[140px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950 bg-linear-to-b from-zinc-900 to-black">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                    Subtitles
+                                                </p>
+                                                <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                                                    <button
+                                                        onClick={() =>
+                                                            handleSubtitleChange(
+                                                                null,
+                                                            )
+                                                        }
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption
+                                                                ? "text-primary bg-primary/10"
+                                                                : "text-white/80"
+                                                            }`}
+                                                    >
+                                                        Off
+                                                    </button>
+                                                    {captions.length === 0 ? (
+                                                        <div className="px-2.5 py-1.5 text-xs text-white/40 italic">
+                                                            No subtitles available
+                                                        </div>
+                                                    ) : (
+                                                        captions.map(
+                                                            (caption) => (
+                                                                <button
+                                                                    key={
+                                                                        caption.id ||
+                                                                        caption.url
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleSubtitleChange(
+                                                                            caption,
+                                                                        )
+                                                                    }
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
+                                                                            caption.id
+                                                                            ? "text-primary bg-primary/10"
+                                                                            : "text-white/80"
+                                                                        }`}
+                                                                >
+                                                                    {
+                                                                        caption.lanName
+                                                                    }
+                                                                </button>
+                                                            ),
+                                                        )
+                                                    )}
+                                                </div>
+                                                <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                    Size
+                                                </p>
+                                                <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                                                    {[
+                                                        "16px",
+                                                        "22px",
+                                                        "28px",
+                                                        "36px",
+                                                    ].map((size, i) => (
+                                                        <button
+                                                            key={size}
+                                                            onClick={() =>
+                                                                setSubtitleSize(
+                                                                    size,
+                                                                )
+                                                            }
+                                                            className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize ===
+                                                                    size
+                                                                    ? "text-primary bg-primary/10"
+                                                                    : "text-white/60"
+                                                                }`}
+                                                        >
+                                                            {
+                                                                [
+                                                                    "SM",
+                                                                    "MD",
+                                                                    "LG",
+                                                                    "XL",
+                                                                ][i]
+                                                            }
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* Quality (desktop full pill) */}
                                     <div
@@ -3666,105 +3673,6 @@ export default function VideoPlayer({
                                 </div>
                                 {/* ── MOBILE-ONLY: compact icon controls ── */}
                                 <div className="sm:hidden flex items-center space-x-0">
-                                    {/* Subtitle (mobile icon) */}
-                                    {captions.length > 0 && (
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => {
-                                                    setShowSubtitleMenu(
-                                                        !showSubtitleMenu,
-                                                    );
-                                                    setShowQualityMenu(false);
-                                                    setShowSpeedMenu(false);
-                                                    setShowAudioMenu(false);
-                                                    setShowRatioMenu(false);
-                                                }}
-                                                className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${showSubtitleMenu ||
-                                                        showSubtitles
-                                                        ? "text-primary bg-primary/10"
-                                                        : "text-white/60 hover:text-white hover:bg-white/10"
-                                                    }`}
-                                                title="Subtitles"
-                                            >
-                                                <Subtitles className="w-4.5 h-4.5" />
-                                            </button>
-                                            {showSubtitleMenu && (
-                                                <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
-                                                    <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
-                                                        Subtitles
-                                                    </p>
-                                                    <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
-                                                        <button
-                                                            onClick={() =>
-                                                                handleSubtitleChange(
-                                                                    null,
-                                                                )
-                                                            }
-                                                            className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
-                                                        >
-                                                            Off
-                                                        </button>
-                                                        {captions.map(
-                                                            (caption) => (
-                                                                <button
-                                                                    key={
-                                                                        caption.id ||
-                                                                        caption.url
-                                                                    }
-                                                                    onClick={() =>
-                                                                        handleSubtitleChange(
-                                                                            caption,
-                                                                        )
-                                                                    }
-                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
-                                                                            caption.id
-                                                                            ? "text-primary bg-primary/10"
-                                                                            : "text-white/80"
-                                                                        }`}
-                                                                >
-                                                                    {
-                                                                        caption.lanName
-                                                                    }
-                                                                </button>
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                    <div className="h-px bg-zinc-800 my-1 shrink-0" />
-                                                    <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">
-                                                        Size
-                                                    </p>
-                                                    <div className="flex items-center justify-between px-1 py-1 shrink-0">
-                                                        {[
-                                                            "16px",
-                                                            "22px",
-                                                            "28px",
-                                                            "36px",
-                                                        ].map((size, i) => (
-                                                            <button
-                                                                key={size}
-                                                                onClick={() =>
-                                                                    setSubtitleSize(
-                                                                        size,
-                                                                    )
-                                                                }
-                                                                className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
-                                                            >
-                                                                {
-                                                                    [
-                                                                        "SM",
-                                                                        "MD",
-                                                                        "LG",
-                                                                        "XL",
-                                                                    ][i]
-                                                                }
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
                                     {/* Audio/Dub (mobile icon) */}
                                     {dubs && dubs.length > 0 && (
                                         <div className="relative">
@@ -3902,6 +3810,112 @@ export default function VideoPlayer({
                                                         {label}
                                                     </button>
                                                 ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Subtitle (mobile icon — always visible near Quality) */}
+                                    <div
+                                        className="relative"
+                                        ref={subtitleMenuMobileRef}
+                                    >
+                                        <button
+                                            onClick={() => {
+                                                setShowSubtitleMenu(
+                                                    !showSubtitleMenu,
+                                                );
+                                                setShowQualityMenu(false);
+                                                setShowSpeedMenu(false);
+                                                setShowAudioMenu(false);
+                                                setShowRatioMenu(false);
+                                            }}
+                                            className={`p-2.5 rounded-lg transition-all focus:outline-none cursor-pointer flex items-center justify-center active:scale-90 ${showSubtitleMenu ||
+                                                    (showSubtitles && activeCaption)
+                                                    ? "text-primary bg-primary/10"
+                                                    : "text-white/60 hover:text-white hover:bg-white/10"
+                                                }`}
+                                            title={captions.length > 0 ? "Subtitles" : "Subtitles (None available)"}
+                                        >
+                                            <Subtitles className="w-4.5 h-4.5" />
+                                        </button>
+                                        {showSubtitleMenu && (
+                                            <div className="absolute bottom-12 right-0 border border-zinc-800 rounded-xl p-2 min-w-[130px] flex flex-col z-50 shadow-2xl animate-fade-in bg-zinc-950">
+                                                <p className="text-[10px] text-white/40 px-2 py-1 font-bold shrink-0">
+                                                    Subtitles
+                                                </p>
+                                                <div className="max-h-[140px] overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                                                    <button
+                                                        onClick={() =>
+                                                            handleSubtitleChange(
+                                                                null,
+                                                            )
+                                                        }
+                                                        className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${!activeCaption ? "text-primary bg-primary/10" : "text-white/80"}`}
+                                                    >
+                                                        Off
+                                                    </button>
+                                                    {captions.length === 0 ? (
+                                                        <div className="px-2.5 py-1.5 text-xs text-white/40 italic">
+                                                            No subtitles available
+                                                        </div>
+                                                    ) : (
+                                                        captions.map(
+                                                            (caption) => (
+                                                                <button
+                                                                    key={
+                                                                        caption.id ||
+                                                                        caption.url
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleSubtitleChange(
+                                                                            caption,
+                                                                        )
+                                                                    }
+                                                                    className={`w-full text-left text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors ${activeCaption?.id ===
+                                                                            caption.id
+                                                                            ? "text-primary bg-primary/10"
+                                                                            : "text-white/80"
+                                                                        }`}
+                                                                >
+                                                                    {
+                                                                        caption.lanName
+                                                                    }
+                                                                </button>
+                                                            ),
+                                                        )
+                                                    )}
+                                                </div>
+                                                <div className="h-px bg-zinc-800 my-1 shrink-0" />
+                                                <p className="text-[10px] text-white/40 px-2 py-0.5 font-bold shrink-0">
+                                                    Size
+                                                </p>
+                                                <div className="flex items-center justify-between px-1 py-1 shrink-0">
+                                                    {[
+                                                        "16px",
+                                                        "22px",
+                                                        "28px",
+                                                        "36px",
+                                                    ].map((size, i) => (
+                                                        <button
+                                                            key={size}
+                                                            onClick={() =>
+                                                                setSubtitleSize(
+                                                                    size,
+                                                                )
+                                                            }
+                                                            className={`text-[9px] font-black px-1.5 py-1 rounded transition-colors ${subtitleSize === size ? "text-primary bg-primary/10" : "text-white/60"}`}
+                                                        >
+                                                            {
+                                                                [
+                                                                    "SM",
+                                                                    "MD",
+                                                                    "LG",
+                                                                    "XL",
+                                                                ][i]
+                                                            }
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
