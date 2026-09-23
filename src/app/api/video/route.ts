@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 // Streaming video — ensure no body size limit truncates the response
 export const maxDuration = 60;
-export const preferredRegion = ["sin1", "bom1", "hnd1", "kix1", "cdg1", "iad1"];
+export const preferredRegion = "sin1";
 
 const CORS_HEADERS: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
