@@ -5,6 +5,7 @@ import { movieService, getAuthToken } from "./movie-service";
 // Real API host pool — sourced from MovieBox-Tui open-source client.
 // These mobile/app API endpoints are NOT rate-limited like the h5-api.aoneroom.com web endpoint.
 const MIRRORS = [
+    "h5-api.aoneroom.com",
     "api6.aoneroom.com",
     "api5.aoneroom.com",
     "api4.aoneroom.com",
@@ -247,6 +248,157 @@ async function fetchMirrorStream(
     return null;
 }
 
+async function fetchCaptionsFromH5Api(
+    subjectId: string,
+    detailPath: string,
+    season = 0,
+    episode = 0,
+    adult = false,
+): Promise<Caption[]> {
+    if (!subjectId) return [];
+    try {
+        const h5Base = "https://h5-api.aoneroom.com";
+        const token = await getAuthToken();
+        const spoofedIp = randomSpoofedIp();
+        const h5Headers: Record<string, string> = {
+            "User-Agent":
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+            Accept: "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            Referer: "https://videodownloader.site/",
+            Origin: "https://videodownloader.site",
+            "X-Play-Mode": adult ? "0" : "1",
+            "X-Client-Token": generateXClientToken(),
+            "X-Forwarded-For": spoofedIp,
+            "X-Real-IP": spoofedIp,
+            ...(token
+                ? {
+                      Authorization: `Bearer ${token}`,
+                      Cookie: `token=${token}`,
+                  }
+                : {}),
+        };
+
+        const reqSeason = season > 0 ? season : 0;
+        const reqEpisode = episode > 0 ? episode : 0;
+        const h5Url = `${h5Base}/wefeed-h5api-bff/subject/download?subjectId=${subjectId}&se=${reqSeason}&ep=${reqEpisode}&detailPath=${encodeURIComponent(detailPath)}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(h5Url, {
+            headers: h5Headers,
+            signal: controller.signal,
+            cache: "no-store",
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) return [];
+        const json: any = await res.json();
+        const data = json.data || json;
+        const rawCaptions =
+            data.captions ||
+            data.captionList ||
+            data.subtitles ||
+            data.subtitleList ||
+            data.subs ||
+            [];
+        return rawCaptions
+            .map((c: any, idx: number) => {
+                const cUrl =
+                    c.url || c.link || c.subUrl || c.subtitleUrl || "";
+                if (!cUrl || typeof cUrl !== "string" || !cUrl.trim())
+                    return null;
+                return {
+                    id: String(c.id || idx),
+                    lan: c.lan || c.language || c.lang || "en",
+                    lanName:
+                        c.lanName ||
+                        c.languageName ||
+                        c.langName ||
+                        c.name ||
+                        c.lan ||
+                        "English",
+                    url: cUrl.trim(),
+                    size: Number(c.size || 0),
+                    delay: Number(c.delay || 0),
+                };
+            })
+            .filter((c: any): c is Caption => c !== null);
+    } catch {
+        return [];
+    }
+}
+
+async function ensureCaptions(
+    data: StreamData,
+    path: string,
+    subjectId?: string,
+    season = 0,
+    episode = 0,
+    adult = false,
+): Promise<StreamData> {
+    if (data.captions && data.captions.length > 0) {
+        return data;
+    }
+
+    let sId = subjectId;
+    let resolvedDetailPath = path;
+    let dubsList: any[] = [];
+
+    try {
+        const details = await movieService.getDetails(path, adult);
+        if (!sId && details?.subject?.subjectId) {
+            sId = details.subject.subjectId;
+        }
+        if (details?.subject?.detailPath) {
+            resolvedDetailPath = details.subject.detailPath;
+        }
+        dubsList = details?.subject?.dubs || details?.dubs || [];
+    } catch {
+        /* ignore */
+    }
+
+    if (!sId) {
+        const parts = path.split("-");
+        sId = parts.length > 1 ? parts[parts.length - 1] : path;
+    }
+
+    if (sId) {
+        let caps = await fetchCaptionsFromH5Api(
+            sId,
+            resolvedDetailPath,
+            season,
+            episode,
+            adult,
+        );
+
+        // If no captions found on main subject, check dub tracks for captions
+        if (caps.length === 0 && dubsList.length > 0) {
+            for (const dub of dubsList) {
+                if (dub.subjectId && dub.subjectId !== sId) {
+                    const dubCaps = await fetchCaptionsFromH5Api(
+                        dub.subjectId,
+                        dub.detailPath || resolvedDetailPath,
+                        season,
+                        episode,
+                        adult,
+                    );
+                    if (dubCaps.length > 0) {
+                        caps = dubCaps;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (caps.length > 0) {
+            data.captions = caps;
+        }
+    }
+
+    return data;
+}
+
 const streamCache = new Map<string, { data: StreamData; expiresAt: number }>();
 
 export const streamService = {
@@ -279,6 +431,16 @@ export const streamService = {
                 },
             );
             if (hasRealDownloads) {
+                if (!cached.data.captions || cached.data.captions.length === 0) {
+                    cached.data = await ensureCaptions(
+                        cached.data,
+                        path,
+                        undefined,
+                        season,
+                        episode,
+                        adult,
+                    );
+                }
                 return cached.data;
             }
             // Stale embed-only cache — discard and re-fetch
@@ -308,7 +470,7 @@ export const streamService = {
             clearTimeout(timeoutId);
 
             if (vRes.ok) {
-                const vData: any = await vRes.json();
+                let vData: any = await vRes.json();
                 if (vData && Array.isArray(vData.downloads)) {
                     const validDownloads = vData.downloads.filter((d: any) => {
                         const dUrl =
@@ -352,6 +514,14 @@ export const streamService = {
 
                     if (validDownloads.length > 0) {
                         vData.downloads = validDownloads;
+                        vData = await ensureCaptions(
+                            vData,
+                            path,
+                            undefined,
+                            season,
+                            episode,
+                            adult,
+                        );
                         if (streamCache.size > 200) {
                             const firstKey = streamCache.keys().next().value;
                             if (firstKey) streamCache.delete(firstKey);
@@ -509,11 +679,19 @@ export const streamService = {
                             limitedCode: "",
                             stream_domain: "https://h5.aoneroom.com",
                         };
+                        const finalResult = await ensureCaptions(
+                            result,
+                            path,
+                            subjectId,
+                            season,
+                            episode,
+                            adult,
+                        );
                         streamCache.set(cacheKey, {
-                            data: result,
+                            data: finalResult,
                             expiresAt: Date.now() + 3 * 60 * 1000,
                         });
-                        return result;
+                        return finalResult;
                     }
                 }
             }
@@ -622,15 +800,23 @@ export const streamService = {
                 tier1Tasks.map((t) => validTask(t)),
             );
             if (valid) {
+                const finalValid = await ensureCaptions(
+                    valid,
+                    canonicalPath,
+                    subject.subjectId,
+                    season,
+                    episode,
+                    adult,
+                );
                 if (streamCache.size > 200) {
                     const firstKey = streamCache.keys().next().value;
                     if (firstKey) streamCache.delete(firstKey);
                 }
                 streamCache.set(cacheKey, {
-                    data: valid,
+                    data: finalValid,
                     expiresAt: Date.now() + 3 * 60 * 1000,
                 });
-                return valid;
+                return finalValid;
             }
         } catch {
             // Fallthrough to h5-api direct fallback
@@ -763,11 +949,19 @@ export const streamService = {
                             limitedCode: h5Data.limitedCode || "",
                             stream_domain: "https://videodownloader.site/",
                         };
+                        const finalResult = await ensureCaptions(
+                            result,
+                            path,
+                            subject.subjectId,
+                            season,
+                            episode,
+                            adult,
+                        );
                         streamCache.set(cacheKey, {
-                            data: result,
+                            data: finalResult,
                             expiresAt: Date.now() + 3 * 60 * 1000,
                         });
-                        return result;
+                        return finalResult;
                     }
                 }
             }
@@ -817,7 +1011,15 @@ export const streamService = {
                         (r.downloads.length > 0 || r.captions.length > 0),
                 );
                 if (dubValid) {
-                    return dubValid;
+                    const finalDub = await ensureCaptions(
+                        dubValid,
+                        dub.detailPath,
+                        dubSubject.subjectId,
+                        season,
+                        episode,
+                        adult,
+                    );
+                    return finalDub;
                 }
             } catch {
                 // Continue to next dub

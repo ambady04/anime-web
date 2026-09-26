@@ -2248,7 +2248,8 @@ export default function VideoPlayer({
                 if (showSubtitles && activeCaption) {
                     const isMatch =
                         track.language === activeCaption.lan ||
-                        track.label === activeCaption.lanName;
+                        track.label === activeCaption.lanName ||
+                        tracks.length === 1;
 
                     if (isMatch && !enabledAny) {
                         track.mode = "showing";
@@ -2701,7 +2702,7 @@ export default function VideoPlayer({
                     {/* Subtitle track */}
                     {subtitleUrl && activeCaption && (
                         <track
-                            key={activeCaption.id || activeCaption.url}
+                            key={`${activeCaption.id || activeCaption.url}-${subtitleUrl}`}
                             kind="subtitles"
                             src={subtitleUrl}
                             srcLang={activeCaption.lan}
