@@ -19,6 +19,7 @@ KIXO is a premium, high-fidelity Glassmorphism-style movie streaming web applica
     - **Hotkeys**: Full window shortcuts support (`Space` for play/pause, `F` for fullscreen, `I` for Picture-in-Picture, `M` for mute, `Arrows` for seek/volume).
     - **Click-outside & Idle Auto-close**: Click outside of active dropdown menus to automatically shut them down.
 - 🔐 **Inspect Guard Protection**: Features built-in timing-based DevTools detection and right-click restriction to protect premium assets and clear the browser Network tab instantly upon inspection attempts.
+- 💬 **Multi-Language Subtitles**: Dynamic caption track loading with automatic language matching, WebVTT conversion, and customizable display sizing.
 - 💾 **Local History & Watchlist**: Integrated local storage tracking to bookmark titles, track watched episodes in real-time, and resume playback exactly where you left off ("Continue Watching").
 
 ---
@@ -55,4 +56,8 @@ npm run build
 npm run start
 ```
 
-### 4. Developed By
+---
+
+### Developed By
+
+Developed with ❤️ for streaming enthusiasts.
